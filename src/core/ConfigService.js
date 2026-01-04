@@ -25,6 +25,9 @@ class ConfigService {
             KEYWORDS: this._parseList(process.env.KEYWORDS, true),
             FROM_USERS: this._parseList(process.env.FROM_USERS),
 
+            // Database
+            DATABASE_URL: process.env.DATABASE_URL || "",
+
             // Rate Limiting
             RATE_LIMIT_MS: parseInt(process.env.RATE_LIMIT_MS || "30000", 10),
 

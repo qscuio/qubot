@@ -4,7 +4,32 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - qubot-network
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qubot
+      POSTGRES_PASSWORD: qubot
+      POSTGRES_DB: qubot
     volumes:
-      # Optional: persist logs or session if we were using a file session (but we use StringSession)
-      - ./logs:/app/logs
-    # No ports needed as it is a client
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qubot -d qubot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - qubot-network
+
+volumes:
+  postgres-data:
+
+networks:
+  qubot-network:
+    driver: bridge

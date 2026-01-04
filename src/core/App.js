@@ -2,6 +2,7 @@ const Logger = require("./Logger");
 const ConfigService = require("./ConfigService");
 const TelegramService = require("./TelegramService");
 const FeatureManager = require("./FeatureManager");
+const StorageService = require("./StorageService");
 
 const logger = new Logger("App");
 
@@ -12,6 +13,7 @@ class App {
     constructor() {
         this.config = null;
         this.telegram = null;
+        this.storage = null;
         this.featureManager = null;
     }
 
@@ -21,17 +23,22 @@ class App {
         // 1. Load Configuration
         this.config = new ConfigService();
 
-        // 2. Initialize Telegram Service
+        // 2. Initialize Storage (optional, for subscription feature)
+        this.storage = new StorageService(this.config);
+        await this.storage.init();
+
+        // 3. Initialize Telegram Service
         this.telegram = new TelegramService(this.config);
         await this.telegram.connect();
 
-        // 3. Initialize Feature Manager
+        // 4. Initialize Feature Manager
         this.featureManager = new FeatureManager({
             config: this.config,
             telegram: this.telegram,
+            storage: this.storage,
         });
 
-        // 4. Load and Enable Features
+        // 5. Load and Enable Features
         await this.featureManager.loadFeatures();
         await this.featureManager.enableAll();
 
