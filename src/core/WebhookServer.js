@@ -53,6 +53,29 @@ class WebhookServer {
                 res.json({ ok: true });
             } catch (err) {
                 logger.error(`Error handling update for ${botName}`, err);
+
+                // Try to notify user about the error
+                const chatId = req.body?.message?.chat?.id || req.body?.callback_query?.message?.chat?.id;
+                if (chatId) {
+                    try {
+                        let errorMsg = "⚠️ An error occurred while processing your request.";
+
+                        // Provide more specific messages for common errors
+                        if (err.code === "ETIMEDOUT" || err.code === "ECONNRESET" || err.code === "ENOTFOUND") {
+                            errorMsg = "⚠️ Network error: Connection to Telegram API timed out. Please try again.";
+                        } else if (err.code === "ECONNREFUSED") {
+                            errorMsg = "⚠️ Service temporarily unavailable. Please try again later.";
+                        } else if (err.message) {
+                            errorMsg = `⚠️ Error: ${err.message.substring(0, 100)}`;
+                        }
+
+                        await bot.getTelegraf().telegram.sendMessage(chatId, errorMsg);
+                    } catch (notifyErr) {
+                        // If we can't even notify the user, just log it
+                        logger.warn(`Failed to notify user about error: ${notifyErr.message}`);
+                    }
+                }
+
                 res.status(500).json({ error: "Internal error" });
             }
         });
