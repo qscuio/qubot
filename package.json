@@ -1,0 +1,19 @@
+{
+  "name": "telegram-userbot-monitor",
+  "version": "1.0.0",
+  "description": "Personal Telegram Userbot for channel monitoring and news aggregation",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node src/index.js",
+    "generate-session": "node scripts/generate-session.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "input": "^1.0.1",
+    "telegram": "^2.19.10"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

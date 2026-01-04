@@ -1,0 +1,45 @@
+name: Deploy Userbot
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Create .env file
+      run: |
+        echo "API_ID=${{ secrets.API_ID }}" >> .env
+        echo "API_HASH=${{ secrets.API_HASH }}" >> .env
+        echo "TG_SESSION=${{ secrets.TG_SESSION }}" >> .env
+        echo "SOURCE_CHANNELS=${{ secrets.SOURCE_CHANNELS }}" >> .env
+        echo "TARGET_CHANNEL=${{ secrets.TARGET_CHANNEL }}" >> .env
+        echo "KEYWORDS=${{ secrets.KEYWORDS }}" >> .env
+
+    - name: Copy files to VPS
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        source: "./*"
+        target: "/home/${{ secrets.VPS_USER }}/telegram-userbot-monitor"
+
+    - name: Deploy with Docker Compose
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USER }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        script: |
+          cd /home/${{ secrets.VPS_USER }}/telegram-userbot-monitor
+          # Ensure docker-compose is available or use 'docker compose' dependent on version
+          if command -v docker-compose &> /dev/null; then
+              docker-compose up -d --build
+          else
+              docker compose up -d --build
+          fi

@@ -1,0 +1,10 @@
+services:
+  userbot:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # Optional: persist logs or session if we were using a file session (but we use StringSession)
+      - ./logs:/app/logs
+    # No ports needed as it is a client
