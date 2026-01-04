@@ -382,13 +382,7 @@ ${rawContent.substring(0, 15000)}`;
             summaryMarkdown = `# ${chat.title} - Notes\n\n> Summary generation failed\n\nSee raw file for full conversation.\n\n---\n*Exported from QuBot*`;
         }
 
-        // Send raw file as document
-        await ctx.replyWithDocument({
-            source: Buffer.from(rawMarkdown, "utf-8"),
-            filename: `raw-${filename}`,
-        });
-
-        // Push to GitHub
+        // Push to GitHub (primary), or send as file (fallback)
         if (this.githubService && this.githubService.isReady) {
             try {
                 await ctx.reply("⏳ Pushing to GitHub...");
@@ -414,6 +408,11 @@ ${rawContent.substring(0, 15000)}`;
             const errorDetail = this.githubService?.initError || "Unknown error";
             await ctx.reply(`⚠️ GitHub export failed during init:\n<code>${escapeHtml(errorDetail)}</code>\n\nCheck server SSH key is added to GitHub.`, { parse_mode: "HTML" });
         } else {
+            // Fallback: send as file if no GitHub configured
+            await ctx.replyWithDocument({
+                source: Buffer.from(rawMarkdown, "utf-8"),
+                filename: `raw-${filename}`,
+            });
             await ctx.reply("ℹ️ GitHub export not configured. Set NOTES_REPO to enable.");
         }
     }

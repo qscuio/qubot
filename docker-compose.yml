@@ -21,6 +21,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    volumes:
+      - ~/.ssh:/root/.ssh:ro  # Mount SSH keys for GitHub export
     networks:
       - qubot-network
 

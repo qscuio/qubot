@@ -23,8 +23,8 @@ class GitHubService {
         try {
             await fs.mkdir(this.localPath, { recursive: true });
 
-            // Configure SSH to skip host key verification (for Docker)
-            const sshCommand = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null";
+            // Configure SSH with specific key and skip host verification
+            const sshCommand = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /root/.ssh/github_actions";
             this.git = simpleGit().env("GIT_SSH_COMMAND", sshCommand);
 
             // Check if repo exists locally
