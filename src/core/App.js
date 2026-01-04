@@ -97,11 +97,16 @@ class App {
     }
 
     async _startWebhookMode() {
+        // Set commands menu for each bot (even though not polling)
+        for (const name of this.botManager.getBotNames()) {
+            const bot = this.botManager.getBot(name);
+            await bot.setCommands();
+        }
+
         // Start webhook server
         this.webhookServer = new WebhookServer(this.config, this.botManager);
         await this.webhookServer.start();
 
-        // Note: Webhooks are registered via npm run setup-webhook
         logger.info("📡 Webhook mode enabled. Run 'npm run setup-webhook' to register webhooks.");
     }
 

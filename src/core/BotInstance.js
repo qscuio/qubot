@@ -87,6 +87,19 @@ class BotInstance {
     }
 
     /**
+     * Set commands menu (call this in webhook mode).
+     */
+    async setCommands() {
+        if (!this.bot || this.commands.length === 0) return;
+        try {
+            await this.bot.telegram.setMyCommands(this.commands);
+            this.logger.info(`Set ${this.commands.length} commands in menu.`);
+        } catch (err) {
+            this.logger.warn(`Failed to set commands: ${err.message}`);
+        }
+    }
+
+    /**
      * Start the bot.
      */
     async start() {
