@@ -324,6 +324,23 @@ class AiBot extends BotInstance {
             const chat = await this.storage.getChatById(chatId);
             await ctx.answerCbQuery(`Switched to: ${chat?.title || "Chat"}`);
             await ctx.editMessageText(`✅ Switched to: <b>${escapeHtml(chat?.title || "Chat")}</b>`, { parse_mode: "HTML" });
+
+            // Display recent chat history
+            const messages = await this.storage.getChatMessages(chatId, 10);
+            if (messages.length > 0) {
+                const historyLines = messages.reverse().map((m) => {
+                    const icon = m.role === "user" ? "👤" : "🤖";
+                    const content = m.content.length > 150
+                        ? m.content.substring(0, 150) + "..."
+                        : m.content;
+                    return `${icon} <b>${m.role === "user" ? "You" : "AI"}:</b>\n${escapeHtml(content)}`;
+                });
+
+                const historyHtml = `📜 <b>Recent History (${messages.length} messages):</b>\n\n${historyLines.join("\n\n───────────\n\n")}`;
+                await sendLongHtmlMessage(ctx, historyHtml);
+            } else {
+                await ctx.reply("📭 This chat has no messages yet. Send a message to start.");
+            }
         }
     }
 
