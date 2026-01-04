@@ -22,6 +22,7 @@ class ConfigService {
             // Bot Tokens (each bot has its own token)
             RSS_BOT_TOKEN: process.env.RSS_BOT_TOKEN || "",
             AI_BOT_TOKEN: process.env.AI_BOT_TOKEN || "",
+            MONITOR_BOT_TOKEN: process.env.MONITOR_BOT_TOKEN || "",
 
             // Webhook Config
             BOT_PORT: parseInt(process.env.BOT_PORT || "3000", 10),

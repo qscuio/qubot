@@ -137,6 +137,7 @@ class App {
         const rssBotToken = this.config.get("RSS_BOT_TOKEN");
         if (rssBotToken) {
             const rssBot = new RssBot(rssBotToken, this.config, this.storage, allowedUsers);
+            rssBot.setService(this.services.rss);
             await rssBot.setup();
             this.botManager.registerBot("rss-bot", rssBot);
         }
@@ -145,8 +146,19 @@ class App {
         const aiBotToken = this.config.get("AI_BOT_TOKEN");
         if (aiBotToken) {
             const aiBot = new AiBot(aiBotToken, this.config, this.storage, this.githubService, allowedUsers);
+            aiBot.setService(this.services.ai);
             await aiBot.setup();
             this.botManager.registerBot("ai-bot", aiBot);
+        }
+
+        // Monitor Bot
+        const monitorBotToken = this.config.get("MONITOR_BOT_TOKEN");
+        if (monitorBotToken) {
+            const MonitorBot = require("../bots/monitor-bot");
+            const monitorBot = new MonitorBot(monitorBotToken, this.config, allowedUsers);
+            monitorBot.setService(this.services.monitor);
+            await monitorBot.setup();
+            this.botManager.registerBot("monitor-bot", monitorBot);
         }
     }
 

@@ -4,18 +4,27 @@ const Parser = require("rss-parser");
 const parser = new Parser();
 
 /**
- * RssBot - RSS subscription bot.
- * Commands: /sub, /unsub, /list, /check, /help
+ * RssBot - Telegram interface for RSS subscriptions.
+ * Delegates subscription logic to RssService.
+ * Handles Telegram-specific UI and RSS polling.
  */
 class RssBot extends BotInstance {
-    constructor(token, config, storage, allowedUsers) {
+    constructor(token, config, storage, allowedUsers, rssService = null) {
         super("rss-bot", token, allowedUsers);
         this.config = config;
         this.storage = storage;
+        this.rssService = rssService;
         this.pollInterval = null;
         this.pollIntervalMs = 5 * 60 * 1000; // 5 minutes
-        this.lastPollBySource = new Map(); // Rate limiting per source
-        this.pendingSubscriptions = new Map(); // token -> {url, title, userId, chatId, expires}
+        this.lastPollBySource = new Map();
+        this.pendingSubscriptions = new Map();
+    }
+
+    /**
+     * Set the RSS service (allows injection after construction).
+     */
+    setService(rssService) {
+        this.rssService = rssService;
     }
 
     async setup() {
@@ -32,7 +41,7 @@ class RssBot extends BotInstance {
         this.command("status", "Check bot status", (ctx) => this._handleStatus(ctx));
         this.command("help", "Show help", (ctx) => this._handleHelp(ctx));
 
-        // Callback actions for inline buttons
+        // Callback actions
         this.action("cmd_sub", (ctx) => {
             ctx.answerCbQuery();
             return ctx.reply("📌 Usage: /sub <RSS URL>\nExample: /sub https://example.com/feed.xml");
@@ -63,8 +72,8 @@ class RssBot extends BotInstance {
     }
 
     _startPolling() {
-        if (!this.storage) {
-            this.logger.warn("Storage not available, RSS polling disabled.");
+        if (!this.storage && !this.rssService) {
+            this.logger.warn("Storage/service not available, RSS polling disabled.");
             return;
         }
 
@@ -76,19 +85,29 @@ class RssBot extends BotInstance {
     }
 
     async _pollFeeds() {
-        if (!this.storage) return;
-
         try {
-            const sources = await this.storage.getAllSources();
+            let sources;
+            if (this.rssService) {
+                sources = await this.rssService.getAllSources();
+            } else if (this.storage) {
+                sources = await this.storage.getAllSources();
+            } else {
+                return;
+            }
+
             this.logger.debug(`Polling ${sources.length} RSS sources...`);
 
             for (const source of sources) {
                 try {
                     await this._fetchAndNotify(source);
-                    await this.storage.clearSourceErrorCount(source.id);
+                    if (this.storage) {
+                        await this.storage.clearSourceErrorCount(source.id);
+                    }
                 } catch (err) {
                     this.logger.warn(`Failed to fetch ${source.title || source.link}: ${err.message}`);
-                    await this.storage.incrementSourceErrorCount(source.id);
+                    if (this.storage) {
+                        await this.storage.incrementSourceErrorCount(source.id);
+                    }
                 }
             }
         } catch (err) {
@@ -108,26 +127,24 @@ class RssBot extends BotInstance {
         const feed = await parser.parseURL(source.link);
         const targetChannel = this.config.get("TARGET_CHANNEL");
 
-        // Process all items until we hit one we've seen (most feeds are sorted newest-first)
         for (const item of feed.items) {
             const itemId = item.guid || item.link || item.title;
             const hashId = `${source.id}:${itemId}`;
 
-            // Skip if already seen - stop processing older items
-            const exists = await this.storage.contentExists(hashId);
+            const exists = this.storage ? await this.storage.contentExists(hashId) : false;
             if (exists) {
-                // If we've seen this item, older items are likely also seen
                 break;
             }
 
-            // Mark as seen
-            await this.storage.addContent(hashId, source.id, itemId, item.link, item.title);
+            if (this.storage) {
+                await this.storage.addContent(hashId, source.id, itemId, item.link, item.title);
+            }
 
-            // Get subscriber count for this source
-            const subscribers = await this.storage.getSubscribersBySource(source.id);
+            const subscribers = this.storage
+                ? await this.storage.getSubscribersBySource(source.id)
+                : [];
             const subCount = subscribers.length;
 
-            // Post to TARGET_CHANNEL with feed info
             const message = this._formatUpdate(source, item, subCount);
 
             try {
@@ -168,26 +185,35 @@ class RssBot extends BotInstance {
             });
         }
 
-        // Check storage availability
-        if (!this.storage) {
-            return ctx.reply("❌ Database unavailable. Cannot persist subscriptions.", {
-                reply_markup: this._quickActionsKeyboard()
-            });
-        }
-
         try {
             await ctx.reply("⏳ Validating RSS feed...");
-            const feed = await parser.parseURL(url);
-            const title = feed.title || url;
-            const latestItem = feed.items[0];
-            const preview = latestItem
-                ? `\n\n📄 <b>Latest:</b> ${this._escapeHtml(latestItem.title?.substring(0, 60) || "No title")}...`
+
+            // Use service if available
+            let validation;
+            if (this.rssService) {
+                validation = await this.rssService.validateFeed(url);
+            } else {
+                const feed = await parser.parseURL(url);
+                validation = {
+                    valid: true,
+                    title: feed.title || url,
+                    latestItem: feed.items[0]
+                };
+            }
+
+            if (!validation.valid) {
+                return ctx.reply(`❌ Invalid feed: ${validation.error}`, {
+                    reply_markup: this._quickActionsKeyboard()
+                });
+            }
+
+            const title = validation.title;
+            const preview = validation.latestItem
+                ? `\n\n📄 <b>Latest:</b> ${this._escapeHtml(validation.latestItem.title?.substring(0, 60) || "No title")}...`
                 : "";
 
-            // Generate a short token for this subscription request
+            // Generate token for confirmation
             const token = `${userId}_${Date.now().toString(36)}`;
-
-            // Store the full URL and metadata with expiration (5 min)
             this.pendingSubscriptions.set(token, {
                 url,
                 title,
@@ -196,15 +222,12 @@ class RssBot extends BotInstance {
                 expires: Date.now() + 5 * 60 * 1000
             });
 
-            // Clean up expired tokens
             this._cleanupPendingSubscriptions();
 
-            const buttons = [
-                [
-                    { text: "✅ Subscribe", callback_data: `confirm_sub:${token}` },
-                    { text: "❌ Cancel", callback_data: `cancel_sub:${token}` }
-                ]
-            ];
+            const buttons = [[
+                { text: "✅ Subscribe", callback_data: `confirm_sub:${token}` },
+                { text: "❌ Cancel", callback_data: `cancel_sub:${token}` }
+            ]];
 
             await ctx.reply(
                 `📰 <b>${this._escapeHtml(title)}</b>\n\n🔗 ${url}${preview}\n\n<i>Send updates to TARGET_CHANNEL?</i>`,
@@ -234,21 +257,28 @@ class RssBot extends BotInstance {
             return ctx.answerCbQuery("Request expired. Please use /sub again.");
         }
 
-        // Remove from pending
         this.pendingSubscriptions.delete(token);
-
-        if (!this.storage) {
-            await ctx.answerCbQuery("Database unavailable");
-            return ctx.editMessageText("❌ Database unavailable. Cannot persist subscriptions.");
-        }
 
         try {
             const { url, title, userId, chatId } = pending;
-            const added = await this.storage.addRssSubscription(userId, chatId, url, title);
+            let added;
+
+            if (this.rssService) {
+                const result = await this.rssService.subscribe(userId, url, chatId);
+                added = result.added;
+            } else if (this.storage) {
+                added = await this.storage.addRssSubscription(userId, chatId, url, title);
+            } else {
+                await ctx.answerCbQuery("Database unavailable");
+                return ctx.editMessageText("❌ Database unavailable. Cannot persist subscriptions.");
+            }
 
             if (added) {
                 await ctx.answerCbQuery("Subscribed!");
-                await ctx.editMessageText(`✅ <b>Subscribed!</b>\n\n📰 ${this._escapeHtml(title)}\n🔗 ${url}\n\n<i>Updates will be posted to TARGET_CHANNEL.</i>`, { parse_mode: "HTML" });
+                await ctx.editMessageText(
+                    `✅ <b>Subscribed!</b>\n\n📰 ${this._escapeHtml(title)}\n🔗 ${url}\n\n<i>Updates will be posted to TARGET_CHANNEL.</i>`,
+                    { parse_mode: "HTML" }
+                );
             } else {
                 await ctx.answerCbQuery("Already subscribed");
                 await ctx.editMessageText(`⚠️ You're already subscribed to: ${this._escapeHtml(title)}`, { parse_mode: "HTML" });
@@ -268,26 +298,22 @@ class RssBot extends BotInstance {
             });
         }
 
-        // Check storage availability
-        if (!this.storage) {
-            return ctx.reply("❌ Database unavailable. Cannot manage subscriptions.", {
-                reply_markup: this._quickActionsKeyboard()
-            });
-        }
-
         try {
-            const subs = await this.storage.getRssSubscriptions(userId);
-            const source = subs.find((s) => s.url === input || String(s.id) === input);
+            if (this.rssService) {
+                const result = await this.rssService.unsubscribe(userId, input);
+                await ctx.reply(`✅ Unsubscribed: ${result.title}`);
+            } else if (this.storage) {
+                const subs = await this.storage.getRssSubscriptions(userId);
+                const source = subs.find((s) => s.url === input || String(s.id) === input);
 
-            if (!source) {
-                return ctx.reply("❌ Subscription not found.");
-            }
+                if (!source) {
+                    return ctx.reply("❌ Subscription not found.");
+                }
 
-            const removed = await this.storage.removeRssSubscription(userId, source.url);
-            if (removed) {
+                await this.storage.removeRssSubscription(userId, source.url);
                 await ctx.reply(`✅ Unsubscribed: ${source.title}`);
             } else {
-                await ctx.reply("⚠️ You're not subscribed to this feed.");
+                return ctx.reply("❌ Database unavailable.", { reply_markup: this._quickActionsKeyboard() });
             }
         } catch (err) {
             await ctx.reply(`❌ Unsubscribe failed: ${err.message}`);
@@ -298,24 +324,26 @@ class RssBot extends BotInstance {
         const userId = ctx.from?.id;
 
         try {
-            if (!this.storage) {
+            let subs;
+            if (this.rssService) {
+                subs = await this.rssService.getSubscriptions(userId);
+            } else if (this.storage) {
+                subs = await this.storage.getRssSubscriptions(userId);
+            } else {
                 return ctx.reply("❌ Database unavailable.");
             }
 
-            const subs = await this.storage.getRssSubscriptions(userId);
             if (subs.length === 0) {
                 return ctx.reply("📭 You have no subscriptions.\n\nUse /sub <URL> to add one.", {
                     reply_markup: this._quickActionsKeyboard()
                 });
             }
 
-            // Build inline buttons for each subscription
             const buttons = subs.map((s) => [{
                 text: `🗑️ ${s.title.substring(0, 25)}`,
                 callback_data: `unsub:${s.id}`
             }]);
 
-            // Add quick actions at the end
             buttons.push([{ text: "➕ Subscribe", callback_data: "cmd_sub" }, { text: "🏠 Home", callback_data: "cmd_start" }]);
 
             await ctx.reply(`📚 <b>Your subscriptions (${subs.length})</b>\n\n<i>Tap to unsubscribe:</i>`, {
@@ -336,14 +364,25 @@ class RssBot extends BotInstance {
         const sourceId = parseInt(ctx.match[1], 10);
 
         try {
-            const subs = await this.storage.getRssSubscriptions(userId);
+            let subs;
+            if (this.rssService) {
+                subs = await this.rssService.getSubscriptions(userId);
+            } else {
+                subs = await this.storage.getRssSubscriptions(userId);
+            }
+
             const source = subs.find((s) => s.id === sourceId);
 
             if (!source) {
                 return ctx.answerCbQuery("Not found");
             }
 
-            await this.storage.removeRssSubscription(userId, source.url);
+            if (this.rssService) {
+                await this.rssService.unsubscribe(userId, source.url);
+            } else {
+                await this.storage.removeRssSubscription(userId, source.url);
+            }
+
             await ctx.answerCbQuery(`Unsubscribed: ${source.title}`);
             await ctx.editMessageText(`✅ Unsubscribed from: ${source.title}`);
         } catch (err) {
@@ -369,17 +408,22 @@ class RssBot extends BotInstance {
         const userId = ctx.from?.id;
         let subCount = 0;
         let sourceCount = 0;
-        const dbStatus = this.storage ? "✅ Connected" : "❌ Unavailable";
+        const dbStatus = (this.storage || this.rssService) ? "✅ Connected" : "❌ Unavailable";
 
-        if (this.storage) {
-            try {
+        try {
+            if (this.rssService) {
+                const subs = await this.rssService.getSubscriptions(userId);
+                subCount = subs.length;
+                const sources = await this.rssService.getAllSources();
+                sourceCount = sources.length;
+            } else if (this.storage) {
                 const subs = await this.storage.getRssSubscriptions(userId);
                 subCount = subs.length;
                 const sources = await this.storage.getAllSources();
                 sourceCount = sources.length;
-            } catch (err) {
-                // Ignore
             }
+        } catch (err) {
+            // Ignore
         }
 
         await ctx.reply(
