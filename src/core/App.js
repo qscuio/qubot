@@ -8,6 +8,7 @@ const WebhookServer = require("./WebhookServer");
 
 // Import bot classes
 const RssBot = require("../bots/rss-bot");
+const AiBot = require("../bots/ai-bot");
 
 const logger = new Logger("App");
 
@@ -80,10 +81,12 @@ class App {
             this.botManager.registerBot("rss-bot", rssBot);
         }
 
-        // AI Bot (placeholder for future)
+        // AI Bot
         const aiBotToken = this.config.get("AI_BOT_TOKEN");
         if (aiBotToken) {
-            logger.info("AI Bot token found, will be enabled in future update.");
+            const aiBot = new AiBot(aiBotToken, this.config);
+            await aiBot.setup();
+            this.botManager.registerBot("ai-bot", aiBot);
         }
     }
 
