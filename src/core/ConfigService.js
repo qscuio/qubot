@@ -19,8 +19,14 @@ class ConfigService {
             API_HASH: process.env.API_HASH || "",
             SESSION: process.env.TG_SESSION || "",
 
-            // Telegram Bot Token (for commands)
-            BOT_TOKEN: process.env.BOT_TOKEN || "",
+            // Bot Tokens (each bot has its own token)
+            RSS_BOT_TOKEN: process.env.RSS_BOT_TOKEN || "",
+            AI_BOT_TOKEN: process.env.AI_BOT_TOKEN || "",
+
+            // Webhook Config
+            BOT_PORT: parseInt(process.env.BOT_PORT || "3000", 10),
+            BOT_SECRET: process.env.BOT_SECRET || "",
+            WEBHOOK_URL: process.env.WEBHOOK_URL || "",
 
             // Monitoring
             SOURCE_CHANNELS: this._parseList(process.env.SOURCE_CHANNELS),

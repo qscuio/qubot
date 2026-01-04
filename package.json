@@ -6,10 +6,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node src/index.js",
-    "generate-session": "node scripts/generate-session.js"
+    "generate-session": "node scripts/generate-session.js",
+    "setup-webhook": "node scripts/setup-webhook.js"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
+    "express": "^5.2.1",
     "input": "^1.0.1",
     "pg": "^8.16.3",
     "rss-parser": "^3.13.0",

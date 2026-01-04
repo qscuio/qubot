@@ -9,7 +9,7 @@ const logger = new Logger("FeatureManager");
  */
 class FeatureManager {
     constructor(services) {
-        this.services = services; // { config, telegram }
+        this.services = services; // { config, storage, botManager, telegram }
         this.features = new Map();
     }
 

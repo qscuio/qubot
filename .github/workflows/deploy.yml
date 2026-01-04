@@ -1,49 +1,246 @@
-name: Deploy Userbot
+name: Deploy to VPS
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    name: Deploy
     steps:
-    - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Create .env file
-      run: |
-        echo "API_ID=${{ secrets.API_ID }}" >> .env
-        echo "API_HASH=${{ secrets.API_HASH }}" >> .env
-        echo "TG_SESSION=${{ secrets.TG_SESSION }}" >> .env
-        echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
-        echo "SOURCE_CHANNELS=${{ secrets.SOURCE_CHANNELS }}" >> .env
-        echo "TARGET_CHANNEL=${{ secrets.TARGET_CHANNEL }}" >> .env
-        echo "KEYWORDS=${{ secrets.KEYWORDS }}" >> .env
-        echo "FROM_USERS=${{ secrets.FROM_USERS }}" >> .env
-        echo "RATE_LIMIT_MS=${{ secrets.RATE_LIMIT_MS }}" >> .env
-        echo "LOG_LEVEL=${{ secrets.LOG_LEVEL }}" >> .env
+      - name: Install Docker if needed
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            SUDO=""
+            if [ "$(id -u)" != "0" ]; then
+              SUDO="sudo"
+            fi
+            
+            # Install Git
+            if ! command -v git &> /dev/null; then
+              echo "📦 Installing Git..."
+              $SUDO apt-get update
+              $SUDO apt-get install -y git
+            fi
+            
+            # Install Docker
+            if ! command -v docker &> /dev/null; then
+              echo "🐳 Installing Docker..."
+              curl -fsSL https://get.docker.com | sh
+              $SUDO usermod -aG docker $USER || true
+            fi
+            
+            # Install Docker Compose
+            if ! docker compose version &> /dev/null; then
+              $SUDO apt-get update
+              $SUDO apt-get install -y docker-compose-plugin
+            fi
+            
+            # Start Docker
+            $SUDO systemctl start docker 2>/dev/null || true
+            $SUDO systemctl enable docker 2>/dev/null || true
+            
+            # Configure firewall
+            if command -v ufw &> /dev/null; then
+              $SUDO ufw allow ssh
+              $SUDO ufw allow 80/tcp
+              $SUDO ufw allow 443/tcp
+              $SUDO ufw --force enable || true
+            fi
 
-    - name: Copy files to VPS
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USER }}
-        key: ${{ secrets.VPS_SSH_KEY }}
-        source: "./*"
-        target: "/home/${{ secrets.VPS_USER }}/telegram-userbot-monitor"
+      - name: Setup Nginx reverse proxy
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+          BOT_PORT: ${{ secrets.BOT_PORT || '3000' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: WEBHOOK_URL,BOT_PORT
+          script: |
+            SUDO=""
+            if [ "$(id -u)" != "0" ]; then
+              SUDO="sudo"
+            fi
+            
+            # Skip if no WEBHOOK_URL
+            if [ -z "$WEBHOOK_URL" ]; then
+              echo "⏭️ WEBHOOK_URL not set, skipping Nginx setup (using polling mode)"
+              exit 0
+            fi
+            
+            DOMAIN=$(echo "$WEBHOOK_URL" | sed 's|https://||' | sed 's|/.*||')
+            BOT_PORT=${BOT_PORT:-3000}
+            echo "📡 Setting up Nginx for: $DOMAIN -> port $BOT_PORT"
+            
+            # Install Nginx
+            if ! command -v nginx &> /dev/null; then
+              $SUDO apt-get update
+              $SUDO apt-get install -y nginx
+              $SUDO systemctl enable nginx
+            fi
+            
+            # Install Certbot
+            if ! command -v certbot &> /dev/null; then
+              $SUDO apt-get install -y certbot python3-certbot-nginx
+            fi
+            
+            # Get SSL certificate
+            if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+              echo "🔒 Obtaining SSL certificate..."
+              $SUDO tee /etc/nginx/sites-available/qubot > /dev/null << TMPCONF
+            server {
+                listen 80;
+                server_name $DOMAIN;
+                location / { return 200 'ok'; }
+            }
+            TMPCONF
+              $SUDO ln -sf /etc/nginx/sites-available/qubot /etc/nginx/sites-enabled/qubot
+              $SUDO nginx -t && $SUDO systemctl reload nginx
+              $SUDO certbot certonly --nginx -d $DOMAIN --non-interactive --agree-tos --email admin@$DOMAIN || echo "⚠️ SSL failed"
+            fi
+            
+            # Create Nginx config with SSL
+            $SUDO tee /etc/nginx/sites-available/qubot > /dev/null << NGINXCONF
+            server {
+                listen 80;
+                server_name $DOMAIN;
+                return 301 https://\$host\$request_uri;
+            }
+            
+            server {
+                listen 443 ssl;
+                server_name $DOMAIN;
+                
+                ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+                ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+                include /etc/letsencrypt/options-ssl-nginx.conf;
+                ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+                
+                location / {
+                    proxy_pass http://127.0.0.1:$BOT_PORT;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+            }
+            NGINXCONF
+            
+            $SUDO ln -sf /etc/nginx/sites-available/qubot /etc/nginx/sites-enabled/qubot
+            $SUDO nginx -t && $SUDO systemctl reload nginx
+            echo "✅ Nginx configured with SSL"
 
-    - name: Deploy with Docker Compose
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USER }}
-        key: ${{ secrets.VPS_SSH_KEY }}
-        script: |
-          cd /home/${{ secrets.VPS_USER }}/telegram-userbot-monitor
-          # Ensure docker-compose is available or use 'docker compose' dependent on version
-          if command -v docker-compose &> /dev/null; then
-              docker-compose up -d --build
-          else
-              docker compose up -d --build
-          fi
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/qubot || {
+              mkdir -p /opt/qubot
+              cd /opt/qubot
+              git clone https://github.com/${{ github.repository }}.git .
+            }
+            
+            git fetch origin main
+            git reset --hard origin/main
+            
+            # Create .env file
+            cat > .env << 'EOF'
+            # Telegram API
+            API_ID=${{ secrets.API_ID }}
+            API_HASH=${{ secrets.API_HASH }}
+            TG_SESSION=${{ secrets.TG_SESSION }}
+            
+            # Bot Tokens
+            RSS_BOT_TOKEN=${{ secrets.RSS_BOT_TOKEN }}
+            AI_BOT_TOKEN=${{ secrets.AI_BOT_TOKEN }}
+            
+            # Webhook Config
+            WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}
+            BOT_PORT=${{ secrets.BOT_PORT || '3000' }}
+            BOT_SECRET=${{ secrets.BOT_SECRET }}
+            
+            # AI Provider Keys
+            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
+            NVIDIA_API_KEY=${{ secrets.NVIDIA_API_KEY }}
+            
+            # Monitoring
+            SOURCE_CHANNELS=${{ secrets.SOURCE_CHANNELS }}
+            TARGET_CHANNEL=${{ secrets.TARGET_CHANNEL }}
+            KEYWORDS=${{ secrets.KEYWORDS }}
+            FROM_USERS=${{ secrets.FROM_USERS }}
+            
+            # Misc
+            RATE_LIMIT_MS=${{ secrets.RATE_LIMIT_MS }}
+            LOG_LEVEL=${{ secrets.LOG_LEVEL }}
+            EOF
+            
+            # Deploy
+            docker compose down || true
+            docker compose build --no-cache
+            docker compose up -d
+            
+            echo "⏳ Waiting for services..."
+            sleep 15
+            
+            docker compose ps
+            
+            if ! docker compose ps userbot | grep -q "Up"; then
+              echo "❌ Userbot failed to start"
+              docker compose logs userbot
+              exit 1
+            fi
+            
+            # Health check (if webhook mode)
+            if [ -n "${{ secrets.WEBHOOK_URL }}" ]; then
+              BOT_PORT=${{ secrets.BOT_PORT || '3000' }}
+              curl -f http://localhost:$BOT_PORT/health || {
+                echo "❌ Health check failed"
+                docker compose logs userbot
+                exit 1
+              }
+            fi
+            
+            echo "✅ Deployment successful!"
+
+      - name: Register Webhooks
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/qubot
+            
+            # Skip if no WEBHOOK_URL
+            if [ -z "${{ secrets.WEBHOOK_URL }}" ]; then
+              echo "⏭️ No WEBHOOK_URL, using polling mode"
+              exit 0
+            fi
+            
+            if docker compose ps userbot | grep -q "Up"; then
+              docker compose exec -T userbot npm run setup-webhook
+            else
+              echo "❌ Container not running"
+              exit 1
+            fi
