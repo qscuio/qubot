@@ -161,18 +161,120 @@ curl http://localhost:3001/health
 
 ## GitHub Secrets (for CI/CD)
 
+### Required Secrets
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| **VPS** | | |
+| `VPS_HOST` | VPS IP address | `123.45.67.89` |
+| `VPS_USER` | SSH user | `root` |
+| `VPS_SSH_KEY` | Private SSH key | `-----BEGIN OPENSSH...` |
+| **Telegram API** | | |
+| `API_ID` | Telegram API ID | `12345678` |
+| `API_HASH` | Telegram API Hash | `abc123...` |
+| `TG_SESSION` | Session string | `1BVtsOH...` |
+| **Bot Tokens** | | |
+| `RSS_BOT_TOKEN` | RSS Bot token | `123:ABC...` |
+| `AI_BOT_TOKEN` | AI Bot token | `456:DEF...` |
+| `MONITOR_BOT_TOKEN` | Monitor Bot token | `789:GHI...` |
+
+### Webhook & Web Frontend
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `WEBHOOK_URL` | Bot webhook domain | `https://bot.yourdomain.com` |
+| `WEBFRONT_URL` | Web frontend domain | `https://app.yourdomain.com` |
+| `BOT_PORT` | Webhook server port | `3000` |
+| `BOT_SECRET` | Webhook security token | Random string |
+| `API_PORT` | REST API server port | `3001` |
+| `API_KEYS` | API keys (key:userId,...) | `mykey:1,otherkey:2` |
+
+### AI Providers (Optional)
+
 | Secret | Description |
 |--------|-------------|
-| `VPS_HOST` | VPS IP address |
-| `VPS_USER` | SSH user |
-| `VPS_SSH_KEY` | Private SSH key |
-| `API_ID` | Telegram API ID |
-| `API_HASH` | Telegram API Hash |
-| `TG_SESSION` | Session string |
-| `RSS_BOT_TOKEN` | RSS Bot token |
-| `AI_BOT_TOKEN` | AI Bot token |
-| `MONITOR_BOT_TOKEN` | Monitor Bot token |
-| `WEBHOOK_URL` | HTTPS webhook URL |
+| `GROQ_API_KEY` | Groq API key |
+| `GEMINI_API_KEY` | Google Gemini API key |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `CLAUDE_API_KEY` | Anthropic Claude key |
+| `NVIDIA_API_KEY` | NVIDIA NIM key |
+
+### Monitoring (Optional)
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `SOURCE_CHANNELS` | Channels to monitor | `@channel1,@channel2` |
+| `TARGET_CHANNEL` | Forward destination | `@mychannel` |
+| `KEYWORDS` | Filter keywords | `bitcoin,crypto` |
+| `FROM_USERS` | Filter by usernames | `@user1,@user2` |
+
+### Other
+
+| Secret | Description |
+|--------|-------------|
+| `NOTES_REPO` | GitHub repo for exports |
+| `LOG_LEVEL` | `debug`, `info`, `warn`, `error` |
+
+---
+
+## Debugging
+
+### Check Service Status
+```bash
+# SSH to VPS
+ssh your-vps
+cd /opt/qubot
+
+# Container status
+docker compose ps
+
+# View logs
+docker compose logs -f
+docker compose logs userbot --tail 100
+
+# Check specific service
+docker compose logs userbot 2>&1 | grep -i error
+```
+
+### Check API Server
+```bash
+# On VPS - is port 3001 listening?
+curl http://localhost:3001/health
+
+# From outside - through Nginx
+curl https://app.yourdomain.com/health
+```
+
+### Check Nginx
+```bash
+# Test Nginx config
+sudo nginx -t
+
+# View Nginx logs
+sudo tail -f /var/log/nginx/error.log
+
+# Check sites enabled
+ls -la /etc/nginx/sites-enabled/
+```
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| **502 Bad Gateway** | API server not running. Check `docker compose logs` |
+| **Connection refused** | Port not open. Run `ufw allow 3001` |
+| **Unauthorized** | Check `API_KEYS` in .env matches your request |
+| **WebSocket fails** | Check Nginx has `proxy_set_header Upgrade` |
+
+### Restart Services
+```bash
+cd /opt/qubot
+docker compose down
+docker compose up -d --build
+docker compose logs -f
+```
+
+---
 
 ## Adding a New Bot
 
@@ -180,7 +282,7 @@ curl http://localhost:3001/health
 2. Extend `BotInstance`
 3. Create `src/services/YourService.js` for business logic
 4. Register in `App.js`
-5. Add `YOUR_BOT_TOKEN` to config
+5. Add `YOUR_BOT_TOKEN` to GitHub Secrets
 
 ## License
 
