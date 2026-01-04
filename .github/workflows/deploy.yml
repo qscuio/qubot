@@ -149,7 +149,92 @@ jobs:
             
             $SUDO ln -sf /etc/nginx/sites-available/qubot /etc/nginx/sites-enabled/qubot
             $SUDO nginx -t && $SUDO systemctl reload nginx
-            echo "✅ Nginx configured with SSL"
+            echo "✅ Nginx configured with SSL for bot webhook"
+
+      - name: Setup Nginx for Web Frontend
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          WEBFRONT_URL: ${{ secrets.WEBFRONT_URL }}
+          API_PORT: ${{ secrets.API_PORT || '3001' }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: WEBFRONT_URL,API_PORT
+          script: |
+            SUDO=""
+            if [ "$(id -u)" != "0" ]; then
+              SUDO="sudo"
+            fi
+            
+            # Skip if no WEBFRONT_URL
+            if [ -z "$WEBFRONT_URL" ]; then
+              echo "⏭️ WEBFRONT_URL not set, skipping web frontend Nginx setup"
+              exit 0
+            fi
+            
+            WEB_DOMAIN=$(echo "$WEBFRONT_URL" | sed 's|https://||' | sed 's|/.*||')
+            API_PORT=${API_PORT:-3001}
+            echo "🌐 Setting up Nginx for web frontend: $WEB_DOMAIN -> port $API_PORT"
+            
+            # Get SSL certificate for web domain if not exists
+            if [ ! -d "/etc/letsencrypt/live/$WEB_DOMAIN" ]; then
+              echo "🔒 Obtaining SSL certificate for $WEB_DOMAIN..."
+              $SUDO tee /etc/nginx/sites-available/qubot-web > /dev/null << TMPCONF
+            server {
+                listen 80;
+                server_name $WEB_DOMAIN;
+                location / { return 200 'ok'; }
+            }
+            TMPCONF
+              $SUDO ln -sf /etc/nginx/sites-available/qubot-web /etc/nginx/sites-enabled/qubot-web
+              $SUDO nginx -t && $SUDO systemctl reload nginx
+              $SUDO certbot certonly --nginx -d $WEB_DOMAIN --non-interactive --agree-tos --email admin@$WEB_DOMAIN || echo "⚠️ SSL failed for $WEB_DOMAIN"
+            fi
+            
+            # Create Nginx config for web frontend with SSL
+            $SUDO tee /etc/nginx/sites-available/qubot-web > /dev/null << NGINXCONF
+            server {
+                listen 80;
+                server_name $WEB_DOMAIN;
+                return 301 https://\$host\$request_uri;
+            }
+            
+            server {
+                listen 443 ssl;
+                server_name $WEB_DOMAIN;
+                
+                ssl_certificate /etc/letsencrypt/live/$WEB_DOMAIN/fullchain.pem;
+                ssl_certificate_key /etc/letsencrypt/live/$WEB_DOMAIN/privkey.pem;
+                include /etc/letsencrypt/options-ssl-nginx.conf;
+                ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+                
+                location / {
+                    proxy_pass http://127.0.0.1:$API_PORT;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+                
+                # WebSocket support for /ws paths
+                location /ws {
+                    proxy_pass http://127.0.0.1:$API_PORT;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection "upgrade";
+                    proxy_set_header Host \$host;
+                    proxy_read_timeout 86400;
+                }
+            }
+            NGINXCONF
+            
+            $SUDO ln -sf /etc/nginx/sites-available/qubot-web /etc/nginx/sites-enabled/qubot-web
+            $SUDO nginx -t && $SUDO systemctl reload nginx
+            echo "✅ Nginx configured with SSL for web frontend: https://$WEB_DOMAIN"
 
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -204,6 +289,7 @@ jobs:
             API_ENABLED=${{ secrets.API_ENABLED || 'true' }}
             API_PORT=${{ secrets.API_PORT || '3001' }}
             API_KEYS=${{ secrets.API_KEYS }}
+            WEBFRONT_URL=${{ secrets.WEBFRONT_URL }}
             
             # Misc
             RATE_LIMIT_MS=${{ secrets.RATE_LIMIT_MS }}
