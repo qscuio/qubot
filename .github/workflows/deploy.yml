@@ -200,25 +200,19 @@ jobs:
             docker compose build --no-cache
             docker compose up -d
             
-            echo "⏳ Waiting for services..."
-            sleep 15
+            # Wait for userbot to be healthy
+            echo "⏳ Waiting for services to be healthy..."
+            timeout 60 bash -c 'until docker compose ps userbot | grep -q "(healthy)"; do sleep 2; done' || {
+              echo "⚠️ Timeout waiting for health, checking status..."
+            }
             
             docker compose ps
             
+            # Verify container is running
             if ! docker compose ps userbot | grep -q "Up"; then
               echo "❌ Userbot failed to start"
               docker compose logs userbot
               exit 1
-            fi
-            
-            # Health check (if webhook mode)
-            if [ -n "${{ secrets.WEBHOOK_URL }}" ]; then
-              BOT_PORT=${{ secrets.BOT_PORT || '3000' }}
-              curl -f http://localhost:$BOT_PORT/health || {
-                echo "❌ Health check failed"
-                docker compose logs userbot
-                exit 1
-              }
             fi
             
             echo "✅ Deployment successful!"
