@@ -8,8 +8,8 @@ RUN npm ci
 FROM node:20-alpine
 WORKDIR /app
 
-# Install git for /export command
-RUN apk add --no-cache git openssh-client
+# Install git for /export command and curl for runtime/debug probes
+RUN apk add --no-cache git openssh-client curl
 
 # Install production dependencies only
 COPY package*.json ./
