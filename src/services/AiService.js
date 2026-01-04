@@ -31,10 +31,24 @@ class AiService {
      * Update user's AI settings.
      */
     async updateSettings(userId, provider, model) {
-        if (this.storage) {
-            await this.storage.updateAiSettings(userId, provider, model);
+        let resolvedProvider = provider;
+        let resolvedModel = model;
+
+        if (!resolvedProvider) {
+            const current = await this.getSettings(userId);
+            resolvedProvider = current.provider;
+            resolvedModel = resolvedModel || current.model;
         }
-        return { provider, model };
+
+        const providerInstance = getProvider(resolvedProvider);
+        if (!resolvedModel) {
+            resolvedModel = providerInstance?.defaultModel || "";
+        }
+
+        if (this.storage) {
+            await this.storage.updateAiSettings(userId, resolvedProvider, resolvedModel);
+        }
+        return { provider: resolvedProvider, model: resolvedModel };
     }
 
     /**

@@ -4,7 +4,9 @@
  */
 class ApiClient {
     constructor() {
-        this.baseUrl = window.location.origin;
+        const isFile = window.location.protocol === 'file:' || window.location.origin === 'null';
+        const defaultBaseUrl = isFile ? 'http://localhost:3001' : window.location.origin;
+        this.baseUrl = window.QUBOT_API_BASE || defaultBaseUrl;
         this.apiKey = localStorage.getItem('qubot_api_key') || '';
         this.ws = null;
         this.wsCallbacks = new Map();
@@ -75,7 +77,8 @@ class ApiClient {
     }
 
     async getModels(provider) {
-        return this.request(`/api/ai/models?provider=${provider}`);
+        const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+        return this.request(`/api/ai/models${query}`);
     }
 
     async sendMessage(message, chatId = null) {
@@ -83,6 +86,93 @@ class ApiClient {
             method: 'POST',
             body: JSON.stringify({ message, chatId })
         });
+    }
+
+    async sendMessageStream(message, chatId = null, handlers = {}) {
+        const url = `${this.baseUrl}/api/ai/chat/stream`;
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+
+        if (this.apiKey) {
+            headers['Authorization'] = `Bearer ${this.apiKey}`;
+        }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ message, chatId })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || 'Stream request failed');
+        }
+
+        if (!response.body) {
+            throw new Error('Streaming not supported by the browser');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        const result = { content: '', chatId: null, provider: null, model: null };
+
+        const parseEvent = (chunk) => {
+            const lines = chunk.split('\n');
+            let event = 'message';
+            const dataLines = [];
+            for (const line of lines) {
+                if (line.startsWith('event:')) {
+                    event = line.slice(6).trim();
+                } else if (line.startsWith('data:')) {
+                    dataLines.push(line.slice(5).trim());
+                }
+            }
+            if (!dataLines.length) return null;
+            const dataText = dataLines.join('\n');
+            let data = dataText;
+            try {
+                data = JSON.parse(dataText);
+            } catch (err) {
+                data = dataText;
+            }
+            return { event, data };
+        };
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n\n');
+            buffer = parts.pop() || '';
+
+            for (const part of parts) {
+                const parsed = parseEvent(part.trim());
+                if (!parsed) continue;
+
+                if (parsed.event === 'meta') {
+                    Object.assign(result, parsed.data || {});
+                    handlers.onMeta?.(parsed.data);
+                } else if (parsed.event === 'chunk') {
+                    const token = parsed.data?.token ?? parsed.data;
+                    result.content += token || '';
+                    handlers.onChunk?.(token || '');
+                } else if (parsed.event === 'done') {
+                    if (parsed.data?.content) {
+                        result.content = parsed.data.content;
+                    }
+                    handlers.onDone?.(parsed.data);
+                } else if (parsed.event === 'error') {
+                    const message = parsed.data?.error || 'Stream error';
+                    handlers.onError?.(message);
+                    throw new Error(message);
+                }
+            }
+        }
+
+        return result;
     }
 
     async getChats(limit = 20) {
@@ -94,7 +184,7 @@ class ApiClient {
     }
 
     async getChat(chatId, messageLimit = 50) {
-        return this.request(`/api/ai/chats/${chatId}?messages=${messageLimit}`);
+        return this.request(`/api/ai/chats/${chatId}?limit=${messageLimit}`);
     }
 
     async switchChat(chatId) {

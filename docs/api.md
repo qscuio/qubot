@@ -61,6 +61,7 @@ curl http://localhost:3001/health
 | GET | `/api/ai/providers` | List AI providers |
 | GET | `/api/ai/models` | Get models for current provider |
 | POST | `/api/ai/chat` | Send message, get response |
+| POST | `/api/ai/chat/stream` | Stream response via SSE |
 | GET | `/api/ai/chats` | List chat sessions |
 | POST | `/api/ai/chats` | Create new chat |
 | GET | `/api/ai/chats/:id` | Get chat with messages |
@@ -85,6 +86,27 @@ curl -X POST http://localhost:3001/api/ai/chat \
 }
 ```
 
+#### POST /api/ai/chat/stream
+Server-Sent Events (SSE) stream of response chunks.
+```bash
+curl -N -X POST http://localhost:3001/api/ai/chat/stream \
+  -H "Authorization: Bearer myapikey" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello"}'
+```
+
+Example events:
+```
+event: meta
+data: {"chatId":5,"provider":"groq","model":"llama-3.3-70b-versatile"}
+
+event: chunk
+data: {"token":"Hello"}
+
+event: done
+data: {"content":"Hello there!"}
+```
+
 #### GET /api/ai/providers
 ```bash
 curl http://localhost:3001/api/ai/providers \
@@ -98,6 +120,8 @@ curl http://localhost:3001/api/ai/providers \
   ]
 }
 ```
+
+`/api/ai/models` also accepts an optional `provider` query to preview models before switching providers.
 
 ---
 

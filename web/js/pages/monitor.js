@@ -136,9 +136,9 @@ class MonitorPage {
 
     async loadHistory() {
         try {
-            const data = await api.getMonitorHistory(20);
-            if (data.length > 0) {
-                this.messages = data.map(m => ({
+            const { history } = await api.getMonitorHistory(20);
+            if (history?.length) {
+                this.messages = history.map(m => ({
                     source: m.source,
                     text: m.message,
                     timestamp: m.created_at

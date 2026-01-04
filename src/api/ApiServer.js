@@ -164,8 +164,9 @@ class ApiServer {
         this.app.get("/api/ai/models", async (req, res) => {
             try {
                 const settings = await ai.getSettings(req.userId);
-                const models = await ai.getModels(settings.provider);
-                res.json({ provider: settings.provider, models });
+                const provider = req.query.provider || settings.provider;
+                const models = await ai.getModels(provider);
+                res.json({ provider, models });
             } catch (err) {
                 res.status(500).json({ error: err.message });
             }
@@ -182,6 +183,41 @@ class ApiServer {
                 res.json(response);
             } catch (err) {
                 res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Stream message (SSE)
+        this.app.post("/api/ai/chat/stream", async (req, res) => {
+            res.setHeader("Content-Type", "text/event-stream");
+            res.setHeader("Cache-Control", "no-cache, no-transform");
+            res.setHeader("Connection", "keep-alive");
+            res.flushHeaders?.();
+
+            const { message } = req.body || {};
+            if (!message) {
+                res.write(`event: error\ndata: ${JSON.stringify({ error: "Message is required" })}\n\n`);
+                return res.end();
+            }
+
+            try {
+                const response = await ai.chat(req.userId, message);
+                res.write(`event: meta\ndata: ${JSON.stringify({
+                    chatId: response.chatId,
+                    provider: response.provider,
+                    model: response.model
+                })}\n\n`);
+
+                const content = response.content || "";
+                const tokens = content.match(/\s+|\S+/g) || [];
+                for (const token of tokens) {
+                    res.write(`event: chunk\ndata: ${JSON.stringify({ token })}\n\n`);
+                }
+
+                res.write(`event: done\ndata: ${JSON.stringify({ content })}\n\n`);
+                res.end();
+            } catch (err) {
+                res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+                res.end();
             }
         });
 
