@@ -566,7 +566,10 @@ ${rawContent.substring(0, 15000)}`;
 
         // Check which providers are configured
         const configuredProviders = listProviders()
-            .filter(p => p.isConfigured(this.config))
+            .filter(p => {
+                const providerInstance = getProvider(p.key);
+                return providerInstance?.isConfigured?.(this.config);
+            })
             .map(p => p.name);
 
         await ctx.reply(

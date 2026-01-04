@@ -69,7 +69,7 @@ class ChannelMonitorFeature extends BaseFeature {
 
             if (!isMonitored) return;
 
-            const sourceName = chatUsername || chatTitle || chatId || "unknown";
+            const sourceName = chatUsername || chatTitle || rawChatId || "unknown";
 
             // User filter
             if (this.fromUsers.length > 0) {

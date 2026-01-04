@@ -15,6 +15,7 @@ class RssBot extends BotInstance {
         this.pollInterval = null;
         this.pollIntervalMs = 5 * 60 * 1000; // 5 minutes
         this.lastPollBySource = new Map(); // Rate limiting per source
+        this.pendingSubscriptions = new Map(); // token -> {url, title, userId, chatId, expires}
     }
 
     async setup() {
@@ -103,13 +104,17 @@ class RssBot extends BotInstance {
         const feed = await parser.parseURL(source.link);
         const targetChannel = this.config.get("TARGET_CHANNEL");
 
-        for (const item of feed.items.slice(0, 5)) {
+        // Process all items until we hit one we've seen (most feeds are sorted newest-first)
+        for (const item of feed.items) {
             const itemId = item.guid || item.link || item.title;
             const hashId = `${source.id}:${itemId}`;
 
-            // Skip if already seen
+            // Skip if already seen - stop processing older items
             const exists = await this.storage.contentExists(hashId);
-            if (exists) continue;
+            if (exists) {
+                // If we've seen this item, older items are likely also seen
+                break;
+            }
 
             // Mark as seen
             await this.storage.addContent(hashId, source.id, itemId, item.link, item.title);
@@ -149,10 +154,19 @@ class RssBot extends BotInstance {
     }
 
     async _handleSub(ctx) {
+        const userId = ctx.from?.id;
+        const chatId = ctx.chat?.id;
         const url = (ctx.message.text || "").replace("/sub", "").trim();
 
         if (!url) {
             return ctx.reply("📌 Usage: /sub <RSS URL>\nExample: /sub https://example.com/feed.xml", {
+                reply_markup: this._persistentKeyboard()
+            });
+        }
+
+        // Check storage availability
+        if (!this.storage) {
+            return ctx.reply("❌ Database unavailable. Cannot persist subscriptions.", {
                 reply_markup: this._persistentKeyboard()
             });
         }
@@ -166,13 +180,25 @@ class RssBot extends BotInstance {
                 ? `\n\n📄 <b>Latest:</b> ${this._escapeHtml(latestItem.title?.substring(0, 60) || "No title")}...`
                 : "";
 
-            // Encode URL for callback data (limit to 64 chars due to Telegram limits)
-            const shortUrl = url.substring(0, 60);
+            // Generate a short token for this subscription request
+            const token = `${userId}_${Date.now().toString(36)}`;
+
+            // Store the full URL and metadata with expiration (5 min)
+            this.pendingSubscriptions.set(token, {
+                url,
+                title,
+                userId,
+                chatId,
+                expires: Date.now() + 5 * 60 * 1000
+            });
+
+            // Clean up expired tokens
+            this._cleanupPendingSubscriptions();
 
             const buttons = [
                 [
-                    { text: "✅ Subscribe", callback_data: `confirm_sub:${shortUrl}` },
-                    { text: "❌ Cancel", callback_data: `cancel_sub:${shortUrl}` }
+                    { text: "✅ Subscribe", callback_data: `confirm_sub:${token}` },
+                    { text: "❌ Cancel", callback_data: `cancel_sub:${token}` }
                 ]
             ];
 
@@ -187,25 +213,41 @@ class RssBot extends BotInstance {
         }
     }
 
+    _cleanupPendingSubscriptions() {
+        const now = Date.now();
+        for (const [token, data] of this.pendingSubscriptions) {
+            if (data.expires < now) {
+                this.pendingSubscriptions.delete(token);
+            }
+        }
+    }
+
     async _handleSubConfirm(ctx) {
-        const userId = ctx.from?.id;
-        const chatId = ctx.chat?.id;
-        const url = ctx.match[1];
+        const token = ctx.match[1];
+        const pending = this.pendingSubscriptions.get(token);
+
+        if (!pending) {
+            return ctx.answerCbQuery("Request expired. Please use /sub again.");
+        }
+
+        // Remove from pending
+        this.pendingSubscriptions.delete(token);
+
+        if (!this.storage) {
+            await ctx.answerCbQuery("Database unavailable");
+            return ctx.editMessageText("❌ Database unavailable. Cannot persist subscriptions.");
+        }
 
         try {
-            // Re-fetch to get full URL and title
-            const feed = await parser.parseURL(url);
-            const title = feed.title || url;
+            const { url, title, userId, chatId } = pending;
+            const added = await this.storage.addRssSubscription(userId, chatId, url, title);
 
-            if (this.storage) {
-                const added = await this.storage.addRssSubscription(userId, chatId, url, title);
-                if (added) {
-                    await ctx.answerCbQuery("Subscribed!");
-                    await ctx.editMessageText(`✅ <b>Subscribed!</b>\n\n📰 ${this._escapeHtml(title)}\n🔗 ${url}\n\n<i>Updates will be posted to TARGET_CHANNEL.</i>`, { parse_mode: "HTML" });
-                } else {
-                    await ctx.answerCbQuery("Already subscribed");
-                    await ctx.editMessageText(`⚠️ You're already subscribed to: ${this._escapeHtml(title)}`, { parse_mode: "HTML" });
-                }
+            if (added) {
+                await ctx.answerCbQuery("Subscribed!");
+                await ctx.editMessageText(`✅ <b>Subscribed!</b>\n\n📰 ${this._escapeHtml(title)}\n🔗 ${url}\n\n<i>Updates will be posted to TARGET_CHANNEL.</i>`, { parse_mode: "HTML" });
+            } else {
+                await ctx.answerCbQuery("Already subscribed");
+                await ctx.editMessageText(`⚠️ You're already subscribed to: ${this._escapeHtml(title)}`, { parse_mode: "HTML" });
             }
         } catch (err) {
             await ctx.answerCbQuery(`Error: ${err.message}`);
@@ -217,24 +259,31 @@ class RssBot extends BotInstance {
         const input = (ctx.message.text || "").replace("/unsub", "").trim();
 
         if (!input) {
-            return ctx.reply("📌 Usage: /unsub <RSS URL or ID>");
+            return ctx.reply("📌 Usage: /unsub <RSS URL or ID>", {
+                reply_markup: this._persistentKeyboard()
+            });
+        }
+
+        // Check storage availability
+        if (!this.storage) {
+            return ctx.reply("❌ Database unavailable. Cannot manage subscriptions.", {
+                reply_markup: this._persistentKeyboard()
+            });
         }
 
         try {
-            if (this.storage) {
-                const subs = await this.storage.getRssSubscriptions(userId);
-                const source = subs.find((s) => s.url === input || String(s.id) === input);
+            const subs = await this.storage.getRssSubscriptions(userId);
+            const source = subs.find((s) => s.url === input || String(s.id) === input);
 
-                if (!source) {
-                    return ctx.reply("❌ Subscription not found.");
-                }
+            if (!source) {
+                return ctx.reply("❌ Subscription not found.");
+            }
 
-                const removed = await this.storage.removeRssSubscription(userId, source.url);
-                if (removed) {
-                    await ctx.reply(`✅ Unsubscribed: ${source.title}`);
-                } else {
-                    await ctx.reply("⚠️ You're not subscribed to this feed.");
-                }
+            const removed = await this.storage.removeRssSubscription(userId, source.url);
+            if (removed) {
+                await ctx.reply(`✅ Unsubscribed: ${source.title}`);
+            } else {
+                await ctx.reply("⚠️ You're not subscribed to this feed.");
             }
         } catch (err) {
             await ctx.reply(`❌ Unsubscribe failed: ${err.message}`);

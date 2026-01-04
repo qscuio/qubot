@@ -5,12 +5,11 @@ A professional, plugin-based Telegram application with a flexible multi-bot arch
 ## Features
 
 - 🤖 **Multi-Bot Architecture** - 1 Userbot (MTProto) + unlimited Bot API bots
-- 📡 **Channel Monitoring** - Real-time Telegram channel monitoring
-- 📰 **RSS Subscription** - Subscribe to RSS feeds via bot commands
-- 🧠 **AI Chat** - Multi-provider AI support (Groq, Gemini, OpenAI, Claude, NVIDIA)
-- 📚 **16 Default RSS Sources** - BBC, Guardian, Hacker News, TechCrunch, etc.
-- � **Webhook Mode** - Nginx reverse proxy with Let's Encrypt SSL
-- 💾 **PostgreSQL Storage** - Persistent subscription data
+- 📡 **Channel Monitoring** - Real-time Telegram channel monitoring (requires userbot)
+- 📰 **RSS Subscriptions** - User-managed subscriptions delivered to TARGET_CHANNEL
+- 🧠 **AI Chat** - Multi-provider AI (Groq, Gemini, OpenAI, Claude, NVIDIA) with chat history
+- 🔗 **Webhook Mode** - Nginx reverse proxy with Let's Encrypt SSL
+- 💾 **PostgreSQL Storage** - Persistent subscriptions, chat history, settings
 - 🐳 **Dockerized** - Easy deployment with Docker Compose
 - 🚀 **GitHub Actions** - Automated deployment to VPS
 
@@ -19,19 +18,25 @@ A professional, plugin-based Telegram application with a flexible multi-bot arch
 ### 📰 RSS Bot
 | Command | Description |
 |---------|-------------|
-| `/sub <url>` | Subscribe to RSS feed |
+| `/start` | Welcome & quick actions |
+| `/sub <url>` | Subscribe to RSS feed (with preview) |
 | `/unsub <id>` | Unsubscribe |
-| `/list` | List subscriptions |
-| `/check` | Check status |
+| `/list` | List subscriptions (with unsub buttons) |
+| `/status` | Check bot & database status |
 
 **Token:** `RSS_BOT_TOKEN`
 
-### 🧠 AI Bot (Coming Soon)
+### 🧠 AI Bot
 | Command | Description |
 |---------|-------------|
-| `/ai <text>` | Ask AI |
-| `/providers` | Select provider |
+| `/start` | Welcome & quick actions |
+| `/ai <text>` | Ask AI (or just send a message) |
+| `/new` | Start new chat |
+| `/chats` | List/switch chats |
+| `/providers` | Select AI provider |
 | `/models` | Select model |
+| `/export` | Export chat to GitHub |
+| `/status` | Check bot status |
 
 **Token:** `AI_BOT_TOKEN`
 
@@ -172,14 +177,14 @@ src/
 │   ├── BotManager.js       # Manages bots
 │   ├── BotInstance.js      # Bot base class
 │   ├── WebhookServer.js    # Express server
-│   ├── TelegramService.js  # Userbot
+│   ├── TelegramService.js  # Userbot (optional)
 │   └── StorageService.js   # PostgreSQL
 ├── bots/
-│   ├── rss-bot/            # RSS Bot
-│   └── ai-bot/             # AI Bot
+│   ├── rss-bot/            # RSS Bot (subscriptions → TARGET_CHANNEL)
+│   └── ai-bot/             # AI Bot (multi-provider chat)
+├── providers/              # AI providers (Groq, Gemini, etc.)
 └── features/
-    ├── channel-monitor/    # Userbot feature
-    └── rss/                # Default sources
+    └── channel-monitor/    # Userbot channel monitoring
 ```
 
 ## Adding a New Bot
