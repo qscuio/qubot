@@ -6,6 +6,7 @@ const StorageService = require("./StorageService");
 const CacheService = require("./CacheService");
 const FeatureManager = require("./FeatureManager");
 const WebhookServer = require("./WebhookServer");
+const GitHubService = require("./GitHubService");
 
 // Import bot classes
 const RssBot = require("../bots/rss-bot");
@@ -87,10 +88,14 @@ class App {
             this.botManager.registerBot("rss-bot", rssBot);
         }
 
+        // GitHub Service
+        const githubService = new GitHubService(this.config);
+        await githubService.init();
+
         // AI Bot
         const aiBotToken = this.config.get("AI_BOT_TOKEN");
         if (aiBotToken) {
-            const aiBot = new AiBot(aiBotToken, this.config, this.storage);
+            const aiBot = new AiBot(aiBotToken, this.config, this.storage, githubService);
             await aiBot.setup();
             this.botManager.registerBot("ai-bot", aiBot);
         }

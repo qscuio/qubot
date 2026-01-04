@@ -35,6 +35,9 @@ class NvidiaProvider extends BaseProvider {
         const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
         try {
+            console.log(`[NVIDIA] Calling API with model: ${model}`);
+            console.log(`[NVIDIA] Key present: ${!!apiKey}, Key length: ${apiKey?.length}`);
+
             const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
                 method: "POST",
                 headers: {

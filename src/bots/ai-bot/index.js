@@ -9,10 +9,11 @@ const DEFAULT_PROVIDER = "groq";
  * Features: Chat history, multiple providers, long messages, GitHub export.
  */
 class AiBot extends BotInstance {
-    constructor(token, config, storage) {
+    constructor(token, config, storage, githubService) {
         super("ai-bot", token);
         this.config = config;
         this.storage = storage;
+        this.githubService = githubService;
         this.cachedModels = new Map();
     }
 
@@ -337,6 +338,13 @@ class AiBot extends BotInstance {
         }
 
         // Build markdown
+        const date = new Date().toISOString().split("T")[0];
+        const safeTitle = (chat.title || "chat")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "");
+        const filename = `chat-${date}-${safeTitle}.md`;
+
         let md = `# ${chat.title}\n\n`;
         md += `_Exported: ${new Date().toISOString()}_\n\n---\n\n`;
 
@@ -345,11 +353,29 @@ class AiBot extends BotInstance {
             md += `**${role}:**\n${msg.content}\n\n---\n\n`;
         }
 
-        // Send as document
+        // 1. Send as document (always)
         await ctx.replyWithDocument({
             source: Buffer.from(md, "utf-8"),
-            filename: `chat-${chat.id}.md`,
+            filename: filename,
         });
+
+        // 2. Push to GitHub (if configured)
+        if (this.githubService && this.githubService.isReady) {
+            try {
+                await ctx.reply("⏳ Pushing to GitHub...");
+                await this.githubService.saveNote(
+                    filename,
+                    md,
+                    `Add note: ${chat.title} (from QuBot)`
+                );
+                await ctx.reply(`✅ Pushed to GitHub: \`${filename}\``, { parse_mode: "Markdown" });
+            } catch (err) {
+                this.logger.error("GitHub push failed", err);
+                await ctx.reply(`❌ GitHub push failed: ${err.message}`);
+            }
+        } else if (this.config.get("NOTES_REPO")) {
+            await ctx.reply("⚠️ GitHub export configured but service not ready. Check logs.");
+        }
 
         if (ctx.callbackQuery) {
             await ctx.answerCbQuery("Exported!");

@@ -54,6 +54,10 @@ class ConfigService {
             OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
             CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || "",
             NVIDIA_API_KEY: process.env.NVIDIA_API_KEY || "",
+
+            // GitHub Export
+            NOTES_REPO: process.env.NOTES_REPO || "",
+            NOTES_SSH_KEY_PATH: process.env.NOTES_SSH_KEY_PATH || "/home/ubuntu/.ssh/id_rsa",
         };
     }
 
