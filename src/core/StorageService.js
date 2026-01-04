@@ -72,10 +72,45 @@ class StorageService {
             );
         `;
 
+        // AI Chat tables
+        const createAiChatsTable = `
+            CREATE TABLE IF NOT EXISTS ai_chats (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                title TEXT DEFAULT 'New Chat',
+                summary TEXT,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `;
+
+        const createAiMessagesTable = `
+            CREATE TABLE IF NOT EXISTS ai_messages (
+                id SERIAL PRIMARY KEY,
+                chat_id INTEGER NOT NULL REFERENCES ai_chats(id) ON DELETE CASCADE,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `;
+
+        const createAiSettingsTable = `
+            CREATE TABLE IF NOT EXISTS ai_settings (
+                user_id BIGINT PRIMARY KEY,
+                provider TEXT DEFAULT 'groq',
+                model TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `;
+
         try {
             await this.pool.query(createSourcesTable);
             await this.pool.query(createSubscriptionsTable);
             await this.pool.query(createContentsTable);
+            await this.pool.query(createAiChatsTable);
+            await this.pool.query(createAiMessagesTable);
+            await this.pool.query(createAiSettingsTable);
             logger.info("Database tables initialized.");
         } catch (err) {
             logger.error("Failed to create tables", err);
@@ -213,6 +248,152 @@ class StorageService {
             logger.error("Failed to add content", err);
             return false;
         }
+    }
+
+    // ============= AI Chat Methods =============
+
+    async getOrCreateActiveChat(userId) {
+        // Find active chat
+        let result = await this.pool.query(
+            "SELECT * FROM ai_chats WHERE user_id = $1 AND is_active = TRUE ORDER BY updated_at DESC LIMIT 1",
+            [userId]
+        );
+
+        if (result.rows.length > 0) {
+            return result.rows[0];
+        }
+
+        // Create new chat
+        result = await this.pool.query(
+            "INSERT INTO ai_chats (user_id) VALUES ($1) RETURNING *",
+            [userId]
+        );
+        return result.rows[0];
+    }
+
+    async createNewChat(userId) {
+        // Deactivate all existing chats
+        await this.pool.query(
+            "UPDATE ai_chats SET is_active = FALSE WHERE user_id = $1",
+            [userId]
+        );
+
+        // Create new active chat
+        const result = await this.pool.query(
+            "INSERT INTO ai_chats (user_id) VALUES ($1) RETURNING *",
+            [userId]
+        );
+        return result.rows[0];
+    }
+
+    async getChatById(chatId) {
+        const result = await this.pool.query(
+            "SELECT * FROM ai_chats WHERE id = $1",
+            [chatId]
+        );
+        return result.rows[0] || null;
+    }
+
+    async getUserChats(userId, limit = 10) {
+        const result = await this.pool.query(
+            "SELECT * FROM ai_chats WHERE user_id = $1 ORDER BY updated_at DESC LIMIT $2",
+            [userId, limit]
+        );
+        return result.rows;
+    }
+
+    async setActiveChat(userId, chatId) {
+        await this.pool.query(
+            "UPDATE ai_chats SET is_active = FALSE WHERE user_id = $1",
+            [userId]
+        );
+        await this.pool.query(
+            "UPDATE ai_chats SET is_active = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+            [chatId]
+        );
+    }
+
+    async renameChat(chatId, title) {
+        await this.pool.query(
+            "UPDATE ai_chats SET title = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+            [title, chatId]
+        );
+    }
+
+    async updateChatSummary(chatId, summary) {
+        await this.pool.query(
+            "UPDATE ai_chats SET summary = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+            [summary, chatId]
+        );
+    }
+
+    async deleteChat(chatId) {
+        await this.pool.query("DELETE FROM ai_chats WHERE id = $1", [chatId]);
+    }
+
+    // ============= AI Message Methods =============
+
+    async saveMessage(chatId, role, content) {
+        const result = await this.pool.query(
+            "INSERT INTO ai_messages (chat_id, role, content) VALUES ($1, $2, $3) RETURNING *",
+            [chatId, role, content]
+        );
+
+        // Update chat timestamp
+        await this.pool.query(
+            "UPDATE ai_chats SET updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+            [chatId]
+        );
+
+        return result.rows[0];
+    }
+
+    async getChatMessages(chatId, limit = 10) {
+        const result = await this.pool.query(
+            "SELECT * FROM ai_messages WHERE chat_id = $1 ORDER BY created_at DESC LIMIT $2",
+            [chatId, limit]
+        );
+        return result.rows;
+    }
+
+    async getMessageCount(chatId) {
+        const result = await this.pool.query(
+            "SELECT COUNT(*) FROM ai_messages WHERE chat_id = $1",
+            [chatId]
+        );
+        return parseInt(result.rows[0].count, 10);
+    }
+
+    async clearChatMessages(chatId) {
+        await this.pool.query("DELETE FROM ai_messages WHERE chat_id = $1", [chatId]);
+    }
+
+    // ============= AI Settings Methods =============
+
+    async getAiSettings(userId) {
+        const result = await this.pool.query(
+            "SELECT * FROM ai_settings WHERE user_id = $1",
+            [userId]
+        );
+
+        if (result.rows.length === 0) {
+            // Create default settings
+            await this.pool.query(
+                "INSERT INTO ai_settings (user_id, provider, model) VALUES ($1, 'groq', 'llama-3.3-70b-versatile')",
+                [userId]
+            );
+            return { user_id: userId, provider: "groq", model: "llama-3.3-70b-versatile" };
+        }
+
+        return result.rows[0];
+    }
+
+    async updateAiSettings(userId, provider, model) {
+        await this.pool.query(
+            `INSERT INTO ai_settings (user_id, provider, model) VALUES ($1, $2, $3)
+             ON CONFLICT (user_id) DO UPDATE SET provider = $2, model = $3, updated_at = CURRENT_TIMESTAMP`,
+            [userId, provider, model]
+        );
     }
 
     async close() {

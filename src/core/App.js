@@ -90,7 +90,7 @@ class App {
         // AI Bot
         const aiBotToken = this.config.get("AI_BOT_TOKEN");
         if (aiBotToken) {
-            const aiBot = new AiBot(aiBotToken, this.config);
+            const aiBot = new AiBot(aiBotToken, this.config, this.storage);
             await aiBot.setup();
             this.botManager.registerBot("ai-bot", aiBot);
         }
