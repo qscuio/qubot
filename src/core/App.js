@@ -99,7 +99,7 @@ class App {
         // RSS Bot
         const rssBotToken = this.config.get("RSS_BOT_TOKEN");
         if (rssBotToken) {
-            const rssBot = new RssBot(rssBotToken, this.storage, allowedUsers);
+            const rssBot = new RssBot(rssBotToken, this.config, this.storage, allowedUsers);
             await rssBot.setup();
             this.botManager.registerBot("rss-bot", rssBot);
         }
