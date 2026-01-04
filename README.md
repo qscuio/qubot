@@ -7,6 +7,7 @@ A professional, plugin-based Telegram Userbot built with Node.js and GramJS for 
 - **Channel Monitoring**: Listen to specific channels for new messages.
 - **Keyword Filtering**: Only forward messages containing specific keywords.
 - **User Whitelist**: Optionally filter by sender.
+- **RSS Feeds**: 14 curated news sources (BBC, Reuters, HN, TechCrunch, etc.)
 - **Rate Limiting**: Built-in rate limiter to prevent Telegram bans.
 - **Dockerized**: Easy deployment using Docker and Docker Compose.
 - **GitHub Actions**: Automated deployment to VPS.
@@ -25,8 +26,11 @@ src/
 │   └── Logger.js               # Logging utility
 └── features/
     ├── BaseFeature.js          # Abstract base class
-    └── channel-monitor/
-        └── ChannelMonitorFeature.js
+    ├── channel-monitor/
+    │   └── ChannelMonitorFeature.js
+    └── rss/
+        ├── RssFeature.js
+        └── defaultSources.js   # 14 curated RSS sources
 ```
 
 ## Setup & Configuration

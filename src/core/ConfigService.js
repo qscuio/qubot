@@ -28,6 +28,10 @@ class ConfigService {
             // Rate Limiting
             RATE_LIMIT_MS: parseInt(process.env.RATE_LIMIT_MS || "30000", 10),
 
+            // RSS Feature
+            RSS_SOURCES: process.env.RSS_SOURCES || "", // JSON string or empty for defaults
+            RSS_POLL_INTERVAL_MS: parseInt(process.env.RSS_POLL_INTERVAL_MS || "300000", 10), // 5 min default
+
             // Logging
             LOG_LEVEL: process.env.LOG_LEVEL || "info",
         };
