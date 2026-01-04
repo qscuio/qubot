@@ -4,9 +4,14 @@ const TelegramService = require("./TelegramService");
 const BotManager = require("./BotManager");
 const StorageService = require("./StorageService");
 const CacheService = require("./CacheService");
-const FeatureManager = require("./FeatureManager");
 const WebhookServer = require("./WebhookServer");
 const GitHubService = require("./GitHubService");
+
+// Import services
+const { AiService, RssService, MonitorService } = require("../services");
+
+// Import API server
+const { ApiServer } = require("../api");
 
 // Import bot classes
 const RssBot = require("../bots/rss-bot");
@@ -17,6 +22,7 @@ const logger = new Logger("App");
 /**
  * App - Main application entry point.
  * Supports 1 Userbot + N Bot API bots via BotManager.
+ * Also runs REST API server for alternative frontends.
  */
 class App {
     constructor() {
@@ -24,8 +30,21 @@ class App {
         this.storage = null;
         this.cache = null;
         this.botManager = null;
-        this.featureManager = null;
         this.webhookServer = null;
+        this.apiServer = null;
+
+        // Services
+        this.services = {
+            ai: null,
+            rss: null,
+            monitor: null
+        };
+
+        // GitHub service
+        this.githubService = null;
+
+        // Userbot reference
+        this.userbot = null;
     }
 
     async start() {
@@ -46,39 +65,40 @@ class App {
         this.cache = new CacheService(this.config);
         await this.cache.init();
 
-        // 4. Initialize BotManager
+        // 4. Initialize GitHub Service
+        this.githubService = new GitHubService(this.config);
+        await this.githubService.init();
+
+        // 5. Initialize BotManager
         this.botManager = new BotManager();
 
-        // 5. Register Userbot (MTProto) - optional, only if configured
-        let userbot = null;
+        // 6. Register Userbot (MTProto) - optional, only if configured
         if (this.config.isUserbotConfigured()) {
-            userbot = new TelegramService(this.config);
-            await userbot.connect();
-            this.botManager.registerUserbot(userbot);
+            this.userbot = new TelegramService(this.config);
+            await this.userbot.connect();
+            this.botManager.registerUserbot(this.userbot);
         } else {
             logger.info("📵 Userbot disabled (MTProto not configured).");
         }
 
-        // 6. Register Bot API bots
+        // 7. Initialize Services (decoupled business logic)
+        await this._initializeServices();
+
+        // 8. Register Bot API bots
         await this._registerBots();
 
-        // 7. Initialize Feature Manager (only if userbot is available)
-        if (userbot) {
-            this.featureManager = new FeatureManager({
-                config: this.config,
-                storage: this.storage,
-                botManager: this.botManager,
-                telegram: userbot,
-            });
+        // 9. Start API server (if enabled)
+        await this._startApiServer();
 
-            // 8. Load and Enable Features
-            await this.featureManager.loadFeatures();
-            await this.featureManager.enableAll();
-        } else {
-            logger.info("📵 Features requiring userbot skipped.");
+        // 10. Start MonitorService (if userbot available)
+        if (this.services.monitor && this.userbot) {
+            await this.services.monitor.init();
+            await this.services.monitor.start().catch(err => {
+                logger.warn(`Monitor auto-start failed: ${err.message}`);
+            });
         }
 
-        // 9. Start webhook server OR polling
+        // 11. Start webhook server OR polling for Telegram bots
         const useWebhook = !!this.config.get("WEBHOOK_URL");
         if (useWebhook) {
             await this._startWebhookMode();
@@ -87,10 +107,27 @@ class App {
         }
 
         logger.info("🎉 Application started successfully.");
-        logger.info(`   📡 Userbot: ${userbot ? "Connected" : "Disabled"}`);
+        logger.info(`   📡 Userbot: ${this.userbot ? "Connected" : "Disabled"}`);
         logger.info(`   💾 Database: ${this.storage ? "Connected" : "Unavailable"}`);
         logger.info(`   🤖 Bots: ${this.botManager.getBotNames().join(", ") || "none"}`);
         logger.info(`   🔗 Mode: ${useWebhook ? "Webhook" : "Polling"}`);
+        logger.info(`   🌐 API: ${this.apiServer ? `Running on port ${this.config.get("API_PORT") || 3001}` : "Disabled"}`);
+    }
+
+    async _initializeServices() {
+        // AI Service
+        this.services.ai = new AiService(this.config, this.storage, this.githubService);
+        logger.info("✅ AiService initialized");
+
+        // RSS Service
+        this.services.rss = new RssService(this.config, this.storage);
+        logger.info("✅ RssService initialized");
+
+        // Monitor Service (requires userbot)
+        if (this.userbot) {
+            this.services.monitor = new MonitorService(this.config, this.storage, this.userbot);
+            logger.info("✅ MonitorService initialized");
+        }
     }
 
     async _registerBots() {
@@ -104,17 +141,25 @@ class App {
             this.botManager.registerBot("rss-bot", rssBot);
         }
 
-        // GitHub Service
-        const githubService = new GitHubService(this.config);
-        await githubService.init();
-
         // AI Bot
         const aiBotToken = this.config.get("AI_BOT_TOKEN");
         if (aiBotToken) {
-            const aiBot = new AiBot(aiBotToken, this.config, this.storage, githubService, allowedUsers);
+            const aiBot = new AiBot(aiBotToken, this.config, this.storage, this.githubService, allowedUsers);
             await aiBot.setup();
             this.botManager.registerBot("ai-bot", aiBot);
         }
+    }
+
+    async _startApiServer() {
+        const apiEnabled = this.config.get("API_ENABLED") !== "false";
+
+        if (!apiEnabled) {
+            logger.info("📵 API server disabled (API_ENABLED=false).");
+            return;
+        }
+
+        this.apiServer = new ApiServer(this.config, this.services);
+        await this.apiServer.start();
     }
 
     async _startWebhookMode() {
@@ -140,11 +185,14 @@ class App {
     async stop() {
         logger.info("🛑 Stopping application...");
         await this.botManager.stopAll();
-        if (this.featureManager) {
-            await this.featureManager.disableAll();
+        if (this.services.monitor) {
+            await this.services.monitor.stop();
         }
         if (this.webhookServer) {
             await this.webhookServer.stop();
+        }
+        if (this.apiServer) {
+            await this.apiServer.stop();
         }
         if (this.storage) {
             await this.storage.close();
@@ -154,3 +202,4 @@ class App {
 }
 
 module.exports = App;
+

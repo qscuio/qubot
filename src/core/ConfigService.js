@@ -60,6 +60,11 @@ class ConfigService {
 
             // GitHub Export
             NOTES_REPO: process.env.NOTES_REPO || "",
+
+            // REST API Configuration
+            API_ENABLED: process.env.API_ENABLED !== "false", // true by default
+            API_PORT: parseInt(process.env.API_PORT || "3001", 10),
+            API_KEYS: process.env.API_KEYS || "",
         };
     }
 
