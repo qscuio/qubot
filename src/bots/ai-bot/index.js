@@ -24,6 +24,7 @@ class AiBot extends BotInstance {
         }
 
         // Register commands
+        this.command("start", "Welcome and quick actions", (ctx) => this._handleStart(ctx));
         this.command("ai", "Ask AI a question", (ctx) => this._handleAi(ctx));
         this.command("new", "Start new chat", (ctx) => this._handleNew(ctx));
         this.command("chats", "List/switch chats", (ctx) => this._handleChats(ctx));
@@ -32,6 +33,7 @@ class AiBot extends BotInstance {
         this.command("export", "Export chat to markdown", (ctx) => this._handleExport(ctx));
         this.command("providers", "Select AI provider", (ctx) => this._handleProviders(ctx));
         this.command("models", "Select model", (ctx) => this._handleModels(ctx));
+        this.command("status", "Check bot status", (ctx) => this._handleStatus(ctx));
         this.command("help", "Show help", (ctx) => this._handleHelp(ctx));
 
         // Callback actions
@@ -42,11 +44,12 @@ class AiBot extends BotInstance {
         this.action("cmd_chats", (ctx) => this._handleChats(ctx));
         this.action("cmd_providers", (ctx) => this._handleProviders(ctx));
         this.action("cmd_export", (ctx) => this._handleExport(ctx));
+        this.action("cmd_tryai", (ctx) => ctx.reply("💬 Just send me any message to start chatting!"));
 
         // Plain text handler
         this.onText((ctx) => this._handleText(ctx));
 
-        this.logger.info("AiBot commands registered: /ai, /new, /chats, /providers, /models, /export");
+        this.logger.info("AiBot commands registered.");
     }
 
     async _getSettings(userId) {
@@ -61,6 +64,36 @@ class AiBot extends BotInstance {
         if (this.storage) {
             await this.storage.updateAiSettings(userId, provider, model);
         }
+    }
+
+    /**
+     * Call AI provider with retry logic (1 retry with 1s backoff).
+     */
+    async _callAIWithRetry(provider, prompt, model, history, contextPrefix, retries = 1) {
+        let lastError;
+
+        for (let attempt = 0; attempt <= retries; attempt++) {
+            try {
+                return await callAI(
+                    provider,
+                    this.config,
+                    prompt,
+                    model,
+                    history,
+                    contextPrefix
+                );
+            } catch (err) {
+                lastError = err;
+                this.logger.warn(`AI call attempt ${attempt + 1} failed: ${err.message}`);
+
+                if (attempt < retries) {
+                    // Wait before retry (exponential backoff: 1s, 2s, etc.)
+                    await sleep((attempt + 1) * 1000);
+                }
+            }
+        }
+
+        throw lastError;
     }
 
     async _handleAi(ctx) {
@@ -144,9 +177,9 @@ class AiBot extends BotInstance {
                 }
             }
 
-            const response = await callAI(
+            // Call AI with retry (1 retry on failure)
+            const response = await this._callAIWithRetry(
                 settings.provider,
-                this.config,
                 prompt,
                 settings.model,
                 history,
@@ -494,9 +527,67 @@ ${rawContent.substring(0, 15000)}`;
         await ctx.editMessageText(`✅ Selected model: <code>${escapeHtml(modelId)}</code>`, { parse_mode: "HTML" });
     }
 
+    async _handleStart(ctx) {
+        const userId = ctx.from?.id;
+        const settings = await this._getSettings(userId);
+        const provider = getProvider(settings.provider);
+
+        const buttons = [
+            [{ text: "🧠 Try AI", callback_data: "cmd_tryai" }, { text: "📂 My Chats", callback_data: "cmd_chats" }],
+            [{ text: "🔌 Providers", callback_data: "cmd_providers" }, { text: "📝 Export", callback_data: "cmd_export" }],
+        ];
+
+        await ctx.reply(
+            `🧠 <b>Welcome to AI Bot!</b>\n\n` +
+            `Chat with AI powered by multiple providers.\n\n` +
+            `<b>Current:</b> ${provider?.name || settings.provider} / <code>${settings.model}</code>\n\n` +
+            `<i>Just send me a message to start chatting!</i>`,
+            { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } }
+        );
+    }
+
+    async _handleStatus(ctx) {
+        const userId = ctx.from?.id;
+        const settings = await this._getSettings(userId);
+        const provider = getProvider(settings.provider);
+
+        const dbStatus = this.storage ? "✅ Connected" : "❌ Unavailable";
+        const githubStatus = this.githubService?.isReady ? "✅ Ready" : "⚠️ Not configured";
+
+        let chatCount = 0;
+        if (this.storage) {
+            try {
+                const chats = await this.storage.getUserChats(userId, 100);
+                chatCount = chats.length;
+            } catch (err) {
+                // Ignore
+            }
+        }
+
+        // Check which providers are configured
+        const configuredProviders = listProviders()
+            .filter(p => p.isConfigured(this.config))
+            .map(p => p.name);
+
+        await ctx.reply(
+            `📊 <b>AI Bot Status</b>\n\n` +
+            `<b>Database:</b> ${dbStatus}\n` +
+            `<b>GitHub Export:</b> ${githubStatus}\n` +
+            `<b>Your Chats:</b> ${chatCount}\n\n` +
+            `<b>Current Provider:</b> ${provider?.name || settings.provider}\n` +
+            `<b>Model:</b> <code>${settings.model}</code>\n\n` +
+            `<b>Available Providers:</b>\n${configuredProviders.length > 0 ? configuredProviders.join(", ") : "None configured"}`,
+            { parse_mode: "HTML" }
+        );
+    }
+
     async _handleHelp(ctx) {
         const helpText = `
 <b>🧠 AI Bot Help</b>
+
+<b>Getting Started:</b>
+/start - Welcome & quick actions
+/status - Check bot status
 
 <b>Chat Commands:</b>
 /ai &lt;question&gt; - Ask AI a question
@@ -510,14 +601,7 @@ ${rawContent.substring(0, 15000)}`;
 /providers - Select AI provider
 /models - Select model
 
-<b>Supported Providers:</b>
-• Groq (default)
-• Google Gemini
-• OpenAI (GPT-4)
-• Anthropic Claude
-• NVIDIA NIM
-
-<i>Tip: In private chat, just send messages directly without /ai</i>
+<i>Tip: In private chat, just send messages directly!</i>
         `.trim();
 
         await ctx.reply(helpText, { parse_mode: "HTML" });

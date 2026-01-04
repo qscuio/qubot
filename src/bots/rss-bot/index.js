@@ -22,11 +22,17 @@ class RssBot extends BotInstance {
         }
 
         // Register commands
+        this.command("start", "Start and get help", (ctx) => this._handleStart(ctx));
         this.command("sub", "Subscribe to RSS feed", (ctx) => this._handleSub(ctx));
         this.command("unsub", "Unsubscribe from feed", (ctx) => this._handleUnsub(ctx));
         this.command("list", "List subscriptions", (ctx) => this._handleList(ctx));
-        this.command("check", "Check subscription status", (ctx) => this._handleCheck(ctx));
+        this.command("status", "Check bot status", (ctx) => this._handleStatus(ctx));
         this.command("help", "Show help", (ctx) => this._handleHelp(ctx));
+
+        // Callback actions for inline buttons
+        this.action("cmd_sub", (ctx) => ctx.reply("📌 Usage: /sub <RSS URL>\nExample: /sub https://example.com/feed.xml"));
+        this.action("cmd_list", (ctx) => this._handleList(ctx));
+        this.action(/^unsub:(\d+)$/, (ctx) => this._handleUnsubButton(ctx));
 
         this.logger.info("RssBot commands registered.");
     }
@@ -50,8 +56,65 @@ class RssBot extends BotInstance {
     }
 
     async _pollFeeds() {
-        // TODO: Implement feed polling and notification
-        this.logger.debug("Polling RSS feeds...");
+        if (!this.storage) return;
+
+        try {
+            const sources = await this.storage.getAllSources();
+            this.logger.debug(`Polling ${sources.length} RSS sources...`);
+
+            for (const source of sources) {
+                try {
+                    await this._fetchAndNotify(source);
+                    await this.storage.clearSourceErrorCount(source.id);
+                } catch (err) {
+                    this.logger.warn(`Failed to fetch ${source.title || source.link}: ${err.message}`);
+                    await this.storage.incrementSourceErrorCount(source.id);
+                }
+            }
+        } catch (err) {
+            this.logger.error("Poll cycle failed", err);
+        }
+    }
+
+    async _fetchAndNotify(source) {
+        const feed = await parser.parseURL(source.link);
+
+        for (const item of feed.items.slice(0, 5)) {
+            const itemId = item.guid || item.link || item.title;
+            const hashId = `${source.id}:${itemId}`;
+
+            // Skip if already seen
+            const exists = await this.storage.contentExists(hashId);
+            if (exists) continue;
+
+            // Mark as seen
+            await this.storage.addContent(hashId, source.id, itemId, item.link, item.title);
+
+            // Notify all subscribers
+            const subscribers = await this.storage.getSubscribersBySource(source.id);
+            for (const sub of subscribers) {
+                try {
+                    const message = this._formatUpdate(source, item);
+                    await this.sendMessage(sub.user_id, message, { parse_mode: "HTML", disable_web_page_preview: false });
+                } catch (err) {
+                    this.logger.warn(`Failed to notify user ${sub.user_id}: ${err.message}`);
+                }
+            }
+        }
+    }
+
+    _formatUpdate(source, item) {
+        const title = this._escapeHtml(item.title || "No title");
+        const link = item.link || "";
+        const snippet = this._escapeHtml((item.contentSnippet || "").substring(0, 200));
+        const sourceName = this._escapeHtml(source.title || "RSS");
+
+        return `📰 <b>${sourceName}</b>\n\n<b>${title}</b>\n\n${snippet}${snippet.length >= 200 ? "..." : ""}\n\n<a href="${link}">Read more →</a>`;
+    }
+
+    _escapeHtml(text) {
+        if (!text) return "";
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
     async _handleSub(ctx) {
@@ -92,7 +155,7 @@ class RssBot extends BotInstance {
         try {
             if (this.storage) {
                 const subs = await this.storage.getRssSubscriptions(userId);
-                const source = subs.find((s) => s.url === input || s.id === input);
+                const source = subs.find((s) => s.url === input || String(s.id) === input);
 
                 if (!source) {
                     return ctx.reply("❌ Subscription not found.");
@@ -114,43 +177,110 @@ class RssBot extends BotInstance {
         const userId = ctx.from?.id;
 
         try {
-            if (this.storage) {
-                const subs = await this.storage.getRssSubscriptions(userId);
-                if (subs.length === 0) {
-                    return ctx.reply("📭 You have no subscriptions.\n\nUse /sub <URL> to add one.");
-                }
+            if (!this.storage) {
+                return ctx.reply("❌ Database unavailable.");
+            }
 
-                let msg = `📚 Your subscriptions (${subs.length})\n\n`;
-                subs.forEach((s, i) => {
-                    msg += `${i + 1}. ${s.title}\n   ${s.url}\n\n`;
+            const subs = await this.storage.getRssSubscriptions(userId);
+            if (subs.length === 0) {
+                return ctx.reply("📭 You have no subscriptions.\n\nUse /sub <URL> to add one.", {
+                    reply_markup: {
+                        inline_keyboard: [[{ text: "➕ Subscribe", callback_data: "cmd_sub" }]]
+                    }
                 });
-                await ctx.reply(msg);
+            }
+
+            // Build inline buttons for each subscription
+            const buttons = subs.map((s) => [{
+                text: `🗑️ ${s.title.substring(0, 25)}`,
+                callback_data: `unsub:${s.id}`
+            }]);
+
+            await ctx.reply(`📚 *Your subscriptions (${subs.length})*\n\nTap to unsubscribe:`, {
+                parse_mode: "Markdown",
+                reply_markup: { inline_keyboard: buttons }
+            });
+
+            if (ctx.callbackQuery) {
+                await ctx.answerCbQuery();
             }
         } catch (err) {
             await ctx.reply(`❌ Failed to get list: ${err.message}`);
         }
     }
 
-    async _handleCheck(ctx) {
+    async _handleUnsubButton(ctx) {
         const userId = ctx.from?.id;
+        const sourceId = parseInt(ctx.match[1], 10);
 
         try {
-            if (this.storage) {
-                const subs = await this.storage.getRssSubscriptions(userId);
-                await ctx.reply(`📊 Status:\n\n• Subscriptions: ${subs.length}\n• Bot: Active\n• Polling: Every 5 min`);
+            const subs = await this.storage.getRssSubscriptions(userId);
+            const source = subs.find((s) => s.id === sourceId);
+
+            if (!source) {
+                return ctx.answerCbQuery("Not found");
             }
+
+            await this.storage.removeRssSubscription(userId, source.url);
+            await ctx.answerCbQuery(`Unsubscribed: ${source.title}`);
+            await ctx.editMessageText(`✅ Unsubscribed from: ${source.title}`);
         } catch (err) {
-            await ctx.reply(`❌ Check failed: ${err.message}`);
+            await ctx.answerCbQuery(`Error: ${err.message}`);
         }
+    }
+
+    async _handleStart(ctx) {
+        const buttons = [
+            [{ text: "➕ Subscribe to Feed", callback_data: "cmd_sub" }],
+            [{ text: "📋 My Subscriptions", callback_data: "cmd_list" }],
+        ];
+
+        await ctx.reply(
+            "📰 *Welcome to RSS Bot!*\n\n" +
+            "Subscribe to RSS feeds and get updates directly in Telegram.\n\n" +
+            "*Commands:*\n" +
+            "/sub <url> - Subscribe to a feed\n" +
+            "/list - View subscriptions\n" +
+            "/status - Check bot status",
+            { parse_mode: "Markdown", reply_markup: { inline_keyboard: buttons } }
+        );
+    }
+
+    async _handleStatus(ctx) {
+        const userId = ctx.from?.id;
+        let subCount = 0;
+        let sourceCount = 0;
+        const dbStatus = this.storage ? "✅ Connected" : "❌ Unavailable";
+
+        if (this.storage) {
+            try {
+                const subs = await this.storage.getRssSubscriptions(userId);
+                subCount = subs.length;
+                const sources = await this.storage.getAllSources();
+                sourceCount = sources.length;
+            } catch (err) {
+                // Ignore
+            }
+        }
+
+        await ctx.reply(
+            "📊 *RSS Bot Status*\n\n" +
+            `• Database: ${dbStatus}\n` +
+            `• Your subscriptions: ${subCount}\n` +
+            `• Total sources tracked: ${sourceCount}\n` +
+            `• Polling interval: 5 min`,
+            { parse_mode: "Markdown" }
+        );
     }
 
     async _handleHelp(ctx) {
         await ctx.reply(
             "📰 *RSS Bot Help*\n\n" +
+            "/start - Welcome & quick actions\n" +
             "/sub <url> - Subscribe to RSS feed\n" +
             "/unsub <url|id> - Unsubscribe\n" +
-            "/list - List subscriptions\n" +
-            "/check - Check status\n" +
+            "/list - List subscriptions (with unsub buttons)\n" +
+            "/status - Check bot & database status\n" +
             "/help - Show this help",
             { parse_mode: "Markdown" }
         );

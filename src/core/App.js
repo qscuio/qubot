@@ -34,9 +34,13 @@ class App {
         // 1. Load Configuration
         this.config = new ConfigService();
 
-        // 2. Initialize Storage (PostgreSQL)
+        // 2. Initialize Storage (PostgreSQL) - graceful degradation if unavailable
         this.storage = new StorageService(this.config);
-        await this.storage.init();
+        const storageReady = await this.storage.init();
+        if (!storageReady) {
+            logger.warn("⚠️ Database unavailable. Storage-dependent features will be limited.");
+            this.storage = null;
+        }
 
         // 3. Initialize Cache (Redis)
         this.cache = new CacheService(this.config);
@@ -45,27 +49,36 @@ class App {
         // 4. Initialize BotManager
         this.botManager = new BotManager();
 
-        // 4. Register Userbot (MTProto)
-        const userbot = new TelegramService(this.config);
-        await userbot.connect();
-        this.botManager.registerUserbot(userbot);
+        // 5. Register Userbot (MTProto) - optional, only if configured
+        let userbot = null;
+        if (this.config.isUserbotConfigured()) {
+            userbot = new TelegramService(this.config);
+            await userbot.connect();
+            this.botManager.registerUserbot(userbot);
+        } else {
+            logger.info("📵 Userbot disabled (MTProto not configured).");
+        }
 
-        // 5. Register Bot API bots
+        // 6. Register Bot API bots
         await this._registerBots();
 
-        // 6. Initialize Feature Manager
-        this.featureManager = new FeatureManager({
-            config: this.config,
-            storage: this.storage,
-            botManager: this.botManager,
-            telegram: userbot,
-        });
+        // 7. Initialize Feature Manager (only if userbot is available)
+        if (userbot) {
+            this.featureManager = new FeatureManager({
+                config: this.config,
+                storage: this.storage,
+                botManager: this.botManager,
+                telegram: userbot,
+            });
 
-        // 7. Load and Enable Features
-        await this.featureManager.loadFeatures();
-        await this.featureManager.enableAll();
+            // 8. Load and Enable Features
+            await this.featureManager.loadFeatures();
+            await this.featureManager.enableAll();
+        } else {
+            logger.info("📵 Features requiring userbot skipped.");
+        }
 
-        // 8. Start webhook server OR polling
+        // 9. Start webhook server OR polling
         const useWebhook = !!this.config.get("WEBHOOK_URL");
         if (useWebhook) {
             await this._startWebhookMode();
@@ -74,7 +87,8 @@ class App {
         }
 
         logger.info("🎉 Application started successfully.");
-        logger.info(`   📡 Userbot: Connected`);
+        logger.info(`   📡 Userbot: ${userbot ? "Connected" : "Disabled"}`);
+        logger.info(`   💾 Database: ${this.storage ? "Connected" : "Unavailable"}`);
         logger.info(`   🤖 Bots: ${this.botManager.getBotNames().join(", ") || "none"}`);
         logger.info(`   🔗 Mode: ${useWebhook ? "Webhook" : "Polling"}`);
     }
@@ -126,9 +140,14 @@ class App {
     async stop() {
         logger.info("🛑 Stopping application...");
         await this.botManager.stopAll();
-        await this.featureManager.disableAll();
+        if (this.featureManager) {
+            await this.featureManager.disableAll();
+        }
         if (this.webhookServer) {
             await this.webhookServer.stop();
+        }
+        if (this.storage) {
+            await this.storage.close();
         }
         logger.info("Application stopped.");
     }

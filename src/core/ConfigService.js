@@ -72,14 +72,34 @@ class ConfigService {
     }
 
     _validate() {
-        const required = ["API_ID", "API_HASH", "SESSION"];
-        for (const key of required) {
-            if (!this.config[key] || (key === "API_ID" && isNaN(this.config[key]))) {
-                logger.error(`Missing required config: ${key}`);
-                throw new Error(`Missing required config: ${key}`);
-            }
+        // No hard requirements - all features gracefully degrade
+        // Userbot features require API_ID, API_HASH, SESSION
+        // Bot API features require their respective tokens
+        // AI features require provider API keys
+
+        if (this.isUserbotConfigured()) {
+            logger.info("Userbot (MTProto) configured.");
+        } else {
+            logger.warn("Userbot not configured (missing API_ID/API_HASH/SESSION). MTProto features disabled.");
         }
-        logger.info("Configuration loaded and validated.");
+
+        if (!this.config.RSS_BOT_TOKEN && !this.config.AI_BOT_TOKEN) {
+            logger.warn("No bot tokens configured. Bot API features disabled.");
+        }
+
+        logger.info("Configuration loaded.");
+    }
+
+    /**
+     * Check if MTProto userbot is configured.
+     */
+    isUserbotConfigured() {
+        return !!(
+            this.config.API_ID &&
+            !isNaN(this.config.API_ID) &&
+            this.config.API_HASH &&
+            this.config.SESSION
+        );
     }
 
     get(key) {

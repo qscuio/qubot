@@ -45,16 +45,27 @@ class ChannelMonitorFeature extends BaseFeature {
             const chat = await msg.getChat().catch(() => null);
             const chatUsername = chat?.username;
             const chatTitle = chat?.title || "Unknown";
-            const chatId = chat?.id?.toString();
+            const rawChatId = chat?.id?.toString() || "";
 
-            // Check if from monitored source (gramjs should handle this, but double-check)
-            const isMonitored = this.sourceChannels.some(
-                (source) =>
+            // Normalize chatId: strip -100 prefix if present for comparison
+            const normalizedChatId = rawChatId.startsWith("-100")
+                ? rawChatId.slice(4)
+                : rawChatId;
+
+            // Check if from monitored source
+            const isMonitored = this.sourceChannels.some((source) => {
+                // Normalize source ID the same way
+                const normalizedSource = source.startsWith("-100")
+                    ? source.slice(4)
+                    : source.replace(/^@/, "");
+
+                return (
                     source === chatUsername ||
                     source === "@" + chatUsername ||
-                    source === chatId ||
-                    source === "-100" + chatId
-            );
+                    normalizedSource === normalizedChatId ||
+                    source === rawChatId
+                );
+            });
 
             if (!isMonitored) return;
 
