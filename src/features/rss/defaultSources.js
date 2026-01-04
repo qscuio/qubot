@@ -100,4 +100,10 @@ module.exports = [
         category: "deep",
         enabled: true,
     },
+    {
+        name: "阮一峰的网络日志",
+        url: "http://www.ruanyifeng.com/blog/atom.xml",
+        category: "deep",
+        enabled: true,
+    },
 ];
