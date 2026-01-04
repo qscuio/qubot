@@ -4,6 +4,7 @@ services:
     restart: unless-stopped
     ports:
       - "${BOT_PORT:-3000}:${BOT_PORT:-3000}"
+      - "${API_PORT:-3001}:${API_PORT:-3001}"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://qubot:qubot@postgres:5432/qubot
