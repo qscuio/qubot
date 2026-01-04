@@ -8,8 +8,8 @@ const parser = new Parser();
  * Commands: /sub, /unsub, /list, /check, /help
  */
 class RssBot extends BotInstance {
-    constructor(token, storage) {
-        super("rss-bot", token);
+    constructor(token, storage, allowedUsers) {
+        super("rss-bot", token, allowedUsers);
         this.storage = storage;
         this.pollInterval = null;
         this.pollIntervalMs = 5 * 60 * 1000; // 5 minutes

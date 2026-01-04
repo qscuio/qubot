@@ -34,6 +34,9 @@ class ConfigService {
             KEYWORDS: this._parseList(process.env.KEYWORDS, true),
             FROM_USERS: this._parseList(process.env.FROM_USERS),
 
+            // Access Control
+            ALLOWED_USERS: this._parseList(process.env.ALLOWED_USERS),
+
             // Database & Cache
             DATABASE_URL: process.env.DATABASE_URL || "postgresql://qubot:qubot@postgres:5432/qubot",
             REDIS_URL: process.env.REDIS_URL || "",

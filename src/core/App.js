@@ -80,10 +80,12 @@ class App {
     }
 
     async _registerBots() {
+        const allowedUsers = this.config.get("ALLOWED_USERS");
+
         // RSS Bot
         const rssBotToken = this.config.get("RSS_BOT_TOKEN");
         if (rssBotToken) {
-            const rssBot = new RssBot(rssBotToken, this.storage);
+            const rssBot = new RssBot(rssBotToken, this.storage, allowedUsers);
             await rssBot.setup();
             this.botManager.registerBot("rss-bot", rssBot);
         }
@@ -95,7 +97,7 @@ class App {
         // AI Bot
         const aiBotToken = this.config.get("AI_BOT_TOKEN");
         if (aiBotToken) {
-            const aiBot = new AiBot(aiBotToken, this.config, this.storage, githubService);
+            const aiBot = new AiBot(aiBotToken, this.config, this.storage, githubService, allowedUsers);
             await aiBot.setup();
             this.botManager.registerBot("ai-bot", aiBot);
         }

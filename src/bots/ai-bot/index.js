@@ -9,8 +9,8 @@ const DEFAULT_PROVIDER = "groq";
  * Features: Chat history, multiple providers, long messages, GitHub export.
  */
 class AiBot extends BotInstance {
-    constructor(token, config, storage, githubService) {
-        super("ai-bot", token);
+    constructor(token, config, storage, githubService, allowedUsers) {
+        super("ai-bot", token, allowedUsers);
         this.config = config;
         this.storage = storage;
         this.githubService = githubService;

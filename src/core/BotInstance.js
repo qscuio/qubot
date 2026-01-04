@@ -9,10 +9,12 @@ class BotInstance {
     /**
      * @param {string} name - Bot identifier (e.g., "rss-bot")
      * @param {string} token - Telegram Bot Token
+     * @param {Array<string>} allowedUsers - List of allowed usernames/IDs
      */
-    constructor(name, token) {
+    constructor(name, token, allowedUsers = []) {
         this.name = name;
         this.token = token;
+        this.allowedUsers = allowedUsers;
         this.bot = null;
         this.logger = new Logger(`Bot:${name}`);
         this.commands = [];
@@ -20,12 +22,45 @@ class BotInstance {
         if (token) {
             this.bot = new Telegraf(token);
             this._setupErrorHandling();
+            this._setupAuthorization();
         }
     }
 
     _setupErrorHandling() {
         this.bot.catch((err, ctx) => {
             this.logger.error(`Error for ${ctx.updateType}`, err);
+        });
+    }
+
+    _setupAuthorization() {
+        if (!this.allowedUsers || this.allowedUsers.length === 0) {
+            return;
+        }
+
+        this.logger.info(`Authorization enabled. Allowed users: ${this.allowedUsers.join(", ")}`);
+
+        this.bot.use(async (ctx, next) => {
+            const userId = ctx.from?.id?.toString();
+            const username = ctx.from?.username;
+
+            // Check if user is allowed
+            const isAllowed = this.allowedUsers.some(u =>
+                u === userId ||
+                u === username ||
+                u === `@${username}` ||
+                (username && u.toLowerCase() === username.toLowerCase()) ||
+                (username && u.toLowerCase() === `@${username.toLowerCase()}`)
+            );
+
+            if (isAllowed) {
+                return next();
+            }
+
+            this.logger.warn(`Access denied for user: ${userId} (@${username})`);
+            // Only reply to private messages to avoid spamming groups
+            if (ctx.chat?.type === "private") {
+                await ctx.reply("⛔ Access denied. You are not authorized to use this bot.");
+            }
         });
     }
 
