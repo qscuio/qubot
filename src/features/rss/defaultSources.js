@@ -11,8 +11,8 @@ module.exports = [
         enabled: true,
     },
     {
-        name: "Reuters Top News",
-        url: "https://www.reutersagency.com/feed/?best-topics=business-finance&post_type=best",
+        name: "The Guardian",
+        url: "https://www.theguardian.com/world/rss",
         category: "news",
         enabled: true,
     },
