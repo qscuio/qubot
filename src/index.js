@@ -27,37 +27,35 @@ const { shouldKeep, rewrite } = require("./monitor");
     console.log("✅ Userbot connected!");
 
     // 4. Setup Event Handler
-    client.addEventHandler(async (event) => {
-        try {
-            const message = event.message;
+    // 4. Setup Event Handler
 
-            // Determine source
-            const chat = await message.getChat();
-            const chatUsername = chat?.username || chat?.title || "Unknown";
-
-            // Filter check
-            // We only care about messages from SOURCE_CHANNELS
-            // Note: event listener is global, so we must filter by chat.
-            const isMonitored = config.SOURCE_CHANNELS.includes(chatUsername) || config.SOURCE_CHANNELS.includes("@" + chatUsername);
-
-            // Currently, gramjs NewMessage with chats: [...] option is more efficient 
-            // but let's see if we can use it, or filter manually.
-            // If we use `chats` option in event builder, gramjs handles it.
-
-        } catch (err) {
-            console.error("Handler Error:", err);
-        }
-    }, new NewMessage({ chats: config.SOURCE_CHANNELS })); // Filter by source channels effectively
 
     // Better handler definition to include logic
     client.addEventHandler(async (event) => {
         const msg = event.message;
         if (!msg || !msg.message) return;
 
+        // Determine source
+        const chat = await msg.getChat().catch(() => null); // Added .catch(() => null) for robustness
+        const chatUsername = chat?.username;
+        const chatTitle = chat?.title || "Unknown";
+        const chatId = chat?.id?.toString();
+
+        // Filter check
+        // We only care about messages from SOURCE_CHANNELS
+        // Check Username, @Username, or ID
+        const isMonitored = config.SOURCE_CHANNELS.some(source => {
+            return source === chatUsername ||
+                source === "@" + chatUsername ||
+                source === chatId ||
+                source === "-100" + chatId; // Handle common ID variations if needed, though exact string match is safer
+        });
+
+        if (!isMonitored) return;
+
         // Log for debugging
-        const chat = await msg.getChat().catch(() => null);
-        const sourceName = chat?.username || chat?.title || "unknown";
-        console.log(`Received message from ${sourceName}: ${msg.message.substring(0, 50)}...`);
+        const sourceName = chatUsername || chatTitle || chatId || "unknown"; // Updated sourceName derivation
+        console.log(`Received message from ${sourceName} (ID: ${chatId}): ${msg.message.substring(0, 50)}...`);
 
         if (shouldKeep(msg.message)) {
             console.log(" -> Matched keyword, forwarding...");
@@ -76,7 +74,7 @@ const { shouldKeep, rewrite } = require("./monitor");
 
     console.log("🚀 Userbot is running and monitoring:", config.SOURCE_CHANNELS);
 
-}, new NewMessage({ incoming: true })); // Wait, I already added event handler above. 
+})();
 
 // The generic error handling for the process
 process.on("unhandledRejection", (reason, promise) => {
