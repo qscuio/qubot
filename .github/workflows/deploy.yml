@@ -16,6 +16,7 @@ jobs:
         echo "API_ID=${{ secrets.API_ID }}" >> .env
         echo "API_HASH=${{ secrets.API_HASH }}" >> .env
         echo "TG_SESSION=${{ secrets.TG_SESSION }}" >> .env
+        echo "BOT_TOKEN=${{ secrets.BOT_TOKEN }}" >> .env
         echo "SOURCE_CHANNELS=${{ secrets.SOURCE_CHANNELS }}" >> .env
         echo "TARGET_CHANNEL=${{ secrets.TARGET_CHANNEL }}" >> .env
         echo "KEYWORDS=${{ secrets.KEYWORDS }}" >> .env

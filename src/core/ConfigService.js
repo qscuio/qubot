@@ -14,10 +14,13 @@ class ConfigService {
 
     _load() {
         return {
-            // Telegram API
+            // Telegram API (Userbot)
             API_ID: parseInt(process.env.API_ID || "", 10),
             API_HASH: process.env.API_HASH || "",
             SESSION: process.env.TG_SESSION || "",
+
+            // Telegram Bot Token (for commands)
+            BOT_TOKEN: process.env.BOT_TOKEN || "",
 
             // Monitoring
             SOURCE_CHANNELS: this._parseList(process.env.SOURCE_CHANNELS),

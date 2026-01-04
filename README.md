@@ -1,44 +1,54 @@
 # Personal Telegram Userbot Monitor
 
-A professional, plugin-based Telegram Userbot built with Node.js and GramJS for monitoring channels, filtering messages, and forwarding summaries.
+A professional, plugin-based Telegram application that combines:
+- **Userbot (MTProto)**: For monitoring channels and forwarding messages
+- **Bot (Bot API)**: For RSS subscription commands
 
 ## Features
-- **Plugin Architecture**: Extensible design for adding new features easily.
-- **Channel Monitoring**: Listen to specific channels for new messages.
-- **Keyword Filtering**: Only forward messages containing specific keywords.
-- **User Whitelist**: Optionally filter by sender.
-- **RSS Feeds**: 15 curated news sources (BBC, Guardian, HN, TechCrunch, etc.)
-- **RSS Subscription**: Dynamic `/sub`, `/unsub`, `/list`, `/check` commands
-- **Rate Limiting**: Built-in rate limiter to prevent Telegram bans.
-- **PostgreSQL**: Persistent storage for subscriptions.
-- **Dockerized**: Easy deployment using Docker and Docker Compose.
-- **GitHub Actions**: Automated deployment to VPS.
+- **Dual Architecture**: Userbot + Bot working together
+- **Channel Monitoring**: Monitor Telegram channels in real-time
+- **Keyword Filtering**: Only forward messages containing specific keywords
+- **User Whitelist**: Optionally filter by sender
+- **RSS Feeds**: 16 curated news sources (BBC, Guardian, HN, etc.)
+- **RSS Subscription**: `/sub`, `/unsub`, `/list` commands via Bot
+- **Rate Limiting**: Built-in rate limiter to prevent bans
+- **PostgreSQL**: Persistent storage for subscriptions
+- **Dockerized**: Easy deployment with Docker Compose
 
 ## Architecture
 
 ```
-src/
-├── index.js                    # Entry point
-├── core/
-│   ├── App.js                  # Main application class
-│   ├── TelegramService.js      # Telegram client wrapper
-│   ├── ConfigService.js        # Configuration loader
-│   ├── StorageService.js       # PostgreSQL storage
-│   ├── FeatureManager.js       # Feature lifecycle manager
-│   ├── RateLimiter.js          # Rate limiting utility
-│   └── Logger.js               # Logging utility
-└── features/
-    ├── BaseFeature.js          # Abstract base class
-    ├── channel-monitor/
-    │   └── ChannelMonitorFeature.js
-    ├── rss/
-    │   ├── RssFeature.js
-    │   └── defaultSources.js   # 15 curated RSS sources
-    └── rss-subscription/
-        └── RssSubscriptionFeature.js  # /sub, /unsub, /list
+┌─────────────────────────────────────────────────────────────┐
+│                        Application                          │
+├─────────────────────────────────────────────────────────────┤
+│  TelegramService (Userbot)    │    BotService (Bot API)     │
+│  - Channel monitoring         │    - /sub, /unsub, /list    │
+│  - Message forwarding         │    - RSS update notifications│
+├─────────────────────────────────────────────────────────────┤
+│                    StorageService (PostgreSQL)              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## RSS Subscription Commands
+```
+src/
+├── index.js
+├── core/
+│   ├── App.js
+│   ├── TelegramService.js      # Userbot (MTProto)
+│   ├── BotService.js           # Bot API (Telegraf)
+│   ├── StorageService.js       # PostgreSQL
+│   ├── ConfigService.js
+│   ├── FeatureManager.js
+│   ├── RateLimiter.js
+│   └── Logger.js
+└── features/
+    ├── BaseFeature.js
+    ├── channel-monitor/        # Userbot feature
+    ├── rss/                    # Default RSS sources
+    └── rss-subscription/       # Bot commands feature
+```
+
+## Bot Commands
 
 | Command | Description |
 |---------|-------------|
@@ -46,15 +56,16 @@ src/
 | `/unsub <url or id>` | Unsubscribe from a feed |
 | `/list` | List your subscriptions |
 | `/check` | Check subscription status |
+| `/help` | Show help |
 
-## Setup & Configuration
+## Setup
 
 ### 1. Prerequisites
-- **Telegram API Credentials**: Get from [my.telegram.org](https://my.telegram.org).
-- **Telegram Session String**: Generate once locally.
-- **VPS**: A server with Docker and SSH access.
+- Telegram API credentials from [my.telegram.org](https://my.telegram.org)
+- Bot Token from [@BotFather](https://t.me/BotFather)
+- VPS with Docker
 
-### 2. Generating the Session String
+### 2. Generate Session String
 ```bash
 npm install
 npm run generate-session
@@ -62,32 +73,23 @@ npm run generate-session
 
 ### 3. GitHub Secrets
 
-| Secret Name | Description | Example |
-| :--- | :--- | :--- |
-| `API_ID` | Telegram API ID | `123456` |
-| `API_HASH` | Telegram API Hash | `abcdef123456...` |
-| `TG_SESSION` | Session string | `1ApWap...` |
-| `SOURCE_CHANNELS` | Channels to monitor | `news_channel,-100123456` |
-| `TARGET_CHANNEL` | Output channel | `my_news_feed` |
-| `KEYWORDS` | Keywords to filter | `release,launch` |
-| `FROM_USERS` | (Optional) User whitelist | `admin,123456` |
-| `DATABASE_URL` | PostgreSQL connection | `postgresql://user:pass@host:5432/db` |
-| `RATE_LIMIT_MS` | (Optional) Rate limit in ms | `30000` |
-| `VPS_HOST` | VPS IP/Domain | `192.168.1.100` |
-| `VPS_USER` | SSH Username | `root` |
-| `VPS_SSH_KEY` | SSH Private Key | `-----BEGIN...` |
+| Secret | Description |
+| :--- | :--- |
+| `API_ID` | Telegram API ID |
+| `API_HASH` | Telegram API Hash |
+| `TG_SESSION` | Session string (from step 2) |
+| `BOT_TOKEN` | Bot token from @BotFather |
+| `SOURCE_CHANNELS` | Channels to monitor |
+| `TARGET_CHANNEL` | Output channel |
+| `KEYWORDS` | Keywords to filter |
+| `VPS_HOST` | VPS IP/Domain |
+| `VPS_USER` | SSH Username |
+| `VPS_SSH_KEY` | SSH Private Key |
 
-### 4. Deployment
-Push to `main` branch to trigger automatic deployment.
+### 4. Deploy
+Push to `main` branch to trigger deployment.
 
 ### 5. Check Logs
 ```bash
 docker logs -f telegram-userbot-monitor-userbot-1
 ```
-
-## Adding New Features
-
-1. Create folder in `src/features/`
-2. Create `*Feature.js` extending `BaseFeature`
-3. Implement `onInit()` and `onEnable()`
-4. The `FeatureManager` will automatically discover and load it.
