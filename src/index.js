@@ -55,6 +55,27 @@ const { shouldKeep, rewrite } = require("./monitor");
 
         // Log for debugging
         const sourceName = chatUsername || chatTitle || chatId || "unknown"; // Updated sourceName derivation
+
+        // --- NEW: Sender Filter ---
+        // If FROM_USERS is defined, we must check the sender
+        if (config.FROM_USERS.length > 0) {
+            const sender = await msg.getSender().catch(() => null);
+            const senderUsername = sender?.username;
+            const senderId = sender?.id?.toString();
+
+            const isAllowedUser = config.FROM_USERS.some(u =>
+                u === senderUsername ||
+                u === "@" + senderUsername ||
+                u === senderId
+            );
+
+            if (!isAllowedUser) {
+                console.log(` -> Ignored (sender ${senderUsername || senderId} not in whitelist)`);
+                return;
+            }
+        }
+        // --------------------------
+
         console.log(`Received message from ${sourceName} (ID: ${chatId}): ${msg.message.substring(0, 50)}...`);
 
         if (shouldKeep(msg.message)) {

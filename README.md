@@ -37,6 +37,7 @@ Go to your GitHub Repository -> Settings -> Secrets and variables -> Actions, an
 | `SOURCE_CHANNELS` | Comma-separated list of channels to monitor | `news_channel,tech_updates` |
 | `TARGET_CHANNEL` | The channel/username where updates are sent | `my_news_feed` |
 | `KEYWORDS` | Comma-separated keywords to filter for | `release,launch,urgent` |
+| `FROM_USERS` | (Optional) Whitelist specific users/IDs | `admin_user,123456` |
 | `VPS_HOST` | IP address or domain of your VPS | `192.168.1.100` |
 | `VPS_USER` | SSH Username for your VPS | `root` or `ubuntu` |
 | `VPS_SSH_KEY` | Private SSH Key for accessing your VPS | `-----BEGIN OPENSSH PRIVATE KEY...` |

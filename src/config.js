@@ -19,4 +19,11 @@ module.exports = {
         .split(",")
         .map((s) => s.trim().toLowerCase())
         .filter(Boolean),
+
+    // Filter by specific users (optional whitelist)
+    // Can be Usernames or IDs
+    FROM_USERS: (process.env.FROM_USERS || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
 };
