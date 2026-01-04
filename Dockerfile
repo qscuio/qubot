@@ -17,6 +17,7 @@ RUN npm ci --omit=dev
 
 # Copy source code
 COPY src ./src/
+COPY web ./web/
 COPY scripts ./scripts/
 
 # Health check (optional - bot doesn't have HTTP endpoint by default)
