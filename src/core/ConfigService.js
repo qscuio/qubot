@@ -47,6 +47,13 @@ class ConfigService {
 
             // Logging
             LOG_LEVEL: process.env.LOG_LEVEL || "info",
+
+            // AI Provider Keys
+            GROQ_API_KEY: process.env.GROQ_API_KEY || "",
+            GEMINI_API_KEY: process.env.GEMINI_API_KEY || "",
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
+            CLAUDE_API_KEY: process.env.CLAUDE_API_KEY || "",
+            NVIDIA_API_KEY: process.env.NVIDIA_API_KEY || "",
         };
     }
 
