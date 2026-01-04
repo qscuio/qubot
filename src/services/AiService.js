@@ -60,6 +60,117 @@ class AiService {
         return models;
     }
 
+    // ============================================================
+    // PUBLIC AI ANALYSIS METHODS (for use by other services)
+    // ============================================================
+
+    /**
+     * Analyze content with AI (general-purpose, no user context needed).
+     * This is the main method for other services to call.
+     * @param {string} prompt - The analysis prompt
+     * @param {object} options - Optional settings
+     * @returns {Promise<{content: string, thinking?: string}>}
+     */
+    async analyze(prompt, options = {}) {
+        const provider = options.provider || this._getDefaultProvider();
+        const model = options.model || getProvider(provider)?.defaultModel;
+
+        if (!provider || !getProvider(provider)?.isConfigured?.(this.config)) {
+            throw new Error(`No AI provider configured for analysis`);
+        }
+
+        return await this._callAIWithRetry(provider, prompt, model, [], "");
+    }
+
+    /**
+     * Summarize text content.
+     * @param {string} text - Text to summarize
+     * @param {number} maxLength - Max summary length (default 200)
+     */
+    async summarize(text, maxLength = 200) {
+        if (!text || text.length < 50) {
+            return text; // Too short to summarize
+        }
+
+        const prompt = `Summarize the following text in ${maxLength} characters or less. Be concise and capture the key points:\n\n${text.substring(0, 5000)}`;
+
+        const response = await this.analyze(prompt);
+        return response.content || text.substring(0, maxLength);
+    }
+
+    /**
+     * Categorize content into predefined categories.
+     * @param {string} text - Text to categorize
+     * @param {string[]} categories - List of possible categories
+     * @returns {Promise<{category: string, confidence: string, reasoning: string}>}
+     */
+    async categorize(text, categories) {
+        if (!categories || categories.length === 0) {
+            return { category: "uncategorized", confidence: "low", reasoning: "No categories provided" };
+        }
+
+        const prompt = `Categorize the following text into one of these categories: ${categories.join(", ")}
+
+Text: ${text.substring(0, 2000)}
+
+Respond in JSON format:
+{"category": "chosen_category", "confidence": "high|medium|low", "reasoning": "brief explanation"}`;
+
+        try {
+            const response = await this.analyze(prompt);
+            return JSON.parse(response.content);
+        } catch (err) {
+            this.logger.warn("Categorization failed", err.message);
+            return { category: categories[0], confidence: "low", reasoning: "AI parsing failed" };
+        }
+    }
+
+    /**
+     * Extract key information from text.
+     * @param {string} text - Text to analyze
+     * @param {string[]} fields - Fields to extract (e.g., ["topic", "sentiment", "entities"])
+     */
+    async extract(text, fields) {
+        const prompt = `Extract the following information from the text: ${fields.join(", ")}
+
+Text: ${text.substring(0, 3000)}
+
+Respond in JSON format with the requested fields.`;
+
+        try {
+            const response = await this.analyze(prompt);
+            return JSON.parse(response.content);
+        } catch (err) {
+            this.logger.warn("Extraction failed", err.message);
+            return fields.reduce((acc, f) => ({ ...acc, [f]: null }), {});
+        }
+    }
+
+    /**
+     * Check if AI analysis is available (at least one provider configured).
+     */
+    isAnalysisAvailable() {
+        return this._getDefaultProvider() !== null;
+    }
+
+    /**
+     * Get the first configured provider for analysis.
+     */
+    _getDefaultProvider() {
+        const providers = ["groq", "gemini", "openai", "claude", "nvidia"];
+        for (const key of providers) {
+            const provider = getProvider(key);
+            if (provider?.isConfigured?.(this.config)) {
+                return key;
+            }
+        }
+        return null;
+    }
+
+    // ============================================================
+    // USER CHAT METHODS
+    // ============================================================
+
     /**
      * Send a message and get AI response.
      * Returns { content, thinking, chatId, messageCount }

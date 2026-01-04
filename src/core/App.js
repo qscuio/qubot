@@ -115,18 +115,18 @@ class App {
     }
 
     async _initializeServices() {
-        // AI Service
+        // AI Service (base service - initialized first)
         this.services.ai = new AiService(this.config, this.storage, this.githubService);
         logger.info("✅ AiService initialized");
 
-        // RSS Service
-        this.services.rss = new RssService(this.config, this.storage);
-        logger.info("✅ RssService initialized");
+        // RSS Service (with AI for content analysis)
+        this.services.rss = new RssService(this.config, this.storage, this.services.ai);
+        logger.info("✅ RssService initialized (with AI)");
 
-        // Monitor Service (requires userbot)
+        // Monitor Service (requires userbot, with AI for smart filtering)
         if (this.userbot) {
-            this.services.monitor = new MonitorService(this.config, this.storage, this.userbot);
-            logger.info("✅ MonitorService initialized");
+            this.services.monitor = new MonitorService(this.config, this.storage, this.userbot, this.services.ai);
+            logger.info("✅ MonitorService initialized (with AI)");
         }
     }
 

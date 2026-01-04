@@ -6,12 +6,21 @@ const parser = new Parser();
 /**
  * RssService - Business logic for RSS subscription management.
  * Decoupled from Telegram, can be used by REST API or any frontend.
+ * Can use AiService for content analysis if available.
  */
 class RssService {
-    constructor(config, storage) {
+    constructor(config, storage, aiService = null) {
         this.config = config;
         this.storage = storage;
+        this.aiService = aiService;
         this.logger = new Logger("RssService");
+    }
+
+    /**
+     * Set the AI service (allows injection after construction).
+     */
+    setAiService(aiService) {
+        this.aiService = aiService;
     }
 
     /**
@@ -160,6 +169,75 @@ class RssService {
             newItems
         };
     }
+
+    // ============================================================
+    // AI-POWERED ANALYSIS METHODS
+    // ============================================================
+
+    /**
+     * Summarize an RSS item's content using AI.
+     * @param {object} item - RSS item with content
+     * @returns {Promise<string>} - AI-generated summary
+     */
+    async summarizeItem(item) {
+        if (!this.aiService?.isAnalysisAvailable()) {
+            return item.contentSnippet || item.title || "";
+        }
+
+        const content = item.content || item.contentSnippet || item.title;
+        return await this.aiService.summarize(content, 150);
+    }
+
+    /**
+     * Categorize an RSS item into categories.
+     * @param {object} item - RSS item
+     * @param {string[]} categories - Available categories
+     */
+    async categorizeItem(item, categories) {
+        if (!this.aiService?.isAnalysisAvailable()) {
+            return { category: "uncategorized", confidence: "low", reasoning: "AI not available" };
+        }
+
+        const text = `${item.title || ""}\n\n${item.contentSnippet || ""}`;
+        return await this.aiService.categorize(text, categories);
+    }
+
+    /**
+     * Analyze feed items and rank by relevance to a query.
+     * @param {object[]} items - Feed items
+     * @param {string} query - User's interest query
+     * @returns {Promise<object[]>} - Items with relevance scores
+     */
+    async rankByRelevance(items, query) {
+        if (!this.aiService?.isAnalysisAvailable() || items.length === 0) {
+            return items.map((item, idx) => ({ ...item, relevance: 1 - idx * 0.1 }));
+        }
+
+        const itemSummaries = items.slice(0, 10).map((item, idx) =>
+            `${idx + 1}. ${item.title}`
+        ).join("\n");
+
+        const prompt = `Given the user's interest: "${query}"
+
+Rank these items by relevance (1-10, 10 = most relevant):
+${itemSummaries}
+
+Respond in JSON: [{"index": 1, "relevance": 8}, ...]`;
+
+        try {
+            const response = await this.aiService.analyze(prompt);
+            const rankings = JSON.parse(response.content);
+
+            return items.map((item, idx) => {
+                const ranking = rankings.find(r => r.index === idx + 1);
+                return { ...item, relevance: ranking?.relevance || 5 };
+            }).sort((a, b) => b.relevance - a.relevance);
+        } catch (err) {
+            this.logger.warn("Relevance ranking failed", err.message);
+            return items;
+        }
+    }
 }
 
 module.exports = RssService;
+
