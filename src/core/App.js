@@ -3,6 +3,7 @@ const ConfigService = require("./ConfigService");
 const TelegramService = require("./TelegramService");
 const BotManager = require("./BotManager");
 const StorageService = require("./StorageService");
+const CacheService = require("./CacheService");
 const FeatureManager = require("./FeatureManager");
 const WebhookServer = require("./WebhookServer");
 
@@ -20,6 +21,7 @@ class App {
     constructor() {
         this.config = null;
         this.storage = null;
+        this.cache = null;
         this.botManager = null;
         this.featureManager = null;
         this.webhookServer = null;
@@ -31,11 +33,15 @@ class App {
         // 1. Load Configuration
         this.config = new ConfigService();
 
-        // 2. Initialize Storage
+        // 2. Initialize Storage (PostgreSQL)
         this.storage = new StorageService(this.config);
         await this.storage.init();
 
-        // 3. Initialize BotManager
+        // 3. Initialize Cache (Redis)
+        this.cache = new CacheService(this.config);
+        await this.cache.init();
+
+        // 4. Initialize BotManager
         this.botManager = new BotManager();
 
         // 4. Register Userbot (MTProto)
