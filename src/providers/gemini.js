@@ -1,6 +1,6 @@
 const BaseProvider = require("./BaseProvider");
 
-const TIMEOUT_MS = 55000;
+const TIMEOUT_MS = 90000; // 90 seconds
 
 class GeminiProvider extends BaseProvider {
     constructor() {

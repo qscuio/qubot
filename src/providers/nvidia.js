@@ -1,6 +1,6 @@
 const BaseProvider = require("./BaseProvider");
 
-const TIMEOUT_MS = 55000;
+const TIMEOUT_MS = 120000; // 2 minutes for slow models like DeepSeek R1
 
 class NvidiaProvider extends BaseProvider {
     constructor() {
