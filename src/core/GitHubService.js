@@ -23,6 +23,10 @@ class GitHubService {
         try {
             await fs.mkdir(this.localPath, { recursive: true });
 
+            // Configure SSH to skip host key verification (for Docker)
+            const sshCommand = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null";
+            this.git = simpleGit().env("GIT_SSH_COMMAND", sshCommand);
+
             // Check if repo exists locally
             const isRepo = await fs.access(path.join(this.localPath, ".git"))
                 .then(() => true)
@@ -37,15 +41,19 @@ class GitHubService {
                 await this.git.pull();
             }
 
+            this.git.cwd(this.localPath);
+
             // Configure user
             await this.git.addConfig("user.name", "QuBot");
             await this.git.addConfig("user.email", "qubot@bot.com");
 
             this.isReady = true;
+            this.initError = null;
             logger.info("✅ GitHubService initialized.");
             return true;
         } catch (err) {
             logger.error("Failed to initialize GitHubService", err);
+            this.initError = err.message;
             return false;
         }
     }

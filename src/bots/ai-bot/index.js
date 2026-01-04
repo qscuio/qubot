@@ -411,7 +411,8 @@ ${rawContent.substring(0, 15000)}`;
                 await ctx.reply(`❌ GitHub push failed: ${err.message}`);
             }
         } else if (this.config.get("NOTES_REPO")) {
-            await ctx.reply("⚠️ GitHub export configured but service not ready. Check logs.");
+            const errorDetail = this.githubService?.initError || "Unknown error";
+            await ctx.reply(`⚠️ GitHub export failed during init:\n<code>${escapeHtml(errorDetail)}</code>\n\nCheck server SSH key is added to GitHub.`, { parse_mode: "HTML" });
         } else {
             await ctx.reply("ℹ️ GitHub export not configured. Set NOTES_REPO to enable.");
         }
