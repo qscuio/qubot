@@ -190,6 +190,9 @@ jobs:
             KEYWORDS=${{ secrets.KEYWORDS }}
             FROM_USERS=${{ secrets.FROM_USERS }}
             
+            # GitHub Export
+            NOTES_REPO=${{ secrets.NOTES_REPO }}
+            
             # Misc
             RATE_LIMIT_MS=${{ secrets.RATE_LIMIT_MS }}
             LOG_LEVEL=${{ secrets.LOG_LEVEL }}
