@@ -64,19 +64,36 @@ class GitHubService {
             this.git.cwd(this.localPath);
             await this.git.pull(); // Always pull first
 
+            // Ensure directory exists
             const filePath = path.join(this.localPath, filename);
+            const dir = path.dirname(filePath);
+            await fs.mkdir(dir, { recursive: true });
+
             await fs.writeFile(filePath, content, "utf8");
 
             await this.git.add(filename);
             await this.git.commit(commitMessage);
             await this.git.push();
 
-            logger.info(`Pushed ${filename} to GitHub.`);
-            return true;
+            const httpUrl = this._getHttpUrl(filename);
+            logger.info(`Pushed ${filename} to GitHub: ${httpUrl}`);
+            return httpUrl;
         } catch (err) {
             logger.error(`Failed to push ${filename}`, err);
             throw err;
         }
+    }
+
+    _getHttpUrl(filename) {
+        // Convert git@github.com:user/repo.git to https://github.com/user/repo/blob/main/filename
+        let url = this.repoUrl
+            .replace("git@github.com:", "https://github.com/")
+            .replace(".git", "");
+
+        if (url.endsWith(".git")) url = url.slice(0, -4);
+
+        // Assuming main branch
+        return `${url}/blob/main/${filename}`;
     }
 }
 

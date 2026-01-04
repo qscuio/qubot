@@ -337,48 +337,83 @@ class AiBot extends BotInstance {
             return ctx.reply("📭 No messages to export.");
         }
 
-        // Build markdown
-        const date = new Date().toISOString().split("T")[0];
-        const safeTitle = (chat.title || "chat")
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-|-$/g, "");
-        const filename = `chat-${date}-${safeTitle}.md`;
+        await ctx.reply("📝 Exporting chat...");
 
-        let md = `# ${chat.title}\n\n`;
-        md += `_Exported: ${new Date().toISOString()}_\n\n---\n\n`;
+        // Generate filename
+        const date = new Date();
+        const mmdd = `${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+        const words = (chat.title || "chat").split(/\s+/).slice(0, 3).join("-");
+        const safeWords = words.replace(/[^a-zA-Z0-9\u4e00-\u9fa5-]/g, "").substring(0, 30);
+        const filename = `${mmdd}-${safeWords || "chat"}.md`;
 
-        for (const msg of messages.reverse()) {
-            const role = msg.role === "user" ? "👤 User" : "🤖 Assistant";
-            md += `**${role}:**\n${msg.content}\n\n---\n\n`;
+        // Build raw content
+        const rawContent = messages.reverse()
+            .map((m) => `**${m.role === "user" ? "User" : "Assistant"}:**\n${m.content}`)
+            .join("\n\n---\n\n");
+
+        const rawMarkdown = `# ${chat.title}\n\n> Exported: ${date.toLocaleString()} | ${messages.length} messages\n\n${rawContent}\n\n---\n*Exported from QuBot*`;
+
+        // Generate AI Summary
+        let summaryMarkdown = "";
+        try {
+            await ctx.reply("🧠 Generating summary...");
+            const settings = await this._getSettings(userId);
+            const summaryPrompt = `Analyze this conversation and create a structured knowledge summary.
+Extract key points, insights, code examples, and actionable information.
+Use headers (##), bullet points, and code blocks.
+Be concise but comprehensive.
+
+Conversation:
+${rawContent.substring(0, 15000)}`;
+
+            const response = await callAI(
+                settings.provider,
+                this.config,
+                summaryPrompt,
+                settings.model,
+                [],
+                ""
+            );
+
+            const summary = response.content || "Summary generation failed.";
+            summaryMarkdown = `# ${chat.title} - Notes\n\n> Summary of ${messages.length} messages | ${date.toLocaleString()}\n\n${summary}\n\n---\n*AI-generated summary from QuBot*`;
+        } catch (err) {
+            this.logger.error("Summary generation failed", err);
+            summaryMarkdown = `# ${chat.title} - Notes\n\n> Summary generation failed\n\nSee raw file for full conversation.\n\n---\n*Exported from QuBot*`;
         }
 
-        // 1. Send as document (always)
+        // Send raw file as document
         await ctx.replyWithDocument({
-            source: Buffer.from(md, "utf-8"),
-            filename: filename,
+            source: Buffer.from(rawMarkdown, "utf-8"),
+            filename: `raw-${filename}`,
         });
 
-        // 2. Push to GitHub (if configured)
+        // Push to GitHub
         if (this.githubService && this.githubService.isReady) {
             try {
                 await ctx.reply("⏳ Pushing to GitHub...");
-                await this.githubService.saveNote(
-                    filename,
-                    md,
-                    `Add note: ${chat.title} (from QuBot)`
+
+                const rawUrl = await this.githubService.saveNote(
+                    `raw/${filename}`,
+                    rawMarkdown,
+                    `Export raw: ${chat.title} (QuBot)`
                 );
-                await ctx.reply(`✅ Pushed to GitHub: \`${filename}\``, { parse_mode: "Markdown" });
+
+                const notesUrl = await this.githubService.saveNote(
+                    `notes/${filename}`,
+                    summaryMarkdown,
+                    `Export notes: ${chat.title} (QuBot)`
+                );
+
+                await sendLongHtmlMessage(ctx, `✅ <b>Chat exported!</b>\n\n📄 <a href="${rawUrl}">Raw Conversation</a>\n📝 <a href="${notesUrl}">AI Notes</a>`);
             } catch (err) {
                 this.logger.error("GitHub push failed", err);
                 await ctx.reply(`❌ GitHub push failed: ${err.message}`);
             }
         } else if (this.config.get("NOTES_REPO")) {
             await ctx.reply("⚠️ GitHub export configured but service not ready. Check logs.");
-        }
-
-        if (ctx.callbackQuery) {
-            await ctx.answerCbQuery("Exported!");
+        } else {
+            await ctx.reply("ℹ️ GitHub export not configured. Set NOTES_REPO to enable.");
         }
     }
 
