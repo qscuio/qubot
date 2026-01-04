@@ -19,6 +19,9 @@ jobs:
         echo "SOURCE_CHANNELS=${{ secrets.SOURCE_CHANNELS }}" >> .env
         echo "TARGET_CHANNEL=${{ secrets.TARGET_CHANNEL }}" >> .env
         echo "KEYWORDS=${{ secrets.KEYWORDS }}" >> .env
+        echo "FROM_USERS=${{ secrets.FROM_USERS }}" >> .env
+        echo "RATE_LIMIT_MS=${{ secrets.RATE_LIMIT_MS }}" >> .env
+        echo "LOG_LEVEL=${{ secrets.LOG_LEVEL }}" >> .env
 
     - name: Copy files to VPS
       uses: appleboy/scp-action@v0.1.7
