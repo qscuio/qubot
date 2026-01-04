@@ -55,6 +55,12 @@ jobs:
               $SUDO ufw allow ssh
               $SUDO ufw allow 80/tcp
               $SUDO ufw allow 443/tcp
+              # Allow API port if set
+              API_PORT="${{ secrets.API_PORT }}"
+              if [ -n "$API_PORT" ] && [ "$API_PORT" != "" ]; then
+                $SUDO ufw allow $API_PORT/tcp
+                echo "🌐 Opened API port: $API_PORT"
+              fi
               $SUDO ufw --force enable || true
             fi
 
@@ -171,6 +177,7 @@ jobs:
             # Bot Tokens
             RSS_BOT_TOKEN=${{ secrets.RSS_BOT_TOKEN }}
             AI_BOT_TOKEN=${{ secrets.AI_BOT_TOKEN }}
+            MONITOR_BOT_TOKEN=${{ secrets.MONITOR_BOT_TOKEN }}
             
             # Webhook Config
             WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}
@@ -192,6 +199,11 @@ jobs:
             
             # GitHub Export
             NOTES_REPO=${{ secrets.NOTES_REPO }}
+            
+            # REST API
+            API_ENABLED=${{ secrets.API_ENABLED || 'true' }}
+            API_PORT=${{ secrets.API_PORT || '3001' }}
+            API_KEYS=${{ secrets.API_KEYS }}
             
             # Misc
             RATE_LIMIT_MS=${{ secrets.RATE_LIMIT_MS }}
