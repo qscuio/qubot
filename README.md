@@ -186,6 +186,12 @@ curl http://localhost:3001/health
 | `WEBFRONT_URL` | Web frontend domain | `https://app.yourdomain.com` |
 | `BOT_PORT` | Webhook server port | `3000` |
 | `BOT_SECRET` | Webhook security token | Random string |
+
+### REST API
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `API_ENABLED` | Enable/disable REST API | `true` |
 | `API_PORT` | REST API server port | `3001` |
 | `API_KEYS` | API keys (key:userId,...) | `mykey:1,otherkey:2` |
 
@@ -208,11 +214,40 @@ curl http://localhost:3001/health
 | `KEYWORDS` | Filter keywords | `bitcoin,crypto` |
 | `FROM_USERS` | Filter by usernames | `@user1,@user2` |
 
-### Other
+### Access Control (Optional)
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `ALLOWED_USERS` | Allowed Telegram usernames/IDs | `@user1,123456789` |
+
+### RSS (Optional)
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `RSS_SOURCES` | RSS sources JSON override | `[{\"name\":\"HN\",\"url\":\"https://news.ycombinator.com/rss\"}]` |
+| `RSS_POLL_INTERVAL_MS` | RSS poll interval (ms) | `300000` |
+
+### Database & Cache
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://qubot:qubot@postgres:5432/qubot` |
+| `REDIS_URL` | Redis connection string | `redis://redis:6379` |
+
+### GitHub Export (Optional)
 
 | Secret | Description |
 |--------|-------------|
 | `NOTES_REPO` | GitHub repo for exports |
+| `GIT_SSH_COMMAND` | Custom SSH command for GitHub |
+| `GITHUB_SSH_KEY_PATH` | SSH key path for GitHub |
+| `GITHUB_KNOWN_HOSTS` | Known hosts file for GitHub |
+
+### Other
+
+| Secret | Description |
+|--------|-------------|
+| `RATE_LIMIT_MS` | Bot rate limiting interval |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, `error` |
 
 ---
@@ -244,6 +279,23 @@ curl http://localhost:3001/health
 # From outside - through Nginx
 curl https://app.yourdomain.com/health
 ```
+
+### Debug API_PORT Mapping
+```bash
+# Confirm compose resolved your port mappings
+docker compose config | rg -n "ports:|API_PORT|3001"
+
+# Confirm container env is set
+docker compose exec userbot printenv | rg "API_(ENABLED|PORT|KEYS)"
+
+# Confirm API startup logs
+docker compose logs userbot --tail 100 | rg "API:"
+
+# Health check (local)
+curl http://localhost:${API_PORT:-3001}/health
+```
+
+If you use a domain, make sure your reverse proxy routes the domain to `http://127.0.0.1:$API_PORT`.
 
 ### Check Nginx
 ```bash
