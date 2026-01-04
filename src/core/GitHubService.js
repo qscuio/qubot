@@ -9,7 +9,6 @@ class GitHubService {
     constructor(config) {
         this.config = config;
         this.repoUrl = config.get("NOTES_REPO");
-        this.sshKeyPath = config.get("NOTES_SSH_KEY_PATH");
         this.localPath = path.join(process.cwd(), "data", "notes-repo");
         this.git = simpleGit();
         this.isReady = false;
@@ -23,10 +22,6 @@ class GitHubService {
 
         try {
             await fs.mkdir(this.localPath, { recursive: true });
-
-            // Configure git to use SSH key
-            const gitSSHCommand = `ssh -o StrictHostKeyChecking=no -i ${this.sshKeyPath}`;
-            this.git.env("GIT_SSH_COMMAND", gitSSHCommand);
 
             // Check if repo exists locally
             const isRepo = await fs.access(path.join(this.localPath, ".git"))

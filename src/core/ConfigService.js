@@ -57,7 +57,6 @@ class ConfigService {
 
             // GitHub Export
             NOTES_REPO: process.env.NOTES_REPO || "",
-            NOTES_SSH_KEY_PATH: process.env.NOTES_SSH_KEY_PATH || "/home/ubuntu/.ssh/id_rsa",
         };
     }
 
