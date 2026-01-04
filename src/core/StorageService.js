@@ -396,6 +396,52 @@ class StorageService {
         );
     }
 
+    // ============= RSS Bot Convenience Methods =============
+
+    /**
+     * Add an RSS subscription by URL (creates source if needed).
+     * @param {number} userId - Telegram user ID
+     * @param {number} chatId - Telegram chat ID (unused but kept for API compatibility)
+     * @param {string} url - RSS feed URL
+     * @param {string} title - Feed title
+     * @returns {boolean} - true if added, false if already subscribed
+     */
+    async addRssSubscription(userId, chatId, url, title) {
+        // Create or get the source
+        const source = await this.createSource(url, title);
+        // Add subscription
+        return await this.addSubscription(userId, source.id);
+    }
+
+    /**
+     * Get all RSS subscriptions for a user.
+     * @param {number} userId - Telegram user ID
+     * @returns {Array} - Array of subscriptions with url and title
+     */
+    async getRssSubscriptions(userId) {
+        const subs = await this.getSubscriptionsByUser(userId);
+        return subs.map(s => ({
+            id: s.source_id,
+            url: s.link,
+            title: s.title,
+            created_at: s.created_at
+        }));
+    }
+
+    /**
+     * Remove an RSS subscription by URL.
+     * @param {number} userId - Telegram user ID
+     * @param {string} url - RSS feed URL
+     * @returns {boolean} - true if removed, false if not found
+     */
+    async removeRssSubscription(userId, url) {
+        const source = await this.getSourceByLink(url);
+        if (!source) {
+            return false;
+        }
+        return await this.removeSubscription(userId, source.id);
+    }
+
     async close() {
         if (this.pool) {
             await this.pool.end();
