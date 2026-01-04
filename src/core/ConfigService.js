@@ -15,7 +15,7 @@ class ConfigService {
     _load() {
         return {
             // Telegram API (Userbot)
-            API_ID: parseInt(process.env.API_ID || "", 10),
+            API_ID: this._getInt("API_ID", null),
             API_HASH: process.env.API_HASH || "",
             SESSION: process.env.TG_SESSION || "",
 
@@ -25,7 +25,7 @@ class ConfigService {
             MONITOR_BOT_TOKEN: process.env.MONITOR_BOT_TOKEN || "",
 
             // Webhook Config
-            BOT_PORT: parseInt(process.env.BOT_PORT || "3000", 10),
+            BOT_PORT: this._getInt("BOT_PORT", 3000),
             BOT_SECRET: process.env.BOT_SECRET || "",
             WEBHOOK_URL: process.env.WEBHOOK_URL || "",
 
@@ -43,11 +43,11 @@ class ConfigService {
             REDIS_URL: process.env.REDIS_URL || "",
 
             // Rate Limiting
-            RATE_LIMIT_MS: parseInt(process.env.RATE_LIMIT_MS || "30000", 10),
+            RATE_LIMIT_MS: this._getInt("RATE_LIMIT_MS", 30000),
 
             // RSS Feature
             RSS_SOURCES: process.env.RSS_SOURCES || "", // JSON string or empty for defaults
-            RSS_POLL_INTERVAL_MS: parseInt(process.env.RSS_POLL_INTERVAL_MS || "300000", 10), // 5 min default
+            RSS_POLL_INTERVAL_MS: this._getInt("RSS_POLL_INTERVAL_MS", 300000), // 5 min default
 
             // Logging
             LOG_LEVEL: process.env.LOG_LEVEL || "info",
@@ -61,10 +61,13 @@ class ConfigService {
 
             // GitHub Export
             NOTES_REPO: process.env.NOTES_REPO || "",
+            GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND || "",
+            GITHUB_SSH_KEY_PATH: process.env.GITHUB_SSH_KEY_PATH || "",
+            GITHUB_KNOWN_HOSTS: process.env.GITHUB_KNOWN_HOSTS || "",
 
             // REST API Configuration
-            API_ENABLED: process.env.API_ENABLED !== "false", // true by default
-            API_PORT: parseInt(process.env.API_PORT || "3001", 10),
+            API_ENABLED: this._getBool("API_ENABLED", true),
+            API_PORT: this._getInt("API_PORT", 3001),
             API_KEYS: process.env.API_KEYS || "",
         };
     }
@@ -75,6 +78,31 @@ class ConfigService {
             .split(",")
             .map((s) => (lowercase ? s.trim().toLowerCase() : s.trim()))
             .filter(Boolean);
+    }
+
+    _getInt(key, fallback) {
+        const raw = process.env[key];
+        if (raw === undefined || raw === null || raw === "") {
+            return fallback;
+        }
+        const parsed = parseInt(raw, 10);
+        if (Number.isNaN(parsed)) {
+            logger.warn(`Invalid ${key} value "${raw}", using ${fallback}`);
+            return fallback;
+        }
+        return parsed;
+    }
+
+    _getBool(key, fallback) {
+        const raw = process.env[key];
+        if (raw === undefined || raw === null || raw === "") {
+            return fallback;
+        }
+        const normalized = String(raw).trim().toLowerCase();
+        if (["true", "1", "yes", "y", "on"].includes(normalized)) return true;
+        if (["false", "0", "no", "n", "off"].includes(normalized)) return false;
+        logger.warn(`Invalid ${key} value "${raw}", using ${fallback}`);
+        return fallback;
     }
 
     _validate() {
@@ -101,8 +129,7 @@ class ConfigService {
      */
     isUserbotConfigured() {
         return !!(
-            this.config.API_ID &&
-            !isNaN(this.config.API_ID) &&
+            Number.isInteger(this.config.API_ID) &&
             this.config.API_HASH &&
             this.config.SESSION
         );

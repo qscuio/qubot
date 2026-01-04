@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "dev": "node src/index.js",
     "generate-session": "node scripts/generate-session.js",
-    "setup-webhook": "node scripts/setup-webhook.js"
+    "setup-webhook": "node scripts/setup-webhook.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "dotenv": "^16.3.1",

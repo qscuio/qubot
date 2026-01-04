@@ -1,4 +1,5 @@
 const { WebSocketServer } = require("ws");
+const { randomUUID } = require("crypto");
 const { validateApiKey } = require("./auth");
 const Logger = require("../core/Logger");
 
@@ -68,9 +69,15 @@ class WebSocketHandler {
                 filters = await this.monitorService.getFilters(userId);
             }
 
+            const connectionId = randomUUID();
+
             // Store client info
-            this.clients.set(ws, { userId, filters });
-            logger.info(`WebSocket client connected: userId=${userId}`);
+            this.clients.set(ws, { userId, filters, connectionId });
+            logger.infoMeta("ws_connected", {
+                connectionId,
+                userId,
+                ip: req.socket?.remoteAddress || null
+            });
 
             // Send welcome message
             ws.send(JSON.stringify({
@@ -87,11 +94,18 @@ class WebSocketHandler {
             // Handle disconnect
             ws.on("close", () => {
                 this.clients.delete(ws);
-                logger.debug(`WebSocket client disconnected: userId=${userId}`);
+                logger.debugMeta("ws_disconnected", {
+                    connectionId,
+                    userId
+                });
             });
 
             ws.on("error", (err) => {
-                logger.warn(`WebSocket error: ${err.message}`);
+                logger.warnMeta("ws_error", {
+                    connectionId,
+                    userId,
+                    error: err.message
+                });
                 this.clients.delete(ws);
             });
 
@@ -120,6 +134,10 @@ class WebSocketHandler {
                             message.filters
                         );
                         clientInfo.filters = newFilters;
+                        logger.infoMeta("ws_filters_updated", {
+                            connectionId: clientInfo.connectionId,
+                            userId: clientInfo.userId
+                        });
                         ws.send(JSON.stringify({
                             type: "filters_updated",
                             filters: newFilters

@@ -17,6 +17,8 @@ class MonitorService extends EventEmitter {
         this.logger = new Logger("MonitorService");
         this.isRunning = false;
         this.sourceChannels = [];
+        this._messageHandler = this._handleMessage.bind(this);
+        this._messageEvent = null;
     }
 
     /**
@@ -50,8 +52,8 @@ class MonitorService extends EventEmitter {
             throw new Error("No source channels configured");
         }
 
-        this.telegram.addMessageHandler(
-            this._handleMessage.bind(this),
+        this._messageEvent = this.telegram.addMessageHandler(
+            this._messageHandler,
             this.sourceChannels
         );
 
@@ -64,6 +66,10 @@ class MonitorService extends EventEmitter {
      * Stop monitoring channels.
      */
     async stop() {
+        if (this.telegram && this._messageEvent) {
+            this.telegram.removeMessageHandler(this._messageHandler, this._messageEvent);
+            this._messageEvent = null;
+        }
         this.isRunning = false;
         this.logger.info("Channel monitoring stopped");
         return { status: "stopped" };
@@ -99,6 +105,7 @@ class MonitorService extends EventEmitter {
         if (!this.sourceChannels.includes(channelId)) {
             this.sourceChannels.push(channelId);
             this.logger.info(`Added source channel: ${channelId}`);
+            await this._refreshHandlers();
         }
         return { channels: this.sourceChannels };
     }
@@ -111,8 +118,29 @@ class MonitorService extends EventEmitter {
         if (index > -1) {
             this.sourceChannels.splice(index, 1);
             this.logger.info(`Removed source channel: ${channelId}`);
+            await this._refreshHandlers();
         }
         return { channels: this.sourceChannels };
+    }
+
+    async _refreshHandlers() {
+        if (!this.isRunning || !this.telegram) return;
+
+        if (this._messageEvent) {
+            this.telegram.removeMessageHandler(this._messageHandler, this._messageEvent);
+            this._messageEvent = null;
+        }
+
+        if (this.sourceChannels.length === 0) {
+            this.isRunning = false;
+            this.logger.info("Channel monitoring stopped (no source channels).");
+            return;
+        }
+
+        this._messageEvent = this.telegram.addMessageHandler(
+            this._messageHandler,
+            this.sourceChannels
+        );
     }
 
     /**
@@ -143,8 +171,7 @@ class MonitorService extends EventEmitter {
             throw new Error("Storage not available");
         }
 
-        // Ensure table exists
-        await this._ensureFiltersTable();
+        await this.storage.ensureMonitorTables();
 
         const mergedFilters = {
             ...this._getDefaultFilters(),
@@ -168,13 +195,18 @@ class MonitorService extends EventEmitter {
         if (!this.storage) {
             return [];
         }
+        if (!userId) {
+            return [];
+        }
 
         try {
+            await this.storage.ensureMonitorTables();
             const result = await this.storage.pool.query(
                 `SELECT * FROM monitor_history 
+                 WHERE user_id = $1
                  ORDER BY created_at DESC 
-                 LIMIT $1`,
-                [limit]
+                 LIMIT $2`,
+                [userId, limit]
             );
             return result.rows;
         } catch (err) {
@@ -188,6 +220,7 @@ class MonitorService extends EventEmitter {
      */
     async _handleMessage(event) {
         try {
+            if (!this.isRunning) return;
             const msg = event.message;
             if (!msg || !msg.message) return;
 
@@ -285,12 +318,22 @@ class MonitorService extends EventEmitter {
         if (!this.storage) return;
 
         try {
-            await this._ensureHistoryTable();
-            await this.storage.pool.query(
-                `INSERT INTO monitor_history (source, source_id, message, created_at)
-                 VALUES ($1, $2, $3, NOW())`,
-                [messageObj.source, messageObj.sourceId, messageObj.text]
-            );
+            await this.storage.ensureMonitorTables();
+            const userIds = this._getHistoryUserIds();
+            if (userIds.length === 0) return;
+
+            for (const userId of userIds) {
+                const filters = await this.getFilters(userId);
+                if (!this._matchesFilters(messageObj, filters)) {
+                    continue;
+                }
+
+                await this.storage.pool.query(
+                    `INSERT INTO monitor_history (user_id, source, source_id, message, created_at)
+                     VALUES ($1, $2, $3, $4, NOW())`,
+                    [userId, messageObj.source, messageObj.sourceId, messageObj.text]
+                );
+            }
         } catch (err) {
             this.logger.warn("Failed to save to history", err.message);
         }
@@ -316,41 +359,60 @@ class MonitorService extends EventEmitter {
         };
     }
 
-    /**
-     * Ensure filters table exists.
-     */
-    async _ensureFiltersTable() {
-        if (!this.storage) return;
+    _matchesFilters(messageObj, filters) {
+        if (!filters?.enabled) return false;
 
-        await this.storage.pool.query(`
-            CREATE TABLE IF NOT EXISTS monitor_filters (
-                user_id BIGINT PRIMARY KEY,
-                filters JSONB NOT NULL DEFAULT '{}',
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
+        if (filters.channels?.length > 0) {
+            const matchesChannel = filters.channels.some(ch =>
+                ch === messageObj.source ||
+                ch === messageObj.sourceId ||
+                ch === `@${messageObj.source}`
+            );
+            if (!matchesChannel) return false;
+        }
+
+        if (filters.keywords?.length > 0) {
+            const lowerText = (messageObj.text || "").toLowerCase();
+            const hasKeyword = filters.keywords.some(k =>
+                lowerText.includes(String(k).toLowerCase())
+            );
+            if (!hasKeyword) return false;
+        }
+
+        return true;
     }
 
-    /**
-     * Ensure history table exists.
-     */
-    async _ensureHistoryTable() {
-        if (!this.storage) return;
+    _getHistoryUserIds() {
+        const ids = new Set();
+        const apiKeysStr = this.config.get("API_KEYS") || "";
 
-        await this.storage.pool.query(`
-            CREATE TABLE IF NOT EXISTS monitor_history (
-                id SERIAL PRIMARY KEY,
-                source VARCHAR(255) NOT NULL,
-                source_id VARCHAR(255),
-                message TEXT,
-                ai_summary TEXT,
-                ai_sentiment VARCHAR(50),
-                ai_topics JSONB,
-                created_at TIMESTAMP DEFAULT NOW()
-            )
-        `);
+        if (apiKeysStr) {
+            const keys = apiKeysStr.split(",").map(k => k.trim()).filter(Boolean);
+            keys.forEach((keyEntry, index) => {
+                if (keyEntry.includes(":")) {
+                    const [, userId] = keyEntry.split(":");
+                    const parsed = parseInt(userId.trim(), 10);
+                    if (!isNaN(parsed)) {
+                        ids.add(parsed);
+                    }
+                } else {
+                    ids.add(index + 1);
+                }
+            });
+        }
+
+        const allowedUsers = this.config.get("ALLOWED_USERS") || [];
+        for (const user of allowedUsers) {
+            const parsed = parseInt(user, 10);
+            if (!isNaN(parsed)) {
+                ids.add(parsed);
+            }
+        }
+
+        return Array.from(ids);
     }
+
+    // Table creation is centralized in StorageService.
 
     // ============================================================
     // AI-POWERED ANALYSIS METHODS

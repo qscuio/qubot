@@ -53,6 +53,18 @@ class TelegramService {
 
         this.client.addEventHandler(handler, eventFilter);
         logger.info(`Message handler registered${chats ? ` for ${chats.length} chats` : ""}.`);
+        return eventFilter;
+    }
+
+    /**
+     * Remove an event handler for new messages.
+     * @param {Function} handler - Handler function.
+     * @param {object} eventFilter - Event filter returned from addMessageHandler.
+     */
+    removeMessageHandler(handler, eventFilter = null) {
+        if (!this.client) return;
+        this.client.removeEventHandler(handler, eventFilter);
+        logger.info("Message handler removed.");
     }
 
     /**

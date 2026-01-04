@@ -1,5 +1,6 @@
 const express = require("express");
 const http = require("http");
+const { randomUUID } = require("crypto");
 const Logger = require("../core/Logger");
 const { createAuthMiddleware } = require("./auth");
 const WebSocketHandler = require("./WebSocketHandler");
@@ -28,6 +29,25 @@ class ApiServer {
     _setupMiddleware() {
         this.app.use(express.json());
 
+        this.app.use((req, res, next) => {
+            req.requestId = req.headers["x-request-id"] || randomUUID();
+            res.setHeader("x-request-id", req.requestId);
+
+            const start = Date.now();
+            res.on("finish", () => {
+                logger.infoMeta("api_request", {
+                    requestId: req.requestId,
+                    method: req.method,
+                    path: req.path,
+                    status: res.statusCode,
+                    userId: req.userId ?? null,
+                    durationMs: Date.now() - start
+                });
+            });
+
+            next();
+        });
+
         // CORS for browser clients
         this.app.use((req, res, next) => {
             res.header("Access-Control-Allow-Origin", "*");
@@ -41,7 +61,11 @@ class ApiServer {
 
         // Request logging
         this.app.use((req, res, next) => {
-            logger.debug(`${req.method} ${req.path}`);
+            logger.debugMeta("api_request_start", {
+                requestId: req.requestId,
+                method: req.method,
+                path: req.path
+            });
             next();
         });
     }
@@ -89,7 +113,11 @@ class ApiServer {
 
         // Error handler
         this.app.use((err, req, res, next) => {
-            logger.error("API error", err);
+            logger.errorMeta("api_error", {
+                requestId: req.requestId,
+                path: req.path,
+                userId: req.userId ?? null
+            }, err);
             res.status(500).json({
                 error: "Internal Server Error",
                 message: err.message

@@ -163,7 +163,7 @@ class App {
     }
 
     async _startApiServer() {
-        const apiEnabled = this.config.get("API_ENABLED") !== "false";
+        const apiEnabled = this.config.get("API_ENABLED");
 
         if (!apiEnabled) {
             logger.info("📵 API server disabled (API_ENABLED=false).");
@@ -214,4 +214,3 @@ class App {
 }
 
 module.exports = App;
-
