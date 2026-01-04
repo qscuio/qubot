@@ -1,5 +1,6 @@
 const express = require("express");
 const http = require("http");
+const path = require("path");
 const { randomUUID } = require("crypto");
 const Logger = require("../core/Logger");
 const { createAuthMiddleware } = require("./auth");
@@ -72,6 +73,10 @@ class ApiServer {
 
     _setupRoutes() {
         const auth = createAuthMiddleware(this.config);
+
+        // Serve static files from web/ directory
+        const webDir = path.join(__dirname, "../../web");
+        this.app.use(express.static(webDir));
 
         // Public routes
         this.app.get("/health", (req, res) => {
