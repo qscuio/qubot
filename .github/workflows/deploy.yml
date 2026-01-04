@@ -20,7 +20,6 @@ jobs:
         echo "TARGET_CHANNEL=${{ secrets.TARGET_CHANNEL }}" >> .env
         echo "KEYWORDS=${{ secrets.KEYWORDS }}" >> .env
         echo "FROM_USERS=${{ secrets.FROM_USERS }}" >> .env
-        echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
         echo "RATE_LIMIT_MS=${{ secrets.RATE_LIMIT_MS }}" >> .env
         echo "LOG_LEVEL=${{ secrets.LOG_LEVEL }}" >> .env
 

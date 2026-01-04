@@ -25,8 +25,8 @@ class ConfigService {
             KEYWORDS: this._parseList(process.env.KEYWORDS, true),
             FROM_USERS: this._parseList(process.env.FROM_USERS),
 
-            // Database
-            DATABASE_URL: process.env.DATABASE_URL || "",
+            // Database (internal docker-compose PostgreSQL)
+            DATABASE_URL: process.env.DATABASE_URL || "postgresql://qubot:qubot@postgres:5432/qubot",
 
             // Rate Limiting
             RATE_LIMIT_MS: parseInt(process.env.RATE_LIMIT_MS || "30000", 10),
