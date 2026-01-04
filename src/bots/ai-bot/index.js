@@ -23,10 +23,10 @@ class AiBot extends BotInstance {
         }
 
         // Register commands
-        this.command("ai", "AI 对话", (ctx) => this._handleAi(ctx));
-        this.command("providers", "选择 AI 提供商", (ctx) => this._handleProviders(ctx));
-        this.command("models", "选择模型", (ctx) => this._handleModels(ctx));
-        this.command("help", "帮助", (ctx) => this._handleHelp(ctx));
+        this.command("ai", "Ask AI a question", (ctx) => this._handleAi(ctx));
+        this.command("providers", "Select AI provider", (ctx) => this._handleProviders(ctx));
+        this.command("models", "Select model", (ctx) => this._handleModels(ctx));
+        this.command("help", "Show help", (ctx) => this._handleHelp(ctx));
 
         // Handle callback queries
         this.action(/^provider:(.+)$/, (ctx) => this._handleProviderSelect(ctx));
@@ -53,7 +53,7 @@ class AiBot extends BotInstance {
         const prompt = (ctx.message.text || "").replace("/ai", "").trim();
 
         if (!prompt) {
-            return ctx.reply("📌 用法: /ai <问题>\n例如: /ai 什么是量子计算?");
+            return ctx.reply("📌 Usage: /ai <question>\nExample: /ai What is quantum computing?");
         }
 
         await this._processAI(ctx, userId, prompt);
@@ -80,15 +80,15 @@ class AiBot extends BotInstance {
 
         if (!provider.isConfigured(this.config)) {
             return ctx.reply(
-                `❌ ${provider.name} API Key 未配置。\n\n` +
-                `使用 /providers 切换到已配置的提供商。`
+                `❌ ${provider.name} API Key not configured.\n\n` +
+                `Use /providers to switch to a configured provider.`
             );
         }
 
         await ctx.sendChatAction("typing");
 
         const statusMsg = await ctx.reply(
-            `🤔 思考中...\n\n📡 ${provider.name}: ${settings.model}`
+            `🤔 Thinking...\n\n📡 ${provider.name}: ${settings.model}`
         );
 
         const typingInterval = setInterval(() => {
@@ -111,13 +111,13 @@ class AiBot extends BotInstance {
                 ctx.chat.id,
                 statusMsg.message_id,
                 null,
-                `✅ 完成!`
+                `✅ Done!`
             );
 
             if (response.thinking) {
                 const thinking = response.thinking.substring(0, 800);
                 await ctx.reply(
-                    `💭 *推理过程:*\n\n_${this._escapeMarkdown(thinking)}${response.thinking.length > 800 ? "..." : ""}_`,
+                    `💭 *Reasoning:*\n\n_${this._escapeMarkdown(thinking)}${response.thinking.length > 800 ? "..." : ""}_`,
                     { parse_mode: "Markdown" }
                 );
             }
@@ -125,12 +125,12 @@ class AiBot extends BotInstance {
             if (response.content) {
                 await this._sendLongMessage(ctx, `💬 *${provider.name}:*\n\n${response.content}`);
             } else {
-                await ctx.reply("⚠️ AI 没有返回响应，请尝试其他模型。");
+                await ctx.reply("⚠️ AI returned no response. Try a different model.");
             }
         } catch (err) {
             clearInterval(typingInterval);
             this.logger.error("AI request failed", err);
-            await ctx.reply(`❌ 请求失败: ${err.message}\n\n使用 /providers 切换提供商。`);
+            await ctx.reply(`❌ Request failed: ${err.message}\n\nUse /providers to switch providers.`);
         }
     }
 
@@ -143,7 +143,7 @@ class AiBot extends BotInstance {
             callback_data: `provider:${p.key}`,
         }]);
 
-        await ctx.reply("🔌 选择 AI 提供商:", {
+        await ctx.reply("🔌 Select AI Provider:", {
             reply_markup: { inline_keyboard: buttons },
         });
     }
@@ -154,16 +154,16 @@ class AiBot extends BotInstance {
         const provider = getProvider(providerKey);
 
         if (!provider) {
-            return ctx.answerCbQuery("❌ 未知提供商");
+            return ctx.answerCbQuery("❌ Unknown provider");
         }
 
         const settings = this._getSettings(userId);
         settings.provider = providerKey;
         settings.model = provider.defaultModel;
 
-        await ctx.answerCbQuery(`✅ 已切换到 ${provider.name}`);
+        await ctx.answerCbQuery(`✅ Switched to ${provider.name}`);
         await ctx.editMessageText(
-            `✅ 已选择: *${provider.name}*\n\n📝 默认模型: \`${provider.defaultModel}\`\n\n使用 /models 切换模型`,
+            `✅ Selected: *${provider.name}*\n\n📝 Default model: \`${provider.defaultModel}\`\n\nUse /models to switch models`,
             { parse_mode: "Markdown" }
         );
     }
@@ -173,7 +173,7 @@ class AiBot extends BotInstance {
         const settings = this._getSettings(userId);
         const provider = getProvider(settings.provider);
 
-        await ctx.reply("⏳ 正在获取模型列表...");
+        await ctx.reply("⏳ Fetching model list...");
 
         // Fetch models (with caching)
         let models;
@@ -185,7 +185,7 @@ class AiBot extends BotInstance {
         }
 
         if (models.length === 0) {
-            return ctx.reply("❌ 当前提供商没有可用模型");
+            return ctx.reply("❌ No models available for this provider");
         }
 
         // Limit to 10 models for UI
@@ -196,7 +196,7 @@ class AiBot extends BotInstance {
             callback_data: `model:${m.id}`,
         }]);
 
-        await ctx.reply(`📝 选择模型 (${provider.name}):`, {
+        await ctx.reply(`📝 Select model (${provider.name}):`, {
             reply_markup: { inline_keyboard: buttons },
         });
     }
@@ -208,18 +208,18 @@ class AiBot extends BotInstance {
 
         settings.model = modelId;
 
-        await ctx.answerCbQuery(`✅ 模型已切换`);
-        await ctx.editMessageText(`✅ 已选择模型: \`${modelId}\``, { parse_mode: "Markdown" });
+        await ctx.answerCbQuery(`✅ Model switched`);
+        await ctx.editMessageText(`✅ Selected model: \`${modelId}\``, { parse_mode: "Markdown" });
     }
 
     async _handleHelp(ctx) {
         await ctx.reply(
-            "🧠 *AI Bot 帮助*\n\n" +
-            "/ai <问题> - 向 AI 提问\n" +
-            "/providers - 选择 AI 提供商\n" +
-            "/models - 选择模型\n\n" +
-            "*支持的提供商:*\n" +
-            "- Groq (默认)\n" +
+            "🧠 *AI Bot Help*\n\n" +
+            "/ai <question> - Ask AI a question\n" +
+            "/providers - Select AI provider\n" +
+            "/models - Select model\n\n" +
+            "*Supported providers:*\n" +
+            "- Groq (default)\n" +
             "- Google Gemini\n" +
             "- OpenAI (GPT-4)\n" +
             "- Anthropic Claude\n" +

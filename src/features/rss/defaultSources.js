@@ -3,7 +3,7 @@
  * Updated with verified working URLs.
  */
 module.exports = [
-    // === 综合新闻 (Working) ===
+    // === General News ===
     {
         name: "BBC News",
         url: "https://feeds.bbci.co.uk/news/rss.xml",
@@ -29,7 +29,7 @@ module.exports = [
         enabled: true,
     },
 
-    // === 科技 / 互联网 / 创业 (Working) ===
+    // === Tech / Internet / Startups ===
     {
         name: "Hacker News",
         url: "https://hnrss.org/frontpage",
@@ -61,7 +61,7 @@ module.exports = [
         enabled: true,
     },
 
-    // === 商业 / 金融 / 宏观 (Working) ===
+    // === Business / Finance / Macro ===
     {
         name: "Financial Times",
         url: "https://www.ft.com/rss/home",
@@ -81,7 +81,7 @@ module.exports = [
         enabled: true,
     },
 
-    // === 深度 / 思想 / 长文 (Working) ===
+    // === Deep Reads / Insight ===
     {
         name: "The Atlantic",
         url: "https://www.theatlantic.com/feed/all/",
@@ -101,7 +101,7 @@ module.exports = [
         enabled: true,
     },
     {
-        name: "阮一峰的网络日志",
+        name: "Ruanyifeng Blog",
         url: "http://www.ruanyifeng.com/blog/atom.xml",
         category: "deep",
         enabled: true,

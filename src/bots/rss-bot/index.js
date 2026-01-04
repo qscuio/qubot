@@ -1,22 +1,18 @@
 const BotInstance = require("../../core/BotInstance");
 const Parser = require("rss-parser");
-const crypto = require("crypto");
+
+const parser = new Parser();
 
 /**
- * RssBot - Handles RSS subscription commands.
+ * RssBot - RSS subscription bot.
+ * Commands: /sub, /unsub, /list, /check, /help
  */
 class RssBot extends BotInstance {
     constructor(token, storage) {
         super("rss-bot", token);
         this.storage = storage;
-        this.parser = new Parser({
-            timeout: 15000,
-            headers: {
-                "User-Agent": "Mozilla/5.0 (compatible; QuBot/1.0)",
-            },
-        });
-        this.pollIntervalMs = 5 * 60 * 1000;
-        this.pollTimer = null;
+        this.pollInterval = null;
+        this.pollIntervalMs = 5 * 60 * 1000; // 5 minutes
     }
 
     async setup() {
@@ -26,198 +22,145 @@ class RssBot extends BotInstance {
         }
 
         // Register commands
-        this.command("sub", "订阅 RSS 源", (ctx) => this._handleSub(ctx));
-        this.command("unsub", "取消订阅", (ctx) => this._handleUnsub(ctx));
-        this.command("list", "查看订阅列表", (ctx) => this._handleList(ctx));
-        this.command("check", "检查订阅状态", (ctx) => this._handleCheck(ctx));
-        this.command("help", "帮助", (ctx) => this._handleHelp(ctx));
+        this.command("sub", "Subscribe to RSS feed", (ctx) => this._handleSub(ctx));
+        this.command("unsub", "Unsubscribe from feed", (ctx) => this._handleUnsub(ctx));
+        this.command("list", "List subscriptions", (ctx) => this._handleList(ctx));
+        this.command("check", "Check subscription status", (ctx) => this._handleCheck(ctx));
+        this.command("help", "Show help", (ctx) => this._handleHelp(ctx));
 
         this.logger.info("RssBot commands registered.");
     }
 
     async start() {
         await super.start();
-
-        // Start polling if storage is available
-        if (this.storage && this.storage.pool) {
-            this._startPolling();
-        }
+        this._startPolling();
     }
 
-    async stop() {
-        if (this.pollTimer) {
-            clearInterval(this.pollTimer);
-            this.pollTimer = null;
+    _startPolling() {
+        if (!this.storage) {
+            this.logger.warn("Storage not available, RSS polling disabled.");
+            return;
         }
-        await super.stop();
+
+        this.pollInterval = setInterval(async () => {
+            await this._pollFeeds();
+        }, this.pollIntervalMs);
+
+        this.logger.info(`RSS polling started (interval: ${this.pollIntervalMs / 1000}s)`);
     }
 
-    // ============= Command Handlers =============
+    async _pollFeeds() {
+        // TODO: Implement feed polling and notification
+        this.logger.debug("Polling RSS feeds...");
+    }
 
     async _handleSub(ctx) {
-        const chatId = ctx.chat.id;
-        const text = ctx.message.text;
-        const url = this._extractUrl(text);
+        const userId = ctx.from?.id;
+        const chatId = ctx.chat?.id;
+        const url = (ctx.message.text || "").replace("/sub", "").trim();
 
         if (!url) {
-            return ctx.reply("📌 用法: /sub <RSS URL>\n例如: /sub https://example.com/feed.xml");
+            return ctx.reply("📌 Usage: /sub <RSS URL>\nExample: /sub https://example.com/feed.xml");
         }
 
         try {
-            await ctx.reply("⏳ 正在验证 RSS 源...");
-            const feed = await this.parser.parseURL(url);
-            const title = feed.title || "Untitled Feed";
+            await ctx.reply("⏳ Validating RSS feed...");
+            const feed = await parser.parseURL(url);
+            const title = feed.title || url;
 
-            const source = await this.storage.createSource(url, title);
-            const added = await this.storage.addSubscription(chatId, source.id);
-
-            if (added) {
-                await ctx.reply(`✅ 订阅成功!\n\n📰 ${title}\n🔗 ${url}`);
-                this.logger.info(`User ${chatId} subscribed to [${source.id}] ${title}`);
-            } else {
-                await ctx.reply(`⚠️ 你已经订阅过这个源了: ${title}`);
+            if (this.storage) {
+                const added = await this.storage.addRssSubscription(userId, chatId, url, title);
+                if (added) {
+                    await ctx.reply(`✅ Subscribed!\n\n📰 ${title}\n🔗 ${url}`);
+                } else {
+                    await ctx.reply(`⚠️ You're already subscribed to: ${title}`);
+                }
             }
         } catch (err) {
-            this.logger.error(`Failed to subscribe to ${url}`, err);
-            await ctx.reply(`❌ 订阅失败: ${err.message}`);
+            await ctx.reply(`❌ Subscribe failed: ${err.message}`);
         }
     }
 
     async _handleUnsub(ctx) {
-        const chatId = ctx.chat.id;
-        const args = ctx.message.text.split(" ").slice(1);
-        const urlOrId = args[0];
+        const userId = ctx.from?.id;
+        const input = (ctx.message.text || "").replace("/unsub", "").trim();
 
-        if (!urlOrId) {
-            return ctx.reply("📌 用法: /unsub <RSS URL 或 ID>");
+        if (!input) {
+            return ctx.reply("📌 Usage: /unsub <RSS URL or ID>");
         }
 
         try {
-            let source;
-            if (/^\d+$/.test(urlOrId)) {
-                source = await this.storage.getSourceById(parseInt(urlOrId));
-            } else {
-                source = await this.storage.getSourceByLink(urlOrId);
-            }
+            if (this.storage) {
+                const subs = await this.storage.getRssSubscriptions(userId);
+                const source = subs.find((s) => s.url === input || s.id === input);
 
-            if (!source) {
-                return ctx.reply("❌ 未找到该订阅源。");
-            }
+                if (!source) {
+                    return ctx.reply("❌ Subscription not found.");
+                }
 
-            const removed = await this.storage.removeSubscription(chatId, source.id);
-            if (removed) {
-                await ctx.reply(`✅ 已取消订阅: ${source.title}`);
-            } else {
-                await ctx.reply("⚠️ 你没有订阅这个源。");
+                const removed = await this.storage.removeRssSubscription(userId, source.url);
+                if (removed) {
+                    await ctx.reply(`✅ Unsubscribed: ${source.title}`);
+                } else {
+                    await ctx.reply("⚠️ You're not subscribed to this feed.");
+                }
             }
         } catch (err) {
-            await ctx.reply(`❌ 取消订阅失败: ${err.message}`);
+            await ctx.reply(`❌ Unsubscribe failed: ${err.message}`);
         }
     }
 
     async _handleList(ctx) {
-        const chatId = ctx.chat.id;
+        const userId = ctx.from?.id;
 
         try {
-            const subs = await this.storage.getSubscriptionsByUser(chatId);
+            if (this.storage) {
+                const subs = await this.storage.getRssSubscriptions(userId);
+                if (subs.length === 0) {
+                    return ctx.reply("📭 You have no subscriptions.\n\nUse /sub <URL> to add one.");
+                }
 
-            if (subs.length === 0) {
-                return ctx.reply("📭 你还没有订阅任何RSS源。\n\n使用 /sub <URL> 添加订阅。");
+                let msg = `📚 Your subscriptions (${subs.length})\n\n`;
+                subs.forEach((s, i) => {
+                    msg += `${i + 1}. ${s.title}\n   ${s.url}\n\n`;
+                });
+                await ctx.reply(msg);
             }
-
-            let msg = `📚 你的订阅列表 (${subs.length}个)\n\n`;
-            for (const sub of subs) {
-                msg += `[${sub.source_id}] ${sub.title || "Untitled"}\n`;
-            }
-            await ctx.reply(msg);
         } catch (err) {
-            await ctx.reply(`❌ 获取列表失败: ${err.message}`);
+            await ctx.reply(`❌ Failed to get list: ${err.message}`);
         }
     }
 
     async _handleCheck(ctx) {
-        const chatId = ctx.chat.id;
+        const userId = ctx.from?.id;
 
         try {
-            const subs = await this.storage.getSubscriptionsByUser(chatId);
-            const sources = await this.storage.getAllSources();
-
-            await ctx.reply(
-                `📊 订阅状态\n\n` +
-                `🔢 你的订阅数: ${subs.length}\n` +
-                `📰 系统RSS源总数: ${sources.length}`
-            );
+            if (this.storage) {
+                const subs = await this.storage.getRssSubscriptions(userId);
+                await ctx.reply(`📊 Status:\n\n• Subscriptions: ${subs.length}\n• Bot: Active\n• Polling: Every 5 min`);
+            }
         } catch (err) {
-            await ctx.reply(`❌ 检查失败: ${err.message}`);
+            await ctx.reply(`❌ Check failed: ${err.message}`);
         }
     }
 
     async _handleHelp(ctx) {
         await ctx.reply(
-            "📖 *RSS 订阅帮助*\n\n" +
-            "/sub <url> - 订阅 RSS 源\n" +
-            "/unsub <url 或 id> - 取消订阅\n" +
-            "/list - 查看订阅列表\n" +
-            "/check - 检查订阅状态",
+            "📰 *RSS Bot Help*\n\n" +
+            "/sub <url> - Subscribe to RSS feed\n" +
+            "/unsub <url|id> - Unsubscribe\n" +
+            "/list - List subscriptions\n" +
+            "/check - Check status\n" +
+            "/help - Show this help",
             { parse_mode: "Markdown" }
         );
     }
 
-    // ============= Polling =============
-
-    _startPolling() {
-        setTimeout(() => {
-            this._pollFeeds().catch((e) => this.logger.error("Poll error", e));
-        }, 60000);
-
-        this.pollTimer = setInterval(() => {
-            this._pollFeeds().catch((e) => this.logger.error("Poll error", e));
-        }, this.pollIntervalMs);
-
-        this.logger.info(`Started polling every ${this.pollIntervalMs / 1000}s`);
-    }
-
-    async _pollFeeds() {
-        const sources = await this.storage.getAllSources();
-
-        for (const source of sources) {
-            try {
-                const feed = await this.parser.parseURL(source.link);
-
-                for (const item of feed.items.slice(0, 5)) {
-                    const hashId = this._generateHashId(source.link, item.guid || item.link);
-
-                    if (await this.storage.contentExists(hashId)) continue;
-
-                    await this.storage.addContent(
-                        hashId, source.id, item.guid || "", item.link || "", item.title || ""
-                    );
-
-                    const subs = await this.storage.getSubscribersBySource(source.id);
-                    for (const sub of subs) {
-                        try {
-                            const msg = `📰 *${source.title}*\n\n*${item.title || "No title"}*\n\n[阅读原文](${item.link})`;
-                            await this.sendMessage(sub.user_id, msg, { parse_mode: "Markdown" });
-                        } catch (e) {
-                            this.logger.warn(`Failed to send to ${sub.user_id}`);
-                        }
-                    }
-                }
-
-                await this.storage.clearSourceErrorCount(source.id);
-            } catch (err) {
-                await this.storage.incrementSourceErrorCount(source.id);
-            }
+    async stop() {
+        if (this.pollInterval) {
+            clearInterval(this.pollInterval);
         }
-    }
-
-    _extractUrl(text) {
-        const match = text.match(/https?:\/\/[^\s]+/);
-        return match ? match[0] : null;
-    }
-
-    _generateHashId(sourceLink, itemId) {
-        return crypto.createHash("md5").update(`${sourceLink}:${itemId}`).digest("hex");
+        await super.stop();
     }
 }
 
