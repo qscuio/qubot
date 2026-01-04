@@ -33,8 +33,14 @@ class RssBot extends BotInstance {
         this.command("help", "Show help", (ctx) => this._handleHelp(ctx));
 
         // Callback actions for inline buttons
-        this.action("cmd_sub", (ctx) => ctx.reply("📌 Usage: /sub <RSS URL>\nExample: /sub https://example.com/feed.xml", { reply_markup: this._persistentKeyboard() }));
+        this.action("cmd_sub", (ctx) => {
+            ctx.answerCbQuery();
+            return ctx.reply("📌 Usage: /sub <RSS URL>\nExample: /sub https://example.com/feed.xml");
+        });
         this.action("cmd_list", (ctx) => this._handleList(ctx));
+        this.action("cmd_status", (ctx) => this._handleStatus(ctx));
+        this.action("cmd_help", (ctx) => this._handleHelp(ctx));
+        this.action("cmd_start", (ctx) => this._handleStart(ctx));
         this.action(/^unsub:(\d+)$/, (ctx) => this._handleUnsubButton(ctx));
         this.action(/^confirm_sub:(.+)$/, (ctx) => this._handleSubConfirm(ctx));
         this.action(/^cancel_sub:(.+)$/, (ctx) => ctx.editMessageText("❌ Subscription cancelled."));
@@ -42,14 +48,12 @@ class RssBot extends BotInstance {
         this.logger.info("RssBot commands registered.");
     }
 
-    _persistentKeyboard() {
+    _quickActionsKeyboard() {
         return {
-            keyboard: [
-                ["/sub", "/list"],
-                ["/status", "/help"]
-            ],
-            resize_keyboard: true,
-            one_time_keyboard: false
+            inline_keyboard: [
+                [{ text: "➕ Subscribe", callback_data: "cmd_sub" }, { text: "📋 My Feeds", callback_data: "cmd_list" }],
+                [{ text: "📊 Status", callback_data: "cmd_status" }, { text: "❓ Help", callback_data: "cmd_help" }],
+            ]
         };
     }
 
@@ -160,14 +164,14 @@ class RssBot extends BotInstance {
 
         if (!url) {
             return ctx.reply("📌 Usage: /sub <RSS URL>\nExample: /sub https://example.com/feed.xml", {
-                reply_markup: this._persistentKeyboard()
+                reply_markup: this._quickActionsKeyboard()
             });
         }
 
         // Check storage availability
         if (!this.storage) {
             return ctx.reply("❌ Database unavailable. Cannot persist subscriptions.", {
-                reply_markup: this._persistentKeyboard()
+                reply_markup: this._quickActionsKeyboard()
             });
         }
 
@@ -208,7 +212,7 @@ class RssBot extends BotInstance {
             );
         } catch (err) {
             await ctx.reply(`❌ Subscribe failed: ${err.message}`, {
-                reply_markup: this._persistentKeyboard()
+                reply_markup: this._quickActionsKeyboard()
             });
         }
     }
@@ -260,14 +264,14 @@ class RssBot extends BotInstance {
 
         if (!input) {
             return ctx.reply("📌 Usage: /unsub <RSS URL or ID>", {
-                reply_markup: this._persistentKeyboard()
+                reply_markup: this._quickActionsKeyboard()
             });
         }
 
         // Check storage availability
         if (!this.storage) {
             return ctx.reply("❌ Database unavailable. Cannot manage subscriptions.", {
-                reply_markup: this._persistentKeyboard()
+                reply_markup: this._quickActionsKeyboard()
             });
         }
 
@@ -301,9 +305,7 @@ class RssBot extends BotInstance {
             const subs = await this.storage.getRssSubscriptions(userId);
             if (subs.length === 0) {
                 return ctx.reply("📭 You have no subscriptions.\n\nUse /sub <URL> to add one.", {
-                    reply_markup: {
-                        inline_keyboard: [[{ text: "➕ Subscribe", callback_data: "cmd_sub" }]]
-                    }
+                    reply_markup: this._quickActionsKeyboard()
                 });
             }
 
@@ -313,8 +315,11 @@ class RssBot extends BotInstance {
                 callback_data: `unsub:${s.id}`
             }]);
 
-            await ctx.reply(`📚 *Your subscriptions (${subs.length})*\n\nTap to unsubscribe:`, {
-                parse_mode: "Markdown",
+            // Add quick actions at the end
+            buttons.push([{ text: "➕ Subscribe", callback_data: "cmd_sub" }, { text: "🏠 Home", callback_data: "cmd_start" }]);
+
+            await ctx.reply(`📚 <b>Your subscriptions (${subs.length})</b>\n\n<i>Tap to unsubscribe:</i>`, {
+                parse_mode: "HTML",
                 reply_markup: { inline_keyboard: buttons }
             });
 
@@ -348,24 +353,16 @@ class RssBot extends BotInstance {
 
     async _handleStart(ctx) {
         const inlineButtons = [
-            [{ text: "➕ Subscribe to Feed", callback_data: "cmd_sub" }],
-            [{ text: "📋 My Subscriptions", callback_data: "cmd_list" }],
+            [{ text: "➕ Subscribe", callback_data: "cmd_sub" }, { text: "📋 My Feeds", callback_data: "cmd_list" }],
+            [{ text: "📊 Status", callback_data: "cmd_status" }, { text: "❓ Help", callback_data: "cmd_help" }],
         ];
 
         await ctx.reply(
-            "📰 *Welcome to RSS Bot!*\n\n" +
-            "Subscribe to RSS feeds and get updates in TARGET\\_CHANNEL.\n\n" +
-            "*Quick Commands:*\n" +
-            "/sub <url> - Subscribe to a feed\n" +
-            "/list - View subscriptions\n" +
-            "/status - Check bot status",
-            { parse_mode: "Markdown", reply_markup: { inline_keyboard: inlineButtons } }
+            "📰 <b>Welcome to RSS Bot!</b>\n\n" +
+            "Subscribe to RSS feeds and get updates in TARGET_CHANNEL.\n\n" +
+            "<i>Use the buttons below or send a command to get started!</i>",
+            { parse_mode: "HTML", reply_markup: { inline_keyboard: inlineButtons } }
         );
-
-        // Send persistent keyboard
-        await ctx.reply("Use the keyboard below for quick actions:", {
-            reply_markup: this._persistentKeyboard()
-        });
     }
 
     async _handleStatus(ctx) {
