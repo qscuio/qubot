@@ -31,6 +31,15 @@ class TelegramService {
         // Sync dialogs to ensure gramjs knows about all channels
         // This is required for receiving updates from channels
         await this._syncDialogs();
+
+        const me = await this.client.getMe().catch(() => null);
+        if (me) {
+            const name = me.username || me.firstName || me.id;
+            logger.info(`Logged in as ${name} (bot=${!!me.bot})`);
+            if (me.bot) {
+                logger.warn("MTProto session is a bot. Bots only receive channel/group updates if added (channels require admin).");
+            }
+        }
     }
 
     /**
