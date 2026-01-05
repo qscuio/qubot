@@ -30,6 +30,14 @@ class TelegramService {
         await this.client.connect();
         logger.info("✅ Connected to Telegram.");
 
+        const authorized = await this.client.checkAuthorization().catch((err) => {
+            logger.warn(`Authorization check failed: ${err.message}`);
+            return false;
+        });
+        if (!authorized) {
+            logger.warn("MTProto session is not authorized. Updates may not be delivered.");
+        }
+
         // Sync dialogs to ensure gramjs knows about all channels
         // This is required for receiving updates from channels
         await this._syncDialogs();
