@@ -102,9 +102,9 @@ class MonitorService extends EventEmitter {
             this.logger.info("MonitorService configured to receive ALL incoming messages (no source filters).");
         }
 
-        // Warm update state for channels to improve update delivery
-        if (this.telegram && this.sourceChannels.length > 0) {
-            await this.telegram.primeChannels(this.sourceChannels);
+        // Warm update state for all dialogs to improve update delivery
+        if (this.telegram) {
+            await this.telegram.primeAllDialogs();
         }
 
         // Store resolved IDs for reference (not used for filtering anymore)

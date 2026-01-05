@@ -16,6 +16,7 @@ class TelegramService {
         this.rateLimiter = new RateLimiter(configService.get("RATE_LIMIT_MS"));
         this._rawUpdateEvent = null;
         this._rawUpdateHandler = null;
+        this._dialogs = null;
     }
 
     async connect() {
@@ -63,6 +64,7 @@ class TelegramService {
         try {
             logger.info("Syncing dialogs to receive channel updates...");
             const dialogs = await this.client.getDialogs({});
+            this._dialogs = dialogs;
             const channels = dialogs.filter(d => d.isChannel || d.isGroup);
             logger.info(`✅ Synced ${dialogs.length} dialogs (${channels.length} channels/groups).`);
             if (logger.level === "debug") {
@@ -184,7 +186,21 @@ class TelegramService {
         logger.info(`Priming ${peers.length} channel(s) to warm update state...`);
         for (const peer of peers) {
             try {
-                const entity = await this.client.getEntity(peer);
+                let entity = peer;
+                const isEntityObject = entity &&
+                    typeof entity === "object" &&
+                    (entity.classType === "constructor" || entity.className);
+                const isInputPeer = isEntityObject && (
+                    entity instanceof Api.InputPeerChannel ||
+                    entity instanceof Api.InputPeerChat ||
+                    entity instanceof Api.InputPeerUser ||
+                    entity instanceof Api.InputPeerSelf
+                );
+
+                if (!isEntityObject || isInputPeer) {
+                    entity = await this.client.getEntity(peer);
+                }
+
                 const messages = await this.client.getMessages(peer, { limit: 1 });
                 const latest = messages?.[0];
                 const latestId = latest?.id ? String(latest.id) : "none";
@@ -220,6 +236,21 @@ class TelegramService {
                 logger.warn(`Prime failed for ${peer}: ${err.message}`);
             }
         }
+    }
+
+    async primeAllDialogs() {
+        if (!this.client) return;
+        let dialogs = this._dialogs;
+        if (!dialogs) {
+            dialogs = await this.client.getDialogs({});
+            this._dialogs = dialogs;
+        }
+        const peers = dialogs
+            .filter(d => d.isChannel || d.isGroup)
+            .map(d => d.entity || d.id)
+            .filter(Boolean);
+        if (peers.length === 0) return;
+        await this.primeChannels(peers);
     }
 
     /**
