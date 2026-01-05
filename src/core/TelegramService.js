@@ -181,10 +181,24 @@ class TelegramService {
         return results.filter(Boolean);
     }
 
+    _describePeer(peer, entity) {
+        const describe = (obj) => {
+            if (!obj || typeof obj !== "object") return null;
+            const title = obj.title || obj.name || obj.username || obj.firstName || obj.lastName;
+            const id = obj.id || obj.channelId || obj.chatId || obj.userId;
+            if (title && id) return `${title} (${id})`;
+            if (title) return title;
+            if (id) return String(id);
+            return null;
+        };
+        return describe(entity) || describe(peer) || String(peer);
+    }
+
     async primeChannels(peers) {
         if (!this.client || !Array.isArray(peers) || peers.length === 0) return;
-        logger.info(`Priming ${peers.length} channel(s) to warm update state...`);
+        logger.info(`Priming ${peers.length} peer(s) to warm update state...`);
         for (const peer of peers) {
+            let label = this._describePeer(peer);
             try {
                 let entity = peer;
                 const isEntityObject = entity &&
@@ -200,6 +214,7 @@ class TelegramService {
                 if (!isEntityObject || isInputPeer) {
                     entity = await this.client.getEntity(peer);
                 }
+                label = this._describePeer(peer, entity);
 
                 const messages = await this.client.getMessages(peer, { limit: 1 });
                 const latest = messages?.[0];
@@ -228,12 +243,12 @@ class TelegramService {
                             limit: 1
                         })
                     );
-                    logger.debug(`Primed ${peer}: latestId=${latestId}, diff=${diff?.className || "unknown"}, pts=${pts}`);
+                    logger.debug(`Primed ${label}: latestId=${latestId}, diff=${diff?.className || "unknown"}, pts=${pts}`);
                 } else {
-                    logger.debug(`Primed ${peer}: latestId=${latestId}, diff=skipped (not a channel)`);
+                    logger.debug(`Primed ${label}: latestId=${latestId}, diff=skipped (not a channel)`);
                 }
             } catch (err) {
-                logger.warn(`Prime failed for ${peer}: ${err.message}`);
+                logger.warn(`Prime failed for ${label}: ${err.message}`);
             }
         }
     }
@@ -246,7 +261,6 @@ class TelegramService {
             this._dialogs = dialogs;
         }
         const peers = dialogs
-            .filter(d => d.isChannel || d.isGroup)
             .map(d => d.entity || d.id)
             .filter(Boolean);
         if (peers.length === 0) return;
