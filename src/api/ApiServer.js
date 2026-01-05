@@ -134,6 +134,14 @@ class ApiServer {
         const ai = this.services.ai;
         if (!ai) return;
 
+        const buildAiOptions = (body = {}) => {
+            const options = (body.options && typeof body.options === "object") ? { ...body.options } : {};
+            if (body.provider && !options.provider) options.provider = body.provider;
+            if (body.model && !options.model) options.model = body.model;
+            if (Number.isInteger(body.retries)) options.retries = body.retries;
+            return options;
+        };
+
         // Get AI settings
         this.app.get("/api/ai/settings", async (req, res) => {
             try {
@@ -160,6 +168,24 @@ class ApiServer {
             res.json({ providers: ai.listProviders() });
         });
 
+        // List AI jobs
+        this.app.get("/api/ai/jobs", (req, res) => {
+            res.json({ jobs: ai.listJobs() });
+        });
+
+        // Run a generic AI job
+        this.app.post("/api/ai/jobs/:id", async (req, res) => {
+            try {
+                const jobId = req.params.id;
+                const payload = req.body?.payload || {};
+                const options = buildAiOptions(req.body || {});
+                const response = await ai.runJob(jobId, payload, options);
+                res.json({ jobId, response });
+            } catch (err) {
+                res.status(400).json({ error: err.message });
+            }
+        });
+
         // Get models
         this.app.get("/api/ai/models", async (req, res) => {
             try {
@@ -181,6 +207,213 @@ class ApiServer {
                 }
                 const response = await ai.chat(req.userId, message);
                 res.json(response);
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Analyze
+        this.app.post("/api/ai/analyze", async (req, res) => {
+            try {
+                const { prompt } = req.body || {};
+                if (!prompt) {
+                    return res.status(400).json({ error: "prompt is required" });
+                }
+                const response = await ai.analyze(prompt, buildAiOptions(req.body || {}));
+                res.json(response);
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Summarize
+        this.app.post("/api/ai/summarize", async (req, res) => {
+            try {
+                const { text, maxLength } = req.body || {};
+                if (!text) {
+                    return res.status(400).json({ error: "text is required" });
+                }
+                const summary = await ai.summarize(text, maxLength, buildAiOptions(req.body || {}));
+                res.json({ summary });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Translate
+        this.app.post("/api/ai/translate", async (req, res) => {
+            try {
+                const { text, targetLanguage, sourceLanguage } = req.body || {};
+                if (!text || !targetLanguage) {
+                    return res.status(400).json({ error: "text and targetLanguage are required" });
+                }
+                const translation = await ai.translate(
+                    text,
+                    targetLanguage,
+                    sourceLanguage,
+                    buildAiOptions(req.body || {})
+                );
+                res.json({ translation });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Language learning
+        this.app.post("/api/ai/language-learning", async (req, res) => {
+            try {
+                const { text, targetLanguage, level, goal } = req.body || {};
+                if (!text) {
+                    return res.status(400).json({ error: "text is required" });
+                }
+                const response = await ai.languageLearning(
+                    text,
+                    targetLanguage,
+                    level,
+                    goal,
+                    buildAiOptions(req.body || {})
+                );
+                res.json({ response });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Research
+        this.app.post("/api/ai/research", async (req, res) => {
+            try {
+                const { question, sources } = req.body || {};
+                if (!question) {
+                    return res.status(400).json({ error: "question is required" });
+                }
+                const report = await ai.research(question, sources || [], buildAiOptions(req.body || {}));
+                res.json({ report });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Categorize
+        this.app.post("/api/ai/categorize", async (req, res) => {
+            try {
+                const { text, categories } = req.body || {};
+                if (!text || !Array.isArray(categories) || categories.length === 0) {
+                    return res.status(400).json({ error: "text and categories are required" });
+                }
+                const result = await ai.categorize(text, categories, buildAiOptions(req.body || {}));
+                res.json({ result });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Extract
+        this.app.post("/api/ai/extract", async (req, res) => {
+            try {
+                const { text, fields } = req.body || {};
+                if (!text || !Array.isArray(fields) || fields.length === 0) {
+                    return res.status(400).json({ error: "text and fields are required" });
+                }
+                const result = await ai.extract(text, fields, buildAiOptions(req.body || {}));
+                res.json({ result });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Sentiment
+        this.app.post("/api/ai/sentiment", async (req, res) => {
+            try {
+                const { text } = req.body || {};
+                if (!text) {
+                    return res.status(400).json({ error: "text is required" });
+                }
+                const result = await ai.getSentiment(text, buildAiOptions(req.body || {}));
+                res.json({ result });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Smart filter match
+        this.app.post("/api/ai/filter-match", async (req, res) => {
+            try {
+                const { text, criteria } = req.body || {};
+                if (!text || !criteria) {
+                    return res.status(400).json({ error: "text and criteria are required" });
+                }
+                const matches = await ai.matchFilter(text, criteria, buildAiOptions(req.body || {}));
+                res.json({ matches });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Digest
+        this.app.post("/api/ai/digest", async (req, res) => {
+            try {
+                const { messages } = req.body || {};
+                if (!Array.isArray(messages) || messages.length === 0) {
+                    return res.status(400).json({ error: "messages are required" });
+                }
+                const digest = await ai.createDigest(messages, buildAiOptions(req.body || {}));
+                res.json({ digest });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Rank by relevance
+        this.app.post("/api/ai/rank", async (req, res) => {
+            try {
+                const { items, query } = req.body || {};
+                if (!Array.isArray(items) || items.length === 0 || !query) {
+                    return res.status(400).json({ error: "items and query are required" });
+                }
+                const ranked = await ai.rankByRelevance(items, query, buildAiOptions(req.body || {}));
+                res.json({ items: ranked });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Tool plan
+        this.app.post("/api/ai/tool-plan", async (req, res) => {
+            try {
+                const { task, tools, constraints } = req.body || {};
+                if (!task || !Array.isArray(tools)) {
+                    return res.status(400).json({ error: "task and tools are required" });
+                }
+                const result = await ai.planToolUse(task, tools, constraints || "", buildAiOptions(req.body || {}));
+                res.json({ result });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Function call
+        this.app.post("/api/ai/function-call", async (req, res) => {
+            try {
+                const { task, functions } = req.body || {};
+                if (!task || !Array.isArray(functions)) {
+                    return res.status(400).json({ error: "task and functions are required" });
+                }
+                const result = await ai.functionCall(task, functions, buildAiOptions(req.body || {}));
+                res.json({ result });
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Claude skill call
+        this.app.post("/api/ai/skill-call", async (req, res) => {
+            try {
+                const { task, skills } = req.body || {};
+                if (!task || !Array.isArray(skills)) {
+                    return res.status(400).json({ error: "task and skills are required" });
+                }
+                const result = await ai.callSkill(task, skills, buildAiOptions(req.body || {}));
+                res.json({ result });
             } catch (err) {
                 res.status(500).json({ error: err.message });
             }

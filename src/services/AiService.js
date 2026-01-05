@@ -1,10 +1,11 @@
 const Logger = require("../core/Logger");
 const { getProvider, listProviders, fetchModels, callAI } = require("../providers");
+const { buildJobPrompt, getJobDefinition, listJobs } = require("./ai/PromptCatalog");
 
 const DEFAULT_PROVIDER = "groq";
 
 /**
- * AiService - Business logic for AI chat functionality.
+ * AiService - Business logic for AI chat and task execution.
  * Decoupled from Telegram, can be used by REST API or any frontend.
  */
 class AiService {
@@ -63,6 +64,20 @@ class AiService {
     }
 
     /**
+     * List supported AI job types.
+     */
+    listJobs() {
+        return listJobs();
+    }
+
+    /**
+     * Get a job definition by id.
+     */
+    getJob(jobId) {
+        return getJobDefinition(jobId);
+    }
+
+    /**
      * Get available models for a provider.
      */
     async getModels(providerKey) {
@@ -74,8 +89,54 @@ class AiService {
         return models;
     }
 
+    /**
+     * Run a well-defined AI job by id.
+     */
+    async runJob(jobId, payload = {}, options = {}) {
+        const { system, prompt } = buildJobPrompt(jobId, payload);
+        const provider = options.provider || this._getDefaultProvider();
+        const model = options.model || getProvider(provider)?.defaultModel;
+
+        if (!provider || !getProvider(provider)?.isConfigured?.(this.config)) {
+            throw new Error(`No AI provider configured for ${jobId}`);
+        }
+
+        const history = options.history || [];
+        const contextPrefix = this._joinContext(system, options.contextPrefix);
+        const retries = Number.isInteger(options.retries) ? options.retries : 1;
+
+        return await this._callAIWithRetry(provider, prompt, model, history, contextPrefix, retries);
+    }
+
+    async _runJsonJob(jobId, payload, options, fallback) {
+        try {
+            const response = await this.runJob(jobId, payload, options);
+            return this._parseJson(response.content, fallback, jobId);
+        } catch (err) {
+            this.logger.warn(`${jobId} failed`, err.message);
+            return fallback;
+        }
+    }
+
+    _parseJson(content, fallback, label) {
+        if (!content) return fallback;
+        try {
+            return JSON.parse(content);
+        } catch (err) {
+            this.logger.warn(`${label} JSON parse failed`, err.message);
+            return fallback;
+        }
+    }
+
+    _joinContext(system, extra) {
+        const parts = [];
+        if (system) parts.push(system);
+        if (extra) parts.push(extra);
+        return parts.join("\n\n");
+    }
+
     // ============================================================
-    // PUBLIC AI ANALYSIS METHODS (for use by other services)
+    // PUBLIC AI TASK METHODS (for use by other services)
     // ============================================================
 
     /**
@@ -86,14 +147,7 @@ class AiService {
      * @returns {Promise<{content: string, thinking?: string}>}
      */
     async analyze(prompt, options = {}) {
-        const provider = options.provider || this._getDefaultProvider();
-        const model = options.model || getProvider(provider)?.defaultModel;
-
-        if (!provider || !getProvider(provider)?.isConfigured?.(this.config)) {
-            throw new Error(`No AI provider configured for analysis`);
-        }
-
-        return await this._callAIWithRetry(provider, prompt, model, [], "");
+        return await this.runJob("analysis", { prompt }, options);
     }
 
     /**
@@ -101,15 +155,52 @@ class AiService {
      * @param {string} text - Text to summarize
      * @param {number} maxLength - Max summary length (default 200)
      */
-    async summarize(text, maxLength = 200) {
+    async summarize(text, maxLength = 200, options = {}) {
         if (!text || text.length < 50) {
             return text; // Too short to summarize
         }
 
-        const prompt = `Summarize the following text in ${maxLength} characters or less. Be concise and capture the key points:\n\n${text.substring(0, 5000)}`;
-
-        const response = await this.analyze(prompt);
+        const response = await this.runJob("summarize", { text, maxLength }, options);
         return response.content || text.substring(0, maxLength);
+    }
+
+    /**
+     * Translate text between languages.
+     */
+    async translate(text, targetLanguage, sourceLanguage = "", options = {}) {
+        if (!text) return "";
+        const response = await this.runJob(
+            "translate",
+            { text, targetLanguage, sourceLanguage },
+            options
+        );
+        return response.content || "";
+    }
+
+    /**
+     * Language tutoring with corrections and practice.
+     */
+    async languageLearning(text, targetLanguage, level = "intermediate", goal = "", options = {}) {
+        if (!text) return "";
+        const response = await this.runJob(
+            "language_learning",
+            { text, targetLanguage, level, goal },
+            options
+        );
+        return response.content || "";
+    }
+
+    /**
+     * Research brief with cautious sourcing.
+     */
+    async research(question, sources = [], options = {}) {
+        if (!question) return "";
+        const response = await this.runJob(
+            "research",
+            { question, sources },
+            options
+        );
+        return response.content || "";
     }
 
     /**
@@ -118,25 +209,13 @@ class AiService {
      * @param {string[]} categories - List of possible categories
      * @returns {Promise<{category: string, confidence: string, reasoning: string}>}
      */
-    async categorize(text, categories) {
+    async categorize(text, categories, options = {}) {
         if (!categories || categories.length === 0) {
             return { category: "uncategorized", confidence: "low", reasoning: "No categories provided" };
         }
 
-        const prompt = `Categorize the following text into one of these categories: ${categories.join(", ")}
-
-Text: ${text.substring(0, 2000)}
-
-Respond in JSON format:
-{"category": "chosen_category", "confidence": "high|medium|low", "reasoning": "brief explanation"}`;
-
-        try {
-            const response = await this.analyze(prompt);
-            return JSON.parse(response.content);
-        } catch (err) {
-            this.logger.warn("Categorization failed", err.message);
-            return { category: categories[0], confidence: "low", reasoning: "AI parsing failed" };
-        }
+        const fallback = { category: categories[0], confidence: "low", reasoning: "AI parsing failed" };
+        return await this._runJsonJob("categorize", { text, categories }, options, fallback);
     }
 
     /**
@@ -144,26 +223,138 @@ Respond in JSON format:
      * @param {string} text - Text to analyze
      * @param {string[]} fields - Fields to extract (e.g., ["topic", "sentiment", "entities"])
      */
-    async extract(text, fields) {
-        const prompt = `Extract the following information from the text: ${fields.join(", ")}
+    async extract(text, fields, options = {}) {
+        const fallback = (fields || []).reduce((acc, f) => ({ ...acc, [f]: null }), {});
+        return await this._runJsonJob("extract", { text, fields }, options, fallback);
+    }
 
-Text: ${text.substring(0, 3000)}
+    /**
+     * Plan tool usage for coding tasks.
+     */
+    async planToolUse(task, tools = [], constraints = "", options = {}) {
+        const fallback = { plan: [], tool_calls: [], final_note: "AI not available." };
+        return await this._runJsonJob(
+            "coding_tool_use",
+            { task, tools, constraints },
+            options,
+            fallback
+        );
+    }
 
-Respond in JSON format with the requested fields.`;
+    /**
+     * Choose a function and return arguments.
+     */
+    async functionCall(task, functions = [], options = {}) {
+        const fallback = { name: "none", arguments: {} };
+        return await this._runJsonJob(
+            "function_call",
+            { task, functions },
+            options,
+            fallback
+        );
+    }
 
-        try {
-            const response = await this.analyze(prompt);
-            return JSON.parse(response.content);
-        } catch (err) {
-            this.logger.warn("Extraction failed", err.message);
-            return fields.reduce((acc, f) => ({ ...acc, [f]: null }), {});
+    /**
+     * Choose a Claude skill and return structured input.
+     */
+    async callSkill(task, skills = [], options = {}) {
+        const fallback = { skill: "none", input: {} };
+        return await this._runJsonJob(
+            "claude_skill",
+            { task, skills },
+            options,
+            fallback
+        );
+    }
+
+    /**
+     * Get sentiment analysis for a message.
+     * @param {string} text - Message text
+     * @returns {Promise<{sentiment: string, score: number}>}
+     */
+    async getSentiment(text, options = {}) {
+        const fallback = { sentiment: "neutral", score: 0 };
+        if (!this.isAnalysisAvailable()) return fallback;
+        return await this._runJsonJob("sentiment", { text }, options, fallback);
+    }
+
+    /**
+     * Check if a message matches smart filter criteria.
+     * @param {string} text - Message text
+     * @param {object} criteria - Filter criteria
+     * @returns {Promise<boolean>}
+     */
+    async matchFilter(text, criteria, options = {}) {
+        if (!this.isAnalysisAvailable()) {
+            return true;
         }
+
+        if (!criteria || Object.keys(criteria).length === 0) {
+            return true;
+        }
+
+        const fallback = { matches: true, confidence: "low", reasoning: "AI not available" };
+        const result = await this._runJsonJob(
+            "smart_filter_match",
+            { text, criteria },
+            options,
+            fallback
+        );
+        return result.matches === true;
+    }
+
+    /**
+     * Summarize multiple messages into a digest.
+     * @param {object[]} messages - Array of message objects
+     * @returns {Promise<string>} - Digest summary
+     */
+    async createDigest(messages, options = {}) {
+        if (!this.isAnalysisAvailable() || !messages || messages.length === 0) {
+            return "No messages to summarize.";
+        }
+
+        const response = await this.runJob("digest", { messages }, options);
+        return response.content || "Failed to create digest.";
+    }
+
+    /**
+     * Rank items by relevance to a query.
+     * @param {object[]} items - Items to rank
+     * @param {string} query - User's interest query
+     */
+    async rankByRelevance(items, query, options = {}) {
+        if (!this.isAnalysisAvailable() || !items || items.length === 0) {
+            return (items || []).map((item, idx) => ({ ...item, relevance: 1 - idx * 0.1 }));
+        }
+
+        const rankings = await this._runJsonJob(
+            "rank_relevance",
+            { items, query },
+            options,
+            []
+        );
+
+        if (!Array.isArray(rankings)) {
+            return items;
+        }
+
+        return items.map((item, idx) => {
+            const ranking = rankings.find(r => r.index === idx + 1);
+            return { ...item, relevance: ranking?.relevance || 5 };
+        }).sort((a, b) => b.relevance - a.relevance);
     }
 
     /**
      * Check if AI analysis is available (at least one provider configured).
      */
     isAnalysisAvailable() {
+        return this._getDefaultProvider() !== null;
+    }
+
+    /**
+     * Check if AI is available.
+     */
+    isAvailable() {
         return this._getDefaultProvider() !== null;
     }
 
@@ -200,7 +391,7 @@ Respond in JSON format with the requested fields.`;
         // Get/create active chat
         let activeChat = null;
         let history = [];
-        let contextPrefix = "";
+        let summaryPrefix = "";
 
         if (this.storage) {
             activeChat = await this.storage.getOrCreateActiveChat(userId);
@@ -221,17 +412,19 @@ Respond in JSON format with the requested fields.`;
             }));
 
             if (activeChat.summary) {
-                contextPrefix = `[Previous conversation summary: ${activeChat.summary}]\n\n`;
+                summaryPrefix = `[Previous conversation summary: ${activeChat.summary}]`;
             }
         }
 
-        // Call AI
-        const response = await this._callAIWithRetry(
-            settings.provider,
-            message,
-            settings.model,
-            history,
-            contextPrefix
+        const response = await this.runJob(
+            "chat",
+            { message },
+            {
+                provider: settings.provider,
+                model: settings.model,
+                history,
+                contextPrefix: summaryPrefix
+            }
         );
 
         // Save assistant message
@@ -361,21 +554,10 @@ Respond in JSON format with the requested fields.`;
         let summaryMarkdown = "";
         try {
             const settings = await this.getSettings(userId);
-            const summaryPrompt = `Analyze this conversation and create a structured knowledge summary.
-Extract key points, insights, code examples, and actionable information.
-Use headers (##), bullet points, and code blocks.
-Be concise but comprehensive.
-
-Conversation:
-${rawContent.substring(0, 15000)}`;
-
-            const response = await callAI(
-                settings.provider,
-                this.config,
-                summaryPrompt,
-                settings.model,
-                [],
-                ""
+            const response = await this.runJob(
+                "chat_notes",
+                { conversation: rawContent },
+                { provider: settings.provider, model: settings.model }
             );
 
             const summary = response.content || "Summary generation failed.";
@@ -452,15 +634,10 @@ ${rawContent.substring(0, 15000)}`;
                 .map(m => `${m.role}: ${m.content.substring(0, 200)}`)
                 .join("\n");
 
-            const summaryPrompt = `Summarize this conversation in 2-3 sentences:\n\n${messagesText}`;
-
-            const response = await callAI(
-                settings.provider,
-                this.config,
-                summaryPrompt,
-                settings.model,
-                [],
-                ""
+            const response = await this.runJob(
+                "chat_summary",
+                { messagesText },
+                { provider: settings.provider, model: settings.model }
             );
 
             if (response.content) {

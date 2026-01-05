@@ -212,26 +212,8 @@ class RssService {
         if (!this.aiService?.isAnalysisAvailable() || items.length === 0) {
             return items.map((item, idx) => ({ ...item, relevance: 1 - idx * 0.1 }));
         }
-
-        const itemSummaries = items.slice(0, 10).map((item, idx) =>
-            `${idx + 1}. ${item.title}`
-        ).join("\n");
-
-        const prompt = `Given the user's interest: "${query}"
-
-Rank these items by relevance (1-10, 10 = most relevant):
-${itemSummaries}
-
-Respond in JSON: [{"index": 1, "relevance": 8}, ...]`;
-
         try {
-            const response = await this.aiService.analyze(prompt);
-            const rankings = JSON.parse(response.content);
-
-            return items.map((item, idx) => {
-                const ranking = rankings.find(r => r.index === idx + 1);
-                return { ...item, relevance: ranking?.relevance || 5 };
-            }).sort((a, b) => b.relevance - a.relevance);
+            return await this.aiService.rankByRelevance(items, query);
         } catch (err) {
             this.logger.warn("Relevance ranking failed", err.message);
             return items;
@@ -240,4 +222,3 @@ Respond in JSON: [{"index": 1, "relevance": 8}, ...]`;
 }
 
 module.exports = RssService;
-

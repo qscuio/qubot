@@ -122,9 +122,42 @@ curl -H "Authorization: Bearer myapikey" http://localhost:3001/api/ai/providers
 |--------|----------|-------------|
 | GET | `/health` | Health check |
 | POST | `/api/ai/chat` | Send message, get AI response |
+| GET | `/api/ai/jobs` | List AI job types |
+| POST | `/api/ai/jobs/:id` | Run a job by id |
 | GET | `/api/rss/subscriptions` | List subscriptions |
 | GET | `/api/monitor/sources` | List source channels |
 | WS | `/ws/monitor` | Real-time message stream |
+
+### AI Job Endpoints (Examples)
+
+List jobs:
+```bash
+curl -H "Authorization: Bearer myapikey" \
+  http://localhost:3001/api/ai/jobs
+```
+
+Run a job with a structured payload:
+```bash
+curl -H "Authorization: Bearer myapikey" \
+  -H "Content-Type: application/json" \
+  -d '{"payload":{"text":"Hello","targetLanguage":"French"}}' \
+  http://localhost:3001/api/ai/jobs/translate
+```
+
+Convenience endpoints map to jobs:
+```bash
+# Summarize
+curl -H "Authorization: Bearer myapikey" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Long text...","maxLength":200}' \
+  http://localhost:3001/api/ai/summarize
+
+# Function call routing
+curl -H "Authorization: Bearer myapikey" \
+  -H "Content-Type: application/json" \
+  -d '{"task":"Create a user","functions":[{"name":"createUser","description":"Create user","parameters":{}}]}' \
+  http://localhost:3001/api/ai/function-call
+```
 
 ## Quick Deploy
 

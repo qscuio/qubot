@@ -454,20 +454,8 @@ class MonitorService extends EventEmitter {
         if (!criteria || Object.keys(criteria).length === 0) {
             return true;
         }
-
-        const prompt = `Analyze if this message matches the filter criteria.
-
-Message: ${text.substring(0, 1000)}
-
-Criteria:
-${Object.entries(criteria).map(([k, v]) => `- ${k}: ${v}`).join("\n")}
-
-Respond with JSON: {"matches": true/false, "confidence": "high/medium/low", "reasoning": "brief explanation"}`;
-
         try {
-            const response = await this.aiService.analyze(prompt);
-            const result = JSON.parse(response.content);
-            return result.matches === true;
+            return await this.aiService.matchFilter(text, criteria);
         } catch (err) {
             this.logger.warn("Smart filter failed", err.message);
             return true; // Pass through on error
@@ -483,16 +471,8 @@ Respond with JSON: {"matches": true/false, "confidence": "high/medium/low", "rea
         if (!this.aiService?.isAnalysisAvailable()) {
             return { sentiment: "neutral", score: 0 };
         }
-
-        const prompt = `Analyze the sentiment of this text.
-
-Text: ${text.substring(0, 500)}
-
-Respond with JSON: {"sentiment": "positive/negative/neutral", "score": -1 to 1}`;
-
         try {
-            const response = await this.aiService.analyze(prompt);
-            return JSON.parse(response.content);
+            return await this.aiService.getSentiment(text);
         } catch (err) {
             return { sentiment: "neutral", score: 0 };
         }
@@ -507,21 +487,8 @@ Respond with JSON: {"sentiment": "positive/negative/neutral", "score": -1 to 1}`
         if (!this.aiService?.isAnalysisAvailable() || messages.length === 0) {
             return "No messages to summarize.";
         }
-
-        const messageTexts = messages.slice(0, 20).map((m, i) =>
-            `${i + 1}. [${m.source}] ${m.text?.substring(0, 100)}`
-        ).join("\n");
-
-        const prompt = `Create a brief digest of these channel messages. Group by topic and highlight key information.
-
-Messages:
-${messageTexts}
-
-Create a concise 2-3 paragraph summary.`;
-
         try {
-            const response = await this.aiService.analyze(prompt);
-            return response.content;
+            return await this.aiService.createDigest(messages);
         } catch (err) {
             this.logger.warn("Digest creation failed", err.message);
             return "Failed to create digest.";

@@ -60,6 +60,8 @@ curl http://localhost:3001/health
 | PUT | `/api/ai/settings` | Update provider/model |
 | GET | `/api/ai/providers` | List AI providers |
 | GET | `/api/ai/models` | Get models for current provider |
+| GET | `/api/ai/jobs` | List AI job types |
+| POST | `/api/ai/jobs/:id` | Run a job by id |
 | POST | `/api/ai/chat` | Send message, get response |
 | POST | `/api/ai/chat/stream` | Stream response via SSE |
 | GET | `/api/ai/chats` | List chat sessions |
@@ -68,6 +70,20 @@ curl http://localhost:3001/health
 | PUT | `/api/ai/chats/:id` | Switch/rename chat |
 | DELETE | `/api/ai/chats/:id/messages` | Clear chat history |
 | POST | `/api/ai/chats/:id/export` | Export to markdown |
+| POST | `/api/ai/analyze` | Run analysis prompt |
+| POST | `/api/ai/summarize` | Summarize text |
+| POST | `/api/ai/translate` | Translate text |
+| POST | `/api/ai/language-learning` | Language learning response |
+| POST | `/api/ai/research` | Research brief |
+| POST | `/api/ai/categorize` | Categorize text |
+| POST | `/api/ai/extract` | Extract structured fields |
+| POST | `/api/ai/sentiment` | Sentiment analysis |
+| POST | `/api/ai/filter-match` | Smart filter match |
+| POST | `/api/ai/digest` | Digest multiple messages |
+| POST | `/api/ai/rank` | Rank items by relevance |
+| POST | `/api/ai/tool-plan` | Plan tool usage |
+| POST | `/api/ai/function-call` | Function routing |
+| POST | `/api/ai/skill-call` | Skill routing |
 
 #### POST /api/ai/chat
 ```bash
@@ -122,6 +138,36 @@ curl http://localhost:3001/api/ai/providers \
 ```
 
 `/api/ai/models` also accepts an optional `provider` query to preview models before switching providers.
+
+#### GET /api/ai/jobs
+```bash
+curl http://localhost:3001/api/ai/jobs \
+  -H "Authorization: Bearer myapikey"
+```
+
+#### POST /api/ai/jobs/:id
+```bash
+curl -X POST http://localhost:3001/api/ai/jobs/translate \
+  -H "Authorization: Bearer myapikey" \
+  -H "Content-Type: application/json" \
+  -d '{"payload":{"text":"Hello","targetLanguage":"French"}}'
+```
+
+#### POST /api/ai/summarize
+```bash
+curl -X POST http://localhost:3001/api/ai/summarize \
+  -H "Authorization: Bearer myapikey" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Long text...","maxLength":200}'
+```
+
+#### POST /api/ai/function-call
+```bash
+curl -X POST http://localhost:3001/api/ai/function-call \
+  -H "Authorization: Bearer myapikey" \
+  -H "Content-Type: application/json" \
+  -d '{"task":"Create a user","functions":[{"name":"createUser","description":"Create user","parameters":{}}]}'
+```
 
 ---
 
