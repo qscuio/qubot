@@ -58,8 +58,14 @@ class MonitorService extends EventEmitter {
         // Pre-resolve channel entities so gramjs can properly filter messages.
         // This is critical for channels the user hasn't directly interacted with.
         this.logger.info(`Resolving ${this.sourceChannels.length} source channel entities...`);
+        this.logger.info(`Source channels from config: ${JSON.stringify(this.sourceChannels)}`);
         const resolvedEntities = await this.telegram.resolveEntities(this.sourceChannels);
         this.logger.info(`Resolved ${resolvedEntities.length} of ${this.sourceChannels.length} channels`);
+
+        // Log each resolved entity
+        resolvedEntities.forEach(e => {
+            this.logger.info(`  ✓ Resolved: ${e.title || e.username || e.id} (ID: ${e.id}, Type: ${e.className})`);
+        });
 
         if (resolvedEntities.length === 0) {
             throw new Error("Failed to resolve any source channels. Check channel IDs and ensure the userbot has access.");
@@ -74,13 +80,15 @@ class MonitorService extends EventEmitter {
             return e.id;
         });
 
+        this.logger.info(`Registering message handler for IDs: ${resolvedIds.map(id => id.toString()).join(', ')}`);
+
         this._messageEvent = this.telegram.addMessageHandler(
             this._messageHandler,
             resolvedIds
         );
 
         this.isRunning = true;
-        this.logger.info("Channel monitoring started");
+        this.logger.info("✅ Channel monitoring started successfully");
         return { status: "started", channels: resolvedEntities.length };
     }
 
@@ -326,14 +334,24 @@ class MonitorService extends EventEmitter {
      */
     async _handleMessage(event) {
         try {
-            if (!this.isRunning) return;
+            if (!this.isRunning) {
+                this.logger.debug("Message received but monitoring not running");
+                return;
+            }
             const msg = event.message;
-            if (!msg || !msg.message) return;
+            if (!msg || !msg.message) {
+                this.logger.debug("Empty message received, skipping");
+                return;
+            }
 
             const chat = await msg.getChat().catch(() => null);
             const chatUsername = chat?.username;
             const chatTitle = chat?.title || "Unknown";
             const rawChatId = chat?.id?.toString() || "";
+
+            // Log every incoming message for debugging
+            this.logger.info(`📨 Message received from: ${chatTitle} (@${chatUsername || 'N/A'}) [${rawChatId}]`);
+            this.logger.debug(`Message preview: ${msg.message.substring(0, 100)}...`);
 
             // Normalize chatId
             const normalizedChatId = rawChatId.startsWith("-100")
@@ -354,7 +372,12 @@ class MonitorService extends EventEmitter {
                 );
             });
 
-            if (!isMonitored) return;
+            if (!isMonitored) {
+                this.logger.debug(`Message not from monitored source. Sources: ${JSON.stringify(this.sourceChannels)}`);
+                return;
+            }
+
+            this.logger.info(`✅ Message matches monitored source: ${chatTitle}`);
 
             const sourceName = chatUsername || chatTitle || rawChatId || "unknown";
 
@@ -373,6 +396,7 @@ class MonitorService extends EventEmitter {
                 );
 
                 if (!isAllowedUser) {
+                    this.logger.debug(`Message filtered by FROM_USERS. Sender: ${senderUsername || senderId}`);
                     return;
                 }
             }
@@ -387,8 +411,12 @@ class MonitorService extends EventEmitter {
                 const lowerText = msg.message.toLowerCase();
                 const hasKeyword = keywords.some(k => lowerText.includes(k));
                 if (!hasKeyword) {
+                    this.logger.debug(`Message filtered by KEYWORDS. Keywords: ${JSON.stringify(keywords)}`);
                     return;
                 }
+                this.logger.info(`✅ Message matches keyword filter`);
+            } else {
+                this.logger.debug(`Keyword filter skipped (no keywords configured)`);
             }
 
             // Create message object
