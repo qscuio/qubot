@@ -1,6 +1,6 @@
 const { TelegramClient } = require("telegram");
 const { StringSession } = require("telegram/sessions");
-const { NewMessage } = require("telegram/events");
+const { NewMessage, Raw } = require("telegram/events");
 const Logger = require("./Logger");
 const RateLimiter = require("./RateLimiter");
 
@@ -14,6 +14,8 @@ class TelegramService {
         this.config = configService;
         this.client = null;
         this.rateLimiter = new RateLimiter(configService.get("RATE_LIMIT_MS"));
+        this._rawUpdateEvent = null;
+        this._rawUpdateHandler = null;
     }
 
     async connect() {
@@ -40,6 +42,8 @@ class TelegramService {
                 logger.warn("MTProto session is a bot. Bots only receive channel/group updates if added (channels require admin).");
             }
         }
+
+        this._enableRawUpdateLogging();
     }
 
     /**
@@ -56,6 +60,27 @@ class TelegramService {
         } catch (err) {
             logger.warn(`Failed to sync dialogs: ${err.message}`);
         }
+    }
+
+    _enableRawUpdateLogging() {
+        if (!this.client || this._rawUpdateEvent) return;
+        if (logger.level !== "debug") return;
+
+        this._rawUpdateHandler = (update) => {
+            const type = update?.className || update?.constructor?.name || "unknown";
+            const peer = update?.message?.peerId || update?.peer;
+            const peerId = peer?.channelId || peer?.chatId || peer?.userId || null;
+            logger.debugMeta("raw_update", {
+                type,
+                peerId: peerId ? String(peerId) : null,
+                hasMessage: !!update?.message,
+                out: !!update?.message?.out
+            });
+        };
+
+        this._rawUpdateEvent = new Raw({});
+        this.client.addEventHandler(this._rawUpdateHandler, this._rawUpdateEvent);
+        logger.info("Raw update logging enabled (LOG_LEVEL=debug).");
     }
 
     /**
