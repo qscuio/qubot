@@ -62,8 +62,8 @@ class ConfigService {
             // GitHub Export
             NOTES_REPO: process.env.NOTES_REPO || "",
             GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND || "",
-            GITHUB_SSH_KEY_PATH: process.env.GITHUB_SSH_KEY_PATH || "",
-            GITHUB_KNOWN_HOSTS: process.env.GITHUB_KNOWN_HOSTS || "",
+            GIT_SSH_KEY_PATH: process.env.GIT_SSH_KEY_PATH || "",
+            GIT_KNOWN_HOSTS: process.env.GIT_KNOWN_HOSTS || "",
 
             // REST API Configuration
             API_ENABLED: this._getBool("API_ENABLED", true),

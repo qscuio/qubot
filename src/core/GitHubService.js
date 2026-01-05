@@ -24,8 +24,8 @@ class GitHubService {
             await fs.mkdir(this.localPath, { recursive: true });
 
             const gitSshCommand = this.config.get("GIT_SSH_COMMAND");
-            const sshKeyPath = this.config.get("GITHUB_SSH_KEY_PATH");
-            const knownHosts = this.config.get("GITHUB_KNOWN_HOSTS");
+            const sshKeyPath = this.config.get("GIT_SSH_KEY_PATH");
+            const knownHosts = this.config.get("GIT_KNOWN_HOSTS");
 
             if (gitSshCommand) {
                 this.git = simpleGit().env("GIT_SSH_COMMAND", gitSshCommand);

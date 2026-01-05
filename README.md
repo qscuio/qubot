@@ -273,8 +273,8 @@ curl http://localhost:3001/health
 |--------|-------------|
 | `NOTES_REPO` | GitHub repo for exports |
 | `GIT_SSH_COMMAND` | Custom SSH command for GitHub |
-| `GITHUB_SSH_KEY_PATH` | SSH key path for GitHub |
-| `GITHUB_KNOWN_HOSTS` | Known hosts file for GitHub |
+| `GIT_SSH_KEY_PATH` | SSH key path for GitHub |
+| `GIT_KNOWN_HOSTS` | Known hosts file for GitHub |
 
 ### Other
 
