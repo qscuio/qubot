@@ -60,8 +60,12 @@ class TelegramService {
             if (logger.level === "debug") {
                 channels.forEach((dialog) => {
                     const title = dialog.title || dialog.name || dialog.username || "Unknown";
+                    const entity = dialog.entity || {};
+                    const left = typeof entity.left === "boolean" ? entity.left : null;
+                    const broadcast = typeof entity.broadcast === "boolean" ? entity.broadcast : null;
+                    const megagroup = typeof entity.megagroup === "boolean" ? entity.megagroup : null;
                     logger.debug(
-                        `Dialog: ${title} (id=${dialog.id}, channel=${!!dialog.isChannel}, group=${!!dialog.isGroup})`
+                        `Dialog: ${title} (id=${dialog.id}, channel=${!!dialog.isChannel}, group=${!!dialog.isGroup}, left=${left}, broadcast=${broadcast}, megagroup=${megagroup})`
                     );
                 });
             }
