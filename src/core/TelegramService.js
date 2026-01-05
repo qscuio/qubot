@@ -41,7 +41,7 @@ class TelegramService {
     async _syncDialogs() {
         try {
             logger.info("Syncing dialogs to receive channel updates...");
-            const dialogs = await this.client.getDialogs({ limit: 100 });
+            const dialogs = await this.client.getDialogs({});
             const channels = dialogs.filter(d => d.isChannel || d.isGroup);
             logger.info(`✅ Synced ${dialogs.length} dialogs (${channels.length} channels/groups).`);
         } catch (err) {

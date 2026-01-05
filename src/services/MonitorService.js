@@ -63,7 +63,8 @@ class MonitorService extends EventEmitter {
         const allChannels = [...new Set([...configChannels, ...dbChannels])];
         this.sourceChannels = allChannels;
 
-        this.logger.info(`MonitorService initialized with ${this.sourceChannels.length} source channels (${configChannels.length} from config, ${dbChannels.length} from database)`);
+        const modeLabel = this.sourceChannels.length === 0 ? " (monitoring all incoming messages)" : "";
+        this.logger.info(`MonitorService initialized with ${this.sourceChannels.length} source channels (${configChannels.length} from config, ${dbChannels.length} from database)${modeLabel}`);
     }
 
     /**
@@ -78,24 +79,27 @@ class MonitorService extends EventEmitter {
             throw new Error("Telegram userbot not available");
         }
 
-        if (this.sourceChannels.length === 0) {
-            throw new Error("No source channels configured");
-        }
+        const hasSources = this.sourceChannels.length > 0;
 
-        // Pre-resolve channel entities so gramjs can properly filter messages.
-        // This is critical for channels the user hasn't directly interacted with.
-        this.logger.info(`Resolving ${this.sourceChannels.length} source channel entities...`);
-        this.logger.info(`Source channels from config: ${JSON.stringify(this.sourceChannels)}`);
-        const resolvedEntities = await this.telegram.resolveEntities(this.sourceChannels);
-        this.logger.info(`Resolved ${resolvedEntities.length} of ${this.sourceChannels.length} channels`);
+        let resolvedEntities = [];
+        if (hasSources) {
+            // Pre-resolve channel entities so gramjs can properly filter messages.
+            // This is critical for channels the user hasn't directly interacted with.
+            this.logger.info(`Resolving ${this.sourceChannels.length} source channel entities...`);
+            this.logger.info(`Source channels from config: ${JSON.stringify(this.sourceChannels)}`);
+            resolvedEntities = await this.telegram.resolveEntities(this.sourceChannels);
+            this.logger.info(`Resolved ${resolvedEntities.length} of ${this.sourceChannels.length} channels`);
 
-        // Log each resolved entity
-        resolvedEntities.forEach(e => {
-            this.logger.info(`  ✓ Resolved: ${e.title || e.username || e.id} (ID: ${e.id}, Type: ${e.className})`);
-        });
+            // Log each resolved entity
+            resolvedEntities.forEach(e => {
+                this.logger.info(`  ✓ Resolved: ${e.title || e.username || e.id} (ID: ${e.id}, Type: ${e.className})`);
+            });
 
-        if (resolvedEntities.length === 0) {
-            throw new Error("Failed to resolve any source channels. Check channel IDs and ensure the userbot has access.");
+            if (resolvedEntities.length === 0) {
+                throw new Error("Failed to resolve any source channels. Check channel IDs and ensure the userbot has access.");
+            }
+        } else {
+            this.logger.info("MonitorService configured to receive ALL incoming messages (no source filters).");
         }
 
         // Store resolved IDs for reference (not used for filtering anymore)
@@ -148,7 +152,6 @@ class MonitorService extends EventEmitter {
     _getTargetChannel() {
         return this.targetChannelOverride || this.config.get("TARGET_CHANNEL");
     }
-
     /**
      * Set target channel at runtime.
      */
@@ -286,20 +289,18 @@ class MonitorService extends EventEmitter {
             this._messageEvent = null;
         }
 
-        if (this.sourceChannels.length === 0) {
-            this.isRunning = false;
-            this.logger.info("Channel monitoring stopped (no source channels).");
-            return;
-        }
+        if (this.sourceChannels.length > 0) {
+            // Re-resolve entities when refreshing handlers
+            const resolvedEntities = await this.telegram.resolveEntities(this.sourceChannels);
+            if (resolvedEntities.length === 0) {
+                this.logger.warn("Failed to resolve any source channels during refresh.");
+                return;
+            }
 
-        // Re-resolve entities when refreshing handlers
-        const resolvedEntities = await this.telegram.resolveEntities(this.sourceChannels);
-        if (resolvedEntities.length === 0) {
-            this.logger.warn("Failed to resolve any source channels during refresh.");
-            return;
+            this._resolvedChannelIds = resolvedEntities.map(e => e.id.toString());
+        } else {
+            this._resolvedChannelIds = [];
         }
-
-        this._resolvedChannelIds = resolvedEntities.map(e => e.id.toString());
 
         // Use receiveAll mode - handler filters manually
         this._messageEvent = this.telegram.addMessageHandler(
@@ -411,7 +412,8 @@ class MonitorService extends EventEmitter {
                 : rawChatId;
 
             // Check if from monitored source
-            const isMonitored = this.sourceChannels.some(source => {
+            const hasSources = this.sourceChannels.length > 0;
+            const isMonitored = !hasSources || this.sourceChannels.some(source => {
                 const normalizedSource = source.startsWith("-100")
                     ? source.slice(4)
                     : source.replace(/^@/, "");
@@ -481,17 +483,19 @@ class MonitorService extends EventEmitter {
             };
 
             // Check if source is disabled or forwarding is paused
-            const matchingSource = this.sourceChannels.find(source => {
-                const normalizedSource = source.startsWith("-100")
-                    ? source.slice(4)
-                    : source.replace(/^@/, "");
-                return (
-                    source === chatUsername ||
-                    source === "@" + chatUsername ||
-                    normalizedSource === normalizedChatId ||
-                    source === rawChatId
-                );
-            });
+            const matchingSource = hasSources
+                ? this.sourceChannels.find(source => {
+                    const normalizedSource = source.startsWith("-100")
+                        ? source.slice(4)
+                        : source.replace(/^@/, "");
+                    return (
+                        source === chatUsername ||
+                        source === "@" + chatUsername ||
+                        normalizedSource === normalizedChatId ||
+                        source === rawChatId
+                    );
+                })
+                : null;
 
             const shouldForward = this.isForwardingEnabled &&
                 matchingSource &&
