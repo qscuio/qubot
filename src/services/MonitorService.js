@@ -71,24 +71,20 @@ class MonitorService extends EventEmitter {
             throw new Error("Failed to resolve any source channels. Check channel IDs and ensure the userbot has access.");
         }
 
-        // Use resolved entity IDs for the filter
-        const resolvedIds = resolvedEntities.map(e => {
-            // For channels/supergroups, use the full marked ID format
-            if (e.className === "Channel") {
-                return BigInt("-100" + e.id.toString());
-            }
-            return e.id;
-        });
+        // Store resolved IDs for reference (not used for filtering anymore)
+        this._resolvedChannelIds = resolvedEntities.map(e => e.id.toString());
+        this.logger.info(`Will monitor channel IDs: ${this._resolvedChannelIds.join(', ')}`);
 
-        this.logger.info(`Registering message handler for IDs: ${resolvedIds.map(id => id.toString()).join(', ')}`);
-
+        // Use receiveAll=true to bypass gramjs chat filter (which doesn't work reliably for channels)
+        // The handler will filter messages manually based on sourceChannels
         this._messageEvent = this.telegram.addMessageHandler(
             this._messageHandler,
-            resolvedIds
+            null,  // No chat filter
+            true   // receiveAll = true
         );
 
         this.isRunning = true;
-        this.logger.info("✅ Channel monitoring started successfully");
+        this.logger.info("✅ Channel monitoring started successfully (receiving all incoming messages)");
         return { status: "started", channels: resolvedEntities.length };
     }
 
@@ -244,16 +240,13 @@ class MonitorService extends EventEmitter {
             return;
         }
 
-        const resolvedIds = resolvedEntities.map(e => {
-            if (e.className === "Channel") {
-                return BigInt("-100" + e.id.toString());
-            }
-            return e.id;
-        });
+        this._resolvedChannelIds = resolvedEntities.map(e => e.id.toString());
 
+        // Use receiveAll mode - handler filters manually
         this._messageEvent = this.telegram.addMessageHandler(
             this._messageHandler,
-            resolvedIds
+            null,
+            true
         );
     }
 

@@ -44,15 +44,22 @@ class TelegramService {
     /**
      * Add an event handler for new messages.
      * @param {Function} handler - Async handler function.
-     * @param {Array} chats - Optional list of chats to filter.
+     * @param {Array} chats - Optional list of chats to filter (may not work reliably for channels).
+     * @param {boolean} receiveAll - If true, receive ALL messages and filter in handler.
      */
-    addMessageHandler(handler, chats = null) {
-        const eventFilter = chats && chats.length > 0
+    addMessageHandler(handler, chats = null, receiveAll = false) {
+        // For monitoring, receiveAll=true is more reliable as gramjs chat filter
+        // may not work correctly for channels the user hasn't directly messaged
+        const eventFilter = (chats && chats.length > 0 && !receiveAll)
             ? new NewMessage({ chats })
-            : new NewMessage({});
+            : new NewMessage({ incoming: true });
 
         this.client.addEventHandler(handler, eventFilter);
-        logger.info(`Message handler registered${chats ? ` for ${chats.length} chats` : ""}.`);
+        if (receiveAll || !chats) {
+            logger.info(`Message handler registered (receiving ALL incoming messages).`);
+        } else {
+            logger.info(`Message handler registered for ${chats.length} chats.`);
+        }
         return eventFilter;
     }
 
