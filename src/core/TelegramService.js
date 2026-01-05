@@ -179,6 +179,21 @@ class TelegramService {
         return results.filter(Boolean);
     }
 
+    async primeChannels(peers) {
+        if (!this.client || !Array.isArray(peers) || peers.length === 0) return;
+        logger.info(`Priming ${peers.length} channel(s) to warm update state...`);
+        for (const peer of peers) {
+            try {
+                const messages = await this.client.getMessages(peer, { limit: 1 });
+                const latest = messages?.[0];
+                const latestId = latest?.id ? String(latest.id) : "none";
+                logger.debug(`Primed ${peer}: latestId=${latestId}`);
+            } catch (err) {
+                logger.warn(`Prime failed for ${peer}: ${err.message}`);
+            }
+        }
+    }
+
     /**
      * Get the underlying TelegramClient (for advanced use).
      */
