@@ -1,4 +1,4 @@
-const { TelegramClient } = require("telegram");
+const { TelegramClient, Api, utils } = require("telegram");
 const { StringSession } = require("telegram/sessions");
 const { NewMessage, Raw } = require("telegram/events");
 const Logger = require("./Logger");
@@ -184,10 +184,38 @@ class TelegramService {
         logger.info(`Priming ${peers.length} channel(s) to warm update state...`);
         for (const peer of peers) {
             try {
+                const entity = await this.client.getEntity(peer);
                 const messages = await this.client.getMessages(peer, { limit: 1 });
                 const latest = messages?.[0];
                 const latestId = latest?.id ? String(latest.id) : "none";
-                logger.debug(`Primed ${peer}: latestId=${latestId}`);
+
+                if (entity instanceof Api.Channel || entity instanceof Api.ChannelForbidden) {
+                    const inputChannel = utils.getInputChannel(entity);
+                    let pts = 1;
+                    try {
+                        const full = await this.client.invoke(
+                            new Api.channels.GetFullChannel({ channel: inputChannel })
+                        );
+                        const fullPts = full?.fullChat?.pts;
+                        if (typeof fullPts === "number" && Number.isFinite(fullPts)) {
+                            pts = fullPts;
+                        }
+                    } catch (err) {
+                        logger.warn(`Failed to fetch channel pts for ${peer}: ${err.message}`);
+                    }
+
+                    const diff = await this.client.invoke(
+                        new Api.updates.GetChannelDifference({
+                            channel: inputChannel,
+                            filter: new Api.ChannelMessagesFilterEmpty(),
+                            pts,
+                            limit: 1
+                        })
+                    );
+                    logger.debug(`Primed ${peer}: latestId=${latestId}, diff=${diff?.className || "unknown"}, pts=${pts}`);
+                } else {
+                    logger.debug(`Primed ${peer}: latestId=${latestId}, diff=skipped (not a channel)`);
+                }
             } catch (err) {
                 logger.warn(`Prime failed for ${peer}: ${err.message}`);
             }

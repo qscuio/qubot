@@ -43,7 +43,7 @@ class ConfigService {
             REDIS_URL: process.env.REDIS_URL || "",
 
             // Rate Limiting
-            RATE_LIMIT_MS: this._getInt("RATE_LIMIT_MS", 30000),
+            RATE_LIMIT_MS: this._getInt("RATE_LIMIT_MS", 5000),
 
             // RSS Feature
             RSS_SOURCES: process.env.RSS_SOURCES || "", // JSON string or empty for defaults
