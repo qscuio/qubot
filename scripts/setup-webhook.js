@@ -14,6 +14,7 @@ const BOT_SECRET = process.env.BOT_SECRET;
 const bots = [
     { name: "rss-bot", token: process.env.RSS_BOT_TOKEN },
     { name: "ai-bot", token: process.env.AI_BOT_TOKEN },
+    { name: "monitor-bot", token: process.env.MONITOR_BOT_TOKEN },
 ].filter((b) => b.token);
 
 if (!WEBHOOK_URL) {
