@@ -68,6 +68,37 @@ class TelegramService {
     }
 
     /**
+     * Resolve an entity (channel, user, chat) by ID or username.
+     * This pre-loads the entity into gramjs cache so NewMessage filters work properly.
+     * @param {string|number} peer - Channel ID, username, or link.
+     * @returns {Promise<object|null>} - The resolved entity or null.
+     */
+    async resolveEntity(peer) {
+        if (!this.client) return null;
+        try {
+            const entity = await this.client.getEntity(peer);
+            logger.debug(`Resolved entity: ${peer} -> ${entity?.id}`);
+            return entity;
+        } catch (err) {
+            logger.warn(`Failed to resolve entity ${peer}: ${err.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * Resolve multiple entities (pre-load into cache).
+     * @param {Array<string|number>} peers - List of channel IDs or usernames.
+     * @returns {Promise<object[]>} - Array of resolved entities (nulls filtered out).
+     */
+    async resolveEntities(peers) {
+        if (!this.client || !peers || peers.length === 0) return [];
+        const results = await Promise.all(
+            peers.map(peer => this.resolveEntity(peer))
+        );
+        return results.filter(Boolean);
+    }
+
+    /**
      * Get the underlying TelegramClient (for advanced use).
      */
     getClient() {

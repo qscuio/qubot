@@ -32,6 +32,10 @@ class MonitorBot extends BotInstance {
         this.command("sources", "List source channels", (ctx) => this._handleSources(ctx));
         this.command("add", "Add source channel", (ctx) => this._handleAdd(ctx));
         this.command("remove", "Remove source channel", (ctx) => this._handleRemove(ctx));
+        this.command("enable", "Enable source channel", (ctx) => this._handleEnable(ctx));
+        this.command("disable", "Disable source channel", (ctx) => this._handleDisable(ctx));
+        this.command("target", "Set target channel", (ctx) => this._handleTarget(ctx));
+        this.command("forward", "Toggle forwarding", (ctx) => this._handleForward(ctx));
         this.command("history", "Recent messages", (ctx) => this._handleHistory(ctx));
         this.command("filters", "Show user filters", (ctx) => this._handleFilters(ctx));
         this.command("monitor", "Start/stop monitoring", (ctx) => this._handleMonitor(ctx));
@@ -44,15 +48,24 @@ class MonitorBot extends BotInstance {
         this.action("cmd_sources", (ctx) => this._handleSources(ctx));
         this.action("cmd_history", (ctx) => this._handleHistory(ctx));
         this.action(/^remove:(.+)$/, (ctx) => this._handleRemoveSource(ctx));
+        this.action(/^enable:(.+)$/, (ctx) => this._handleEnableSource(ctx));
+        this.action(/^disable:(.+)$/, (ctx) => this._handleDisableSource(ctx));
+        this.action("cmd_forward_on", (ctx) => this._handleForwardOn(ctx));
+        this.action("cmd_forward_off", (ctx) => this._handleForwardOff(ctx));
 
         this.logger.info("MonitorBot commands registered.");
     }
 
     _quickActionsKeyboard() {
+        const status = this.monitorService?.getStatus() || {};
+        const forwardBtn = status.forwarding
+            ? { text: "⏸️ Pause", callback_data: "cmd_forward_off" }
+            : { text: "▶️ Resume", callback_data: "cmd_forward_on" };
         return {
             inline_keyboard: [
                 [{ text: "▶️ Start", callback_data: "cmd_start" }, { text: "⏹️ Stop", callback_data: "cmd_stop" }],
-                [{ text: "📋 Sources", callback_data: "cmd_sources" }, { text: "📜 History", callback_data: "cmd_history" }],
+                [forwardBtn, { text: "📋 Sources", callback_data: "cmd_sources" }],
+                [{ text: "📜 History", callback_data: "cmd_history" }],
             ]
         };
     }
@@ -81,12 +94,14 @@ class MonitorBot extends BotInstance {
         }
 
         const status = this.monitorService.getStatus();
-        const statusIcon = status.running ? "🟢" : "🔴";
+        const runningIcon = status.running ? "🟢" : "🔴";
+        const forwardIcon = status.forwarding ? "✅" : "⏸️";
 
         await ctx.reply(
             `📊 <b>Monitor Status</b>\n\n` +
-            `<b>Running:</b> ${statusIcon} ${status.running ? "Yes" : "No"}\n` +
-            `<b>Source channels:</b> ${status.sourceChannels}\n` +
+            `<b>Monitoring:</b> ${runningIcon} ${status.running ? "Running" : "Stopped"}\n` +
+            `<b>Forwarding:</b> ${forwardIcon} ${status.forwarding ? "Active" : "Paused"}\n` +
+            `<b>Source channels:</b> ${status.enabledSources}/${status.sourceChannels} enabled\n` +
             `<b>Target channel:</b> <code>${status.targetChannel || "Not set"}</code>`,
             { parse_mode: "HTML", reply_markup: this._quickActionsKeyboard() }
         );
@@ -112,7 +127,10 @@ class MonitorBot extends BotInstance {
             );
         }
 
-        const channelList = sources.channels.map((c, i) => `${i + 1}. <code>${escapeHtml(String(c))}</code>`).join("\n");
+        const channelList = sources.channels.map((c, i) => {
+            const icon = c.enabled ? "✅" : "⏸️";
+            return `${i + 1}. ${icon} <code>${escapeHtml(String(c.id))}</code>`;
+        }).join("\n");
         const keywordList = sources.keywords.length > 0
             ? sources.keywords.join(", ")
             : "(none - forward all)";
@@ -120,11 +138,16 @@ class MonitorBot extends BotInstance {
             ? sources.users.join(", ")
             : "(none - allow all)";
 
-        // Build buttons to remove sources
-        const buttons = sources.channels.map((c) => [{
-            text: `🗑️ ${String(c).substring(0, 20)}`,
-            callback_data: `remove:${c}`
-        }]);
+        // Build buttons for toggle/remove
+        const buttons = sources.channels.map((c) => {
+            const toggleBtn = c.enabled
+                ? { text: `⏸️ Disable`, callback_data: `disable:${c.id}` }
+                : { text: `✅ Enable`, callback_data: `enable:${c.id}` };
+            return [
+                toggleBtn,
+                { text: `🗑️ Remove`, callback_data: `remove:${c.id}` }
+            ];
+        });
         buttons.push([{ text: "🏠 Home", callback_data: "cmd_status" }]);
 
         await ctx.reply(
@@ -334,17 +357,218 @@ class MonitorBot extends BotInstance {
             `<b>Status & Control:</b>\n` +
             `/start - Welcome and status\n` +
             `/status - Current monitor status\n` +
-            `/monitor - Start/stop monitoring\n\n` +
+            `/monitor - Start/stop monitoring\n` +
+            `/forward - Pause/resume forwarding\n\n` +
             `<b>Source Management:</b>\n` +
             `/sources - List source channels\n` +
             `/add <channel> - Add source\n` +
-            `/remove <channel> - Remove source\n\n` +
+            `/remove <channel> - Remove source\n` +
+            `/enable <channel> - Enable source\n` +
+            `/disable <channel> - Disable source\n\n` +
+            `<b>Target Channel:</b>\n` +
+            `/target - Show current target\n` +
+            `/target <channel> - Set target\n` +
+            `/target reset - Reset to default\n\n` +
             `<b>History & Filters:</b>\n` +
             `/history - Recent forwarded messages\n` +
             `/filters - Your filter policies\n\n` +
-            `<i>Messages matching keywords from source channels are forwarded to TARGET_CHANNEL.</i>`,
+            `<i>Messages from enabled sources are forwarded to target channel.</i>`,
             { parse_mode: "HTML" }
         );
+    }
+
+    // ============================================================
+    // NEW RUNTIME MANAGEMENT COMMANDS
+    // ============================================================
+
+    async _handleTarget(ctx) {
+        const channelId = (ctx.message.text || "").replace(/^\/target\s*/i, "").trim();
+
+        if (!this.monitorService) {
+            return ctx.reply("❌ Monitor service not available.");
+        }
+
+        if (!channelId) {
+            const status = this.monitorService.getStatus();
+            return ctx.reply(
+                `🎯 <b>Target Channel</b>\n\n` +
+                `<b>Current:</b> <code>${escapeHtml(status.targetChannel || "Not set")}</code>\n\n` +
+                `<b>Usage:</b>\n` +
+                `/target @channel_name - Set target\n` +
+                `/target -1001234567890 - Set by ID\n` +
+                `/target reset - Reset to config default`,
+                { parse_mode: "HTML" }
+            );
+        }
+
+        try {
+            if (channelId.toLowerCase() === "reset") {
+                const result = await this.monitorService.resetTargetChannel();
+                return ctx.reply(
+                    `✅ Target channel reset to config default:\n<code>${escapeHtml(result.targetChannel)}</code>`,
+                    { parse_mode: "HTML" }
+                );
+            }
+
+            const result = await this.monitorService.setTargetChannel(channelId);
+            await ctx.reply(
+                `✅ <b>Target channel set!</b>\n\n` +
+                `New target: <code>${escapeHtml(result.targetChannel)}</code>`,
+                { parse_mode: "HTML", reply_markup: this._quickActionsKeyboard() }
+            );
+        } catch (err) {
+            await ctx.reply(`❌ Failed to set target: ${err.message}`);
+        }
+    }
+
+    async _handleForward(ctx) {
+        if (!this.monitorService) {
+            return ctx.reply("❌ Monitor service not available.");
+        }
+
+        const status = this.monitorService.getStatus();
+        const forwardIcon = status.forwarding ? "✅" : "⏸️";
+
+        await ctx.reply(
+            `📤 <b>Forwarding Control</b>\n\n` +
+            `<b>Status:</b> ${forwardIcon} ${status.forwarding ? "Active" : "Paused"}\n\n` +
+            `<i>Toggle forwarding without stopping monitoring.</i>`,
+            {
+                parse_mode: "HTML",
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: "✅ Enable", callback_data: "cmd_forward_on" },
+                            { text: "⏸️ Pause", callback_data: "cmd_forward_off" }
+                        ],
+                        [{ text: "🏠 Home", callback_data: "cmd_status" }]
+                    ]
+                }
+            }
+        );
+    }
+
+    async _handleForwardOn(ctx) {
+        if (!this.monitorService) {
+            return ctx.answerCbQuery("Service not available");
+        }
+
+        try {
+            await this.monitorService.setForwarding(true);
+            await ctx.answerCbQuery("Forwarding enabled!");
+            await ctx.editMessageText(
+                `✅ <b>Forwarding Enabled</b>\n\nMessages will now be forwarded to target channel.`,
+                { parse_mode: "HTML" }
+            );
+        } catch (err) {
+            await ctx.answerCbQuery(`Error: ${err.message}`);
+        }
+    }
+
+    async _handleForwardOff(ctx) {
+        if (!this.monitorService) {
+            return ctx.answerCbQuery("Service not available");
+        }
+
+        try {
+            await this.monitorService.setForwarding(false);
+            await ctx.answerCbQuery("Forwarding paused!");
+            await ctx.editMessageText(
+                `⏸️ <b>Forwarding Paused</b>\n\nMonitoring continues, but messages won't be forwarded.`,
+                { parse_mode: "HTML" }
+            );
+        } catch (err) {
+            await ctx.answerCbQuery(`Error: ${err.message}`);
+        }
+    }
+
+    async _handleEnable(ctx) {
+        const channelId = (ctx.message.text || "").replace(/^\/enable\s*/i, "").trim();
+
+        if (!channelId) {
+            return ctx.reply(
+                "📌 Usage: /enable <channel>\n\n" +
+                "Example: /enable -1001234567890\n\n" +
+                "Use /sources to see the list of channels."
+            );
+        }
+
+        if (!this.monitorService) {
+            return ctx.reply("❌ Monitor service not available.");
+        }
+
+        try {
+            const result = await this.monitorService.enableSource(channelId);
+            await ctx.reply(
+                `✅ <b>Source enabled!</b>\n\n` +
+                `Channel: <code>${escapeHtml(result.channel)}</code>`,
+                { parse_mode: "HTML", reply_markup: this._quickActionsKeyboard() }
+            );
+        } catch (err) {
+            await ctx.reply(`❌ Failed to enable source: ${err.message}`);
+        }
+    }
+
+    async _handleDisable(ctx) {
+        const channelId = (ctx.message.text || "").replace(/^\/disable\s*/i, "").trim();
+
+        if (!channelId) {
+            return ctx.reply(
+                "📌 Usage: /disable <channel>\n\n" +
+                "Example: /disable -1001234567890\n\n" +
+                "Use /sources to see the list of channels."
+            );
+        }
+
+        if (!this.monitorService) {
+            return ctx.reply("❌ Monitor service not available.");
+        }
+
+        try {
+            const result = await this.monitorService.disableSource(channelId);
+            await ctx.reply(
+                `⏸️ <b>Source disabled!</b>\n\n` +
+                `Channel: <code>${escapeHtml(result.channel)}</code>\n` +
+                `<i>Still monitored but not forwarded.</i>`,
+                { parse_mode: "HTML", reply_markup: this._quickActionsKeyboard() }
+            );
+        } catch (err) {
+            await ctx.reply(`❌ Failed to disable source: ${err.message}`);
+        }
+    }
+
+    async _handleEnableSource(ctx) {
+        const channelId = ctx.match[1];
+
+        if (!this.monitorService) {
+            return ctx.answerCbQuery("Service not available");
+        }
+
+        try {
+            await this.monitorService.enableSource(channelId);
+            await ctx.answerCbQuery(`Enabled: ${channelId.substring(0, 15)}`);
+            // Refresh the sources view
+            await this._handleSources(ctx);
+        } catch (err) {
+            await ctx.answerCbQuery(`Error: ${err.message}`);
+        }
+    }
+
+    async _handleDisableSource(ctx) {
+        const channelId = ctx.match[1];
+
+        if (!this.monitorService) {
+            return ctx.answerCbQuery("Service not available");
+        }
+
+        try {
+            await this.monitorService.disableSource(channelId);
+            await ctx.answerCbQuery(`Disabled: ${channelId.substring(0, 15)}`);
+            // Refresh the sources view
+            await this._handleSources(ctx);
+        } catch (err) {
+            await ctx.answerCbQuery(`Error: ${err.message}`);
+        }
     }
 }
 

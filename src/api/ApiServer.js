@@ -671,6 +671,74 @@ class ApiServer {
             }
         });
 
+        // Get monitor status
+        this.app.get("/api/monitor/status", (req, res) => {
+            try {
+                const status = monitor.getStatus();
+                res.json(status);
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Set target channel
+        this.app.put("/api/monitor/target", async (req, res) => {
+            try {
+                const { channelId } = req.body;
+                if (!channelId) {
+                    return res.status(400).json({ error: "channelId is required" });
+                }
+                const result = await monitor.setTargetChannel(channelId);
+                res.json(result);
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Reset target channel to config default
+        this.app.delete("/api/monitor/target", async (req, res) => {
+            try {
+                const result = await monitor.resetTargetChannel();
+                res.json(result);
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Set forwarding enabled/disabled
+        this.app.put("/api/monitor/forwarding", async (req, res) => {
+            try {
+                const { enabled } = req.body;
+                if (typeof enabled !== "boolean") {
+                    return res.status(400).json({ error: "enabled (boolean) is required" });
+                }
+                const result = await monitor.setForwarding(enabled);
+                res.json(result);
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Enable source channel
+        this.app.post("/api/monitor/sources/:id/enable", async (req, res) => {
+            try {
+                const result = await monitor.enableSource(req.params.id);
+                res.json(result);
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
+        // Disable source channel
+        this.app.post("/api/monitor/sources/:id/disable", async (req, res) => {
+            try {
+                const result = await monitor.disableSource(req.params.id);
+                res.json(result);
+            } catch (err) {
+                res.status(500).json({ error: err.message });
+            }
+        });
+
         logger.info("Monitor routes registered");
     }
 

@@ -16,7 +16,10 @@ class MonitorService extends EventEmitter {
         this.aiService = aiService;
         this.logger = new Logger("MonitorService");
         this.isRunning = false;
+        this.isForwardingEnabled = true; // Can pause forwarding without stopping monitoring
         this.sourceChannels = [];
+        this.disabledSources = new Set(); // Track disabled source channels
+        this.targetChannelOverride = null; // Runtime override for target channel
         this._messageHandler = this._handleMessage.bind(this);
         this._messageEvent = null;
     }
@@ -52,14 +55,33 @@ class MonitorService extends EventEmitter {
             throw new Error("No source channels configured");
         }
 
+        // Pre-resolve channel entities so gramjs can properly filter messages.
+        // This is critical for channels the user hasn't directly interacted with.
+        this.logger.info(`Resolving ${this.sourceChannels.length} source channel entities...`);
+        const resolvedEntities = await this.telegram.resolveEntities(this.sourceChannels);
+        this.logger.info(`Resolved ${resolvedEntities.length} of ${this.sourceChannels.length} channels`);
+
+        if (resolvedEntities.length === 0) {
+            throw new Error("Failed to resolve any source channels. Check channel IDs and ensure the userbot has access.");
+        }
+
+        // Use resolved entity IDs for the filter
+        const resolvedIds = resolvedEntities.map(e => {
+            // For channels/supergroups, use the full marked ID format
+            if (e.className === "Channel") {
+                return BigInt("-100" + e.id.toString());
+            }
+            return e.id;
+        });
+
         this._messageEvent = this.telegram.addMessageHandler(
             this._messageHandler,
-            this.sourceChannels
+            resolvedIds
         );
 
         this.isRunning = true;
         this.logger.info("Channel monitoring started");
-        return { status: "started", channels: this.sourceChannels.length };
+        return { status: "started", channels: resolvedEntities.length };
     }
 
     /**
@@ -81,9 +103,76 @@ class MonitorService extends EventEmitter {
     getStatus() {
         return {
             running: this.isRunning,
+            forwarding: this.isForwardingEnabled,
             sourceChannels: this.sourceChannels.length,
-            targetChannel: this.config.get("TARGET_CHANNEL")
+            enabledSources: this.sourceChannels.filter(c => !this.disabledSources.has(c)).length,
+            disabledSources: Array.from(this.disabledSources),
+            targetChannel: this._getTargetChannel()
         };
+    }
+
+    /**
+     * Get the effective target channel (override or config).
+     */
+    _getTargetChannel() {
+        return this.targetChannelOverride || this.config.get("TARGET_CHANNEL");
+    }
+
+    /**
+     * Set target channel at runtime.
+     */
+    async setTargetChannel(channelId) {
+        this.targetChannelOverride = channelId;
+        this.logger.info(`Target channel set to: ${channelId}`);
+        return { targetChannel: channelId };
+    }
+
+    /**
+     * Reset target channel to config default.
+     */
+    async resetTargetChannel() {
+        this.targetChannelOverride = null;
+        const target = this.config.get("TARGET_CHANNEL");
+        this.logger.info(`Target channel reset to config: ${target}`);
+        return { targetChannel: target };
+    }
+
+    /**
+     * Enable/disable forwarding without stopping monitoring.
+     */
+    async setForwarding(enabled) {
+        this.isForwardingEnabled = enabled;
+        this.logger.info(`Forwarding ${enabled ? "enabled" : "disabled"}`);
+        return { forwarding: enabled };
+    }
+
+    /**
+     * Enable a source channel.
+     */
+    async enableSource(channelId) {
+        if (this.disabledSources.has(channelId)) {
+            this.disabledSources.delete(channelId);
+            this.logger.info(`Enabled source channel: ${channelId}`);
+        }
+        return { enabled: true, channel: channelId };
+    }
+
+    /**
+     * Disable a source channel (still monitored but not forwarded).
+     */
+    async disableSource(channelId) {
+        if (this.sourceChannels.includes(channelId)) {
+            this.disabledSources.add(channelId);
+            this.logger.info(`Disabled source channel: ${channelId}`);
+        }
+        return { enabled: false, channel: channelId };
+    }
+
+    /**
+     * Check if a source channel is enabled.
+     */
+    isSourceEnabled(channelId) {
+        return !this.disabledSources.has(channelId);
     }
 
     /**
@@ -91,10 +180,13 @@ class MonitorService extends EventEmitter {
      */
     async getSources() {
         return {
-            channels: this.sourceChannels,
+            channels: this.sourceChannels.map(c => ({
+                id: c,
+                enabled: !this.disabledSources.has(c)
+            })),
             keywords: this.config.get("KEYWORDS") || [],
             users: this.config.get("FROM_USERS") || [],
-            targetChannel: this.config.get("TARGET_CHANNEL")
+            targetChannel: this._getTargetChannel()
         };
     }
 
@@ -137,9 +229,23 @@ class MonitorService extends EventEmitter {
             return;
         }
 
+        // Re-resolve entities when refreshing handlers
+        const resolvedEntities = await this.telegram.resolveEntities(this.sourceChannels);
+        if (resolvedEntities.length === 0) {
+            this.logger.warn("Failed to resolve any source channels during refresh.");
+            return;
+        }
+
+        const resolvedIds = resolvedEntities.map(e => {
+            if (e.className === "Channel") {
+                return BigInt("-100" + e.id.toString());
+            }
+            return e.id;
+        });
+
         this._messageEvent = this.telegram.addMessageHandler(
             this._messageHandler,
-            this.sourceChannels
+            resolvedIds
         );
     }
 
@@ -294,14 +400,35 @@ class MonitorService extends EventEmitter {
                 timestamp: new Date().toISOString()
             };
 
+            // Check if source is disabled or forwarding is paused
+            const matchingSource = this.sourceChannels.find(source => {
+                const normalizedSource = source.startsWith("-100")
+                    ? source.slice(4)
+                    : source.replace(/^@/, "");
+                return (
+                    source === chatUsername ||
+                    source === "@" + chatUsername ||
+                    normalizedSource === normalizedChatId ||
+                    source === rawChatId
+                );
+            });
+
+            const shouldForward = this.isForwardingEnabled &&
+                matchingSource &&
+                !this.disabledSources.has(matchingSource);
+
             // Forward to Telegram TARGET_CHANNEL
-            const targetChannel = this.config.get("TARGET_CHANNEL");
-            if (targetChannel && this.telegram) {
-                const formattedMessage = this._formatMessage(msg.message, sourceName);
-                await this.telegram.sendMessage(targetChannel, {
-                    message: formattedMessage
-                });
-                this.logger.info(`Forwarded message from ${sourceName} to ${targetChannel}`);
+            if (shouldForward) {
+                const targetChannel = this._getTargetChannel();
+                if (targetChannel && this.telegram) {
+                    const formattedMessage = this._formatMessage(msg.message, sourceName);
+                    await this.telegram.sendMessage(targetChannel, {
+                        message: formattedMessage
+                    });
+                    this.logger.info(`Forwarded message from ${sourceName} to ${targetChannel}`);
+                }
+            } else {
+                this.logger.debug(`Skipped forwarding from ${sourceName} (forwarding=${this.isForwardingEnabled}, source enabled=${!this.disabledSources.has(matchingSource)})`);
             }
 
             // Save to history
