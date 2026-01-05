@@ -27,6 +27,26 @@ class TelegramService {
 
         await this.client.connect();
         logger.info("✅ Connected to Telegram.");
+
+        // Sync dialogs to ensure gramjs knows about all channels
+        // This is required for receiving updates from channels
+        await this._syncDialogs();
+    }
+
+    /**
+     * Sync dialogs to ensure gramjs receives updates from all subscribed channels.
+     * Without this, gramjs may not receive updates for channels the user hasn't
+     * recently interacted with.
+     */
+    async _syncDialogs() {
+        try {
+            logger.info("Syncing dialogs to receive channel updates...");
+            const dialogs = await this.client.getDialogs({ limit: 100 });
+            const channels = dialogs.filter(d => d.isChannel || d.isGroup);
+            logger.info(`✅ Synced ${dialogs.length} dialogs (${channels.length} channels/groups).`);
+        } catch (err) {
+            logger.warn(`Failed to sync dialogs: ${err.message}`);
+        }
     }
 
     /**

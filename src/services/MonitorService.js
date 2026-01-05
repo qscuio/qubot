@@ -199,6 +199,15 @@ class MonitorService extends EventEmitter {
      */
     async addSource(channelId) {
         if (!this.sourceChannels.includes(channelId)) {
+            // Resolve the entity first to ensure gramjs can receive updates from it
+            if (this.telegram) {
+                const entity = await this.telegram.resolveEntity(channelId);
+                if (entity) {
+                    this.logger.info(`Resolved new source: ${entity.title || entity.username || channelId}`);
+                } else {
+                    this.logger.warn(`Could not resolve channel: ${channelId}`);
+                }
+            }
             this.sourceChannels.push(channelId);
             this.logger.info(`Added source channel: ${channelId}`);
             await this._refreshHandlers();
