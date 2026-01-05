@@ -152,6 +152,33 @@ class MonitorService extends EventEmitter {
     _getTargetChannel() {
         return this.targetChannelOverride || this.config.get("TARGET_CHANNEL");
     }
+
+    _normalizePeerId(value) {
+        if (value === null || value === undefined) return "";
+        const text = String(value).trim();
+        if (!text) return "";
+        if (!/^-?\d+$/.test(text)) return "";
+        if (text.startsWith("-100")) return text.slice(4);
+        if (text.startsWith("-")) return text.slice(1);
+        return text;
+    }
+
+    _matchesSource(source, chatUsername, rawChatId) {
+        if (!source) return false;
+        if (chatUsername) {
+            if (source === chatUsername || source === `@${chatUsername}`) {
+                return true;
+            }
+        }
+
+        const normalizedSource = this._normalizePeerId(source);
+        const normalizedChatId = this._normalizePeerId(rawChatId);
+        if (normalizedSource && normalizedChatId && normalizedSource === normalizedChatId) {
+            return true;
+        }
+
+        return source === rawChatId;
+    }
     /**
      * Set target channel at runtime.
      */
@@ -406,25 +433,11 @@ class MonitorService extends EventEmitter {
             this.logger.info(`📨 Message received from: ${chatTitle} (@${chatUsername || 'N/A'}) [${rawChatId}]`);
             this.logger.debug(`Message preview: ${msg.message.substring(0, 100)}...`);
 
-            // Normalize chatId
-            const normalizedChatId = rawChatId.startsWith("-100")
-                ? rawChatId.slice(4)
-                : rawChatId;
-
             // Check if from monitored source
             const hasSources = this.sourceChannels.length > 0;
-            const isMonitored = !hasSources || this.sourceChannels.some(source => {
-                const normalizedSource = source.startsWith("-100")
-                    ? source.slice(4)
-                    : source.replace(/^@/, "");
-
-                return (
-                    source === chatUsername ||
-                    source === "@" + chatUsername ||
-                    normalizedSource === normalizedChatId ||
-                    source === rawChatId
-                );
-            });
+            const isMonitored = !hasSources || this.sourceChannels.some(source =>
+                this._matchesSource(source, chatUsername, rawChatId)
+            );
 
             if (!isMonitored) {
                 this.logger.debug(`Message not from monitored source. Sources: ${JSON.stringify(this.sourceChannels)}`);
@@ -484,17 +497,9 @@ class MonitorService extends EventEmitter {
 
             // Check if source is disabled or forwarding is paused
             const matchingSource = hasSources
-                ? this.sourceChannels.find(source => {
-                    const normalizedSource = source.startsWith("-100")
-                        ? source.slice(4)
-                        : source.replace(/^@/, "");
-                    return (
-                        source === chatUsername ||
-                        source === "@" + chatUsername ||
-                        normalizedSource === normalizedChatId ||
-                        source === rawChatId
-                    );
-                })
+                ? this.sourceChannels.find(source =>
+                    this._matchesSource(source, chatUsername, rawChatId)
+                )
                 : null;
 
             const shouldForward = this.isForwardingEnabled &&

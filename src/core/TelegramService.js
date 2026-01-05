@@ -72,7 +72,7 @@ class TelegramService {
         // may not work correctly for channels the user hasn't directly messaged
         const eventFilter = (chats && chats.length > 0 && !receiveAll)
             ? new NewMessage({ chats })
-            : new NewMessage({ incoming: true });
+            : new NewMessage({});
 
         this.client.addEventHandler(handler, eventFilter);
         if (receiveAll || !chats) {
