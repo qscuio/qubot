@@ -57,6 +57,14 @@ class TelegramService {
             const dialogs = await this.client.getDialogs({});
             const channels = dialogs.filter(d => d.isChannel || d.isGroup);
             logger.info(`✅ Synced ${dialogs.length} dialogs (${channels.length} channels/groups).`);
+            if (logger.level === "debug") {
+                channels.forEach((dialog) => {
+                    const title = dialog.title || dialog.name || dialog.username || "Unknown";
+                    logger.debug(
+                        `Dialog: ${title} (id=${dialog.id}, channel=${!!dialog.isChannel}, group=${!!dialog.isGroup})`
+                    );
+                });
+            }
         } catch (err) {
             logger.warn(`Failed to sync dialogs: ${err.message}`);
         }
