@@ -7,7 +7,8 @@
     "start": "node src/index.js",
     "dev": "node src/index.js",
     "generate-session": "node scripts/generate-session.js",
-    "setup-webhook": "node scripts/setup-webhook.js"
+    "setup-webhook": "node scripts/setup-webhook.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
@@ -19,7 +20,8 @@
     "rss-parser": "^3.13.0",
     "simple-git": "^3.30.0",
     "telegraf": "^4.16.3",
-    "telegram": "^2.19.10"
+    "telegram": "^2.19.10",
+    "ws": "^8.18.3"
   },
   "engines": {
     "node": ">=20.0.0"

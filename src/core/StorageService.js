@@ -111,11 +111,48 @@ class StorageService {
             await this.pool.query(createAiChatsTable);
             await this.pool.query(createAiMessagesTable);
             await this.pool.query(createAiSettingsTable);
+            await this.ensureMonitorTables();
             logger.info("Database tables initialized.");
         } catch (err) {
             logger.error("Failed to create tables", err);
             throw err;
         }
+    }
+
+    async ensureMonitorTables() {
+        const createMonitorFiltersTable = `
+            CREATE TABLE IF NOT EXISTS monitor_filters (
+                user_id BIGINT PRIMARY KEY,
+                filters JSONB NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        `;
+
+        const createMonitorHistoryTable = `
+            CREATE TABLE IF NOT EXISTS monitor_history (
+                id SERIAL PRIMARY KEY,
+                user_id BIGINT,
+                source VARCHAR(255) NOT NULL,
+                source_id VARCHAR(255),
+                message TEXT,
+                ai_summary TEXT,
+                ai_sentiment VARCHAR(50),
+                ai_topics JSONB,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        `;
+
+        await this.pool.query(createMonitorFiltersTable);
+        await this.pool.query(createMonitorHistoryTable);
+        await this.pool.query(`
+            ALTER TABLE monitor_history
+            ADD COLUMN IF NOT EXISTS user_id BIGINT
+        `);
+        await this.pool.query(`
+            CREATE INDEX IF NOT EXISTS monitor_history_user_id_idx
+            ON monitor_history (user_id)
+        `);
     }
 
     // ============= Source Methods =============

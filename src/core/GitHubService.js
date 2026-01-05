@@ -23,9 +23,23 @@ class GitHubService {
         try {
             await fs.mkdir(this.localPath, { recursive: true });
 
-            // Configure SSH with specific key and skip host verification
-            const sshCommand = "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i /root/.ssh/github_actions";
-            this.git = simpleGit().env("GIT_SSH_COMMAND", sshCommand);
+            const gitSshCommand = this.config.get("GIT_SSH_COMMAND");
+            const sshKeyPath = this.config.get("GITHUB_SSH_KEY_PATH");
+            const knownHosts = this.config.get("GITHUB_KNOWN_HOSTS");
+
+            if (gitSshCommand) {
+                this.git = simpleGit().env("GIT_SSH_COMMAND", gitSshCommand);
+            } else if (sshKeyPath) {
+                let sshCommand = `ssh -i ${sshKeyPath} -o IdentitiesOnly=yes`;
+                if (knownHosts) {
+                    sshCommand += ` -o UserKnownHostsFile=${knownHosts} -o StrictHostKeyChecking=yes`;
+                } else {
+                    sshCommand += " -o StrictHostKeyChecking=accept-new";
+                }
+                this.git = simpleGit().env("GIT_SSH_COMMAND", sshCommand);
+            } else {
+                this.git = simpleGit();
+            }
 
             // Check if repo exists locally
             const isRepo = await fs.access(path.join(this.localPath, ".git"))

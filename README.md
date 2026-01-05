@@ -1,206 +1,340 @@
 # QuBot - Multi-Bot Telegram Application
 
-A professional, plugin-based Telegram application with a flexible multi-bot architecture supporting 1 Userbot + N Bot API bots.
+A professional, modular Telegram application with REST API support for building alternative frontends.
 
 ## Features
 
 - 🤖 **Multi-Bot Architecture** - 1 Userbot (MTProto) + unlimited Bot API bots
-- 📡 **Channel Monitoring** - Real-time Telegram channel monitoring (requires userbot)
+- 🌐 **REST API** - Full API for AI, RSS, and monitoring (run your own UI!)
+- 🔌 **WebSocket** - Real-time message streaming from monitored channels
+- 📡 **Channel Monitoring** - Monitor Telegram channels with keyword filters
 - 📰 **RSS Subscriptions** - User-managed subscriptions delivered to TARGET_CHANNEL
 - 🧠 **AI Chat** - Multi-provider AI (Groq, Gemini, OpenAI, Claude, NVIDIA) with chat history
 - 🔗 **Webhook Mode** - Nginx reverse proxy with Let's Encrypt SSL
 - 💾 **PostgreSQL Storage** - Persistent subscriptions, chat history, settings
 - 🐳 **Dockerized** - Easy deployment with Docker Compose
-- 🚀 **GitHub Actions** - Automated deployment to VPS
 
-## Default Bots
+## Bots
 
 ### 📰 RSS Bot
 | Command | Description |
 |---------|-------------|
 | `/start` | Welcome & quick actions |
-| `/sub <url>` | Subscribe to RSS feed (with preview) |
+| `/sub <url>` | Subscribe to RSS feed |
 | `/unsub <id>` | Unsubscribe |
-| `/list` | List subscriptions (with unsub buttons) |
-| `/status` | Check bot & database status |
+| `/list` | List subscriptions |
+| `/status` | Check bot status |
 
 **Token:** `RSS_BOT_TOKEN`
 
 ### 🧠 AI Bot
 | Command | Description |
 |---------|-------------|
-| `/start` | Welcome & quick actions |
 | `/ai <text>` | Ask AI (or just send a message) |
 | `/new` | Start new chat |
 | `/chats` | List/switch chats |
 | `/providers` | Select AI provider |
 | `/models` | Select model |
 | `/export` | Export chat to GitHub |
-| `/status` | Check bot status |
 
 **Token:** `AI_BOT_TOKEN`
 
-## Quick Deploy
+### 🔔 Monitor Bot
+| Command | Description |
+|---------|-------------|
+| `/sources` | List source channels |
+| `/add <channel>` | Add source channel |
+| `/remove <channel>` | Remove source |
+| `/history` | Recent forwarded messages |
+| `/monitor` | Start/stop monitoring |
+| `/filters` | Show filter policies |
 
-### Step 1: SSH Key Setup (on VPS)
-
-```bash
-ssh-keygen -t ed25519 -C "github-actions" -f ~/.ssh/github_actions
-cat ~/.ssh/github_actions.pub >> ~/.ssh/authorized_keys
-cat ~/.ssh/github_actions  # Copy to VPS_SSH_KEY secret
-```
-
-### Step 2: DNS Record
-
-Point a domain to your VPS:
-
-| Type | Name | Value |
-|------|------|-------|
-| A | bot | Your VPS IP |
-
-Your `WEBHOOK_URL` will be `https://bot.yourdomain.com`
-
-> ⚠️ **Cloudflare**: Use DNS-only mode (gray cloud) for Let's Encrypt.
-
-### Step 3: Create Telegram Bots
-
-Create bots from [@BotFather](https://t.me/BotFather):
-1. **RSS Bot** - `/newbot` → copy token
-2. **AI Bot** - `/newbot` → copy token
-
-### Step 4: Get API Credentials
-
-1. Go to [my.telegram.org](https://my.telegram.org)
-2. Create app → copy `API_ID` and `API_HASH`
-
-### Step 5: Generate Session
-
-```bash
-git clone git@github.com:your-username/qubot.git
-cd qubot && npm install
-npm run generate-session
-```
-
-### Step 6: Configure GitHub Secrets
-
-**VPS:**
-| Secret | Value |
-|--------|-------|
-| `VPS_HOST` | VPS IP |
-| `VPS_USER` | SSH user |
-| `VPS_SSH_KEY` | Private key |
-
-**Telegram API:**
-| Secret | Value |
-|--------|-------|
-| `API_ID` | API ID |
-| `API_HASH` | API Hash |
-| `TG_SESSION` | Session string |
-
-**Bot Tokens:**
-| Secret | Value |
-|--------|-------|
-| `RSS_BOT_TOKEN` | RSS Bot token |
-| `AI_BOT_TOKEN` | AI Bot token |
-
-**Webhook (for HTTPS mode):**
-
-> All bots share ONE webhook server on `BOT_PORT`. Each bot has its own path: `/webhook/rss-bot`, `/webhook/ai-bot`
-
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `WEBHOOK_URL` | Your domain with HTTPS | `https://bot.yourdomain.com` |
-| `BOT_PORT` | Express server port | `3000` |
-| `BOT_SECRET` | Webhook security token | Random string |
-
-**Monitoring:**
-| Secret | Value |
-|--------|-------|
-| `SOURCE_CHANNELS` | Channels to monitor |
-| `TARGET_CHANNEL` | Output channel |
-| `KEYWORDS` | Filter keywords |
-
-**AI Keys (optional):**
-| Secret | Value |
-|--------|-------|
-| `GROQ_API_KEY` | Groq key |
-| `GEMINI_API_KEY` | Gemini key |
-| `OPENAI_API_KEY` | OpenAI key |
-| `CLAUDE_API_KEY` | Claude key |
-
-### Step 7: Deploy
-
-Push to `main` or run workflow manually.
-
-The workflow:
-- ✅ Installs Docker & Nginx
-- ✅ Obtains SSL certificate
-- ✅ Deploys with Docker Compose
-- ✅ Registers webhooks
-
-### Step 8: Verify
-
-```bash
-ssh your-vps
-cd /opt/qubot
-docker compose logs -f
-```
+**Token:** `MONITOR_BOT_TOKEN`
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        BotManager                            │
-├──────────────────┬───────────────────────────────────────────┤
-│   Userbot        │           Bot API Bots                    │
-│   (MTProto)      │   ┌──────────┐   ┌──────────┐             │
-│   - Monitoring   │   │ RSS Bot  │   │ AI Bot   │             │
-│   - Forwarding   │   │ /sub     │   │ /ai      │             │
-└──────────────────┴───────────────────────────────────────────┘
-          │                    │
-          ▼                    ▼
-    ┌──────────────────────────────────┐
-    │     WebhookServer (Express)      │
-    │     /health, /webhook/:botName   │
-    └──────────────────────────────────┘
-          │
-          ▼
-    ┌──────────────────────────────────┐
-    │     Nginx + Let's Encrypt SSL    │
-    └──────────────────────────────────┘
+                           ┌─────────────────────────────────────┐
+                           │            Frontends                │
+                           ├─────────────┬───────────────────────┤
+                           │  Telegram   │     REST API / WS     │
+                           │    Bots     │     (Web UI, etc.)    │
+                           └──────┬──────┴───────────┬───────────┘
+                                  │                  │
+                                  ▼                  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                        Service Layer                             │
+├─────────────────┬─────────────────┬─────────────────────────────┤
+│   AiService     │   RssService    │       MonitorService        │
+│   - Chat        │   - Subscribe   │   - Source management       │
+│   - Providers   │   - Validate    │   - Real-time streaming     │
+│   - Export      │   - Unsubscribe │   - Filter policies         │
+└─────────────────┴─────────────────┴─────────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                          Storage                                 │
+│                    PostgreSQL + Redis                            │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ```
 src/
-├── core/
+├── api/                    # REST API
+│   ├── ApiServer.js        # Express server
+│   ├── WebSocketHandler.js # Real-time streaming
+│   └── auth.js             # API key auth
+├── services/               # Business logic (decoupled from Telegram)
+│   ├── AiService.js        # AI chat logic
+│   ├── RssService.js       # RSS subscription logic
+│   └── MonitorService.js   # Channel monitoring logic
+├── bots/                   # Telegram bots (thin wrappers)
+│   ├── ai-bot/             # AI chat commands
+│   ├── rss-bot/            # RSS subscription commands
+│   └── monitor-bot/        # Channel monitoring commands
+├── core/                   # Core infrastructure
 │   ├── App.js              # Main entry
 │   ├── BotManager.js       # Manages bots
-│   ├── BotInstance.js      # Bot base class
-│   ├── WebhookServer.js    # Express server
-│   ├── TelegramService.js  # Userbot (optional)
-│   └── StorageService.js   # PostgreSQL
-├── bots/
-│   ├── rss-bot/            # RSS Bot (subscriptions → TARGET_CHANNEL)
-│   └── ai-bot/             # AI Bot (multi-provider chat)
-├── providers/              # AI providers (Groq, Gemini, etc.)
-└── features/
-    └── channel-monitor/    # Userbot channel monitoring
+│   ├── StorageService.js   # PostgreSQL
+│   └── TelegramService.js  # Userbot (MTProto)
+└── providers/              # AI providers
 ```
+
+## REST API
+
+Full API documentation: [docs/api.md](docs/api.md)
+
+**Quick start:**
+```bash
+# Add to .env
+API_KEYS=myapikey:1
+
+# Start app
+npm start
+
+# Test API
+curl http://localhost:3001/health
+curl -H "Authorization: Bearer myapikey" http://localhost:3001/api/ai/providers
+```
+
+**Key endpoints:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| POST | `/api/ai/chat` | Send message, get AI response |
+| GET | `/api/rss/subscriptions` | List subscriptions |
+| GET | `/api/monitor/sources` | List source channels |
+| WS | `/ws/monitor` | Real-time message stream |
+
+## Quick Deploy
+
+### Step 1: Configure
+
+```bash
+cp .env.example .env
+# Edit .env with your values
+```
+
+**Required:**
+- `API_ID`, `API_HASH`, `TG_SESSION` - Telegram API credentials
+- Bot tokens: `RSS_BOT_TOKEN`, `AI_BOT_TOKEN`, `MONITOR_BOT_TOKEN`
+
+**Optional:**
+- `API_KEYS` - For REST API access
+- AI provider keys: `GROQ_API_KEY`, `GEMINI_API_KEY`, etc.
+
+### Step 2: Run
+
+```bash
+docker compose up -d
+docker compose logs -f
+```
+
+### Step 3: Verify
+
+**Telegram:** Message your bot with `/start`
+
+**REST API:**
+```bash
+curl http://localhost:3001/health
+```
+
+## GitHub Secrets (for CI/CD)
+
+### Required Secrets
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| **VPS** | | |
+| `VPS_HOST` | VPS IP address | `123.45.67.89` |
+| `VPS_USER` | SSH user | `root` |
+| `VPS_SSH_KEY` | Private SSH key | `-----BEGIN OPENSSH...` |
+| **Telegram API** | | |
+| `API_ID` | Telegram API ID | `12345678` |
+| `API_HASH` | Telegram API Hash | `abc123...` |
+| `TG_SESSION` | Session string | `1BVtsOH...` |
+| **Bot Tokens** | | |
+| `RSS_BOT_TOKEN` | RSS Bot token | `123:ABC...` |
+| `AI_BOT_TOKEN` | AI Bot token | `456:DEF...` |
+| `MONITOR_BOT_TOKEN` | Monitor Bot token | `789:GHI...` |
+
+### Webhook & Web Frontend
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `WEBHOOK_URL` | Bot webhook domain | `https://bot.yourdomain.com` |
+| `WEBFRONT_URL` | Web frontend domain | `https://app.yourdomain.com` |
+| `BOT_PORT` | Webhook server port | `3000` |
+| `BOT_SECRET` | Webhook security token | Random string |
+
+### REST API
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `API_ENABLED` | Enable/disable REST API | `true` |
+| `API_PORT` | REST API server port | `3001` |
+| `API_KEYS` | API keys (key:userId,...) | `mykey:1,otherkey:2` |
+
+### AI Providers (Optional)
+
+| Secret | Description |
+|--------|-------------|
+| `GROQ_API_KEY` | Groq API key |
+| `GEMINI_API_KEY` | Google Gemini API key |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `CLAUDE_API_KEY` | Anthropic Claude key |
+| `NVIDIA_API_KEY` | NVIDIA NIM key |
+
+### Monitoring (Optional)
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `SOURCE_CHANNELS` | Channels to monitor | `@channel1,@channel2` |
+| `TARGET_CHANNEL` | Forward destination | `@mychannel` |
+| `KEYWORDS` | Filter keywords | `bitcoin,crypto` |
+| `FROM_USERS` | Filter by usernames | `@user1,@user2` |
+
+### Access Control (Optional)
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `ALLOWED_USERS` | Allowed Telegram usernames/IDs | `@user1,123456789` |
+
+### RSS (Optional)
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `RSS_SOURCES` | RSS sources JSON override | `[{\"name\":\"HN\",\"url\":\"https://news.ycombinator.com/rss\"}]` |
+| `RSS_POLL_INTERVAL_MS` | RSS poll interval (ms) | `300000` |
+
+### Database & Cache
+
+| Secret | Description | Example |
+|--------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://qubot:qubot@postgres:5432/qubot` |
+| `REDIS_URL` | Redis connection string | `redis://redis:6379` |
+
+### GitHub Export (Optional)
+
+| Secret | Description |
+|--------|-------------|
+| `NOTES_REPO` | GitHub repo for exports |
+| `GIT_SSH_COMMAND` | Custom SSH command for GitHub |
+| `GITHUB_SSH_KEY_PATH` | SSH key path for GitHub |
+| `GITHUB_KNOWN_HOSTS` | Known hosts file for GitHub |
+
+### Other
+
+| Secret | Description |
+|--------|-------------|
+| `RATE_LIMIT_MS` | Bot rate limiting interval |
+| `LOG_LEVEL` | `debug`, `info`, `warn`, `error` |
+
+---
+
+## Debugging
+
+### Check Service Status
+```bash
+# SSH to VPS
+ssh your-vps
+cd /opt/qubot
+
+# Container status
+docker compose ps
+
+# View logs
+docker compose logs -f
+docker compose logs userbot --tail 100
+
+# Check specific service
+docker compose logs userbot 2>&1 | grep -i error
+```
+
+### Check API Server
+```bash
+# On VPS - is port 3001 listening?
+curl http://localhost:3001/health
+
+# From outside - through Nginx
+curl https://app.yourdomain.com/health
+```
+
+### Debug API_PORT Mapping
+```bash
+# Confirm compose resolved your port mappings
+docker compose config | rg -n "ports:|API_PORT|3001"
+
+# Confirm container env is set
+docker compose exec userbot printenv | rg "API_(ENABLED|PORT|KEYS)"
+
+# Confirm API startup logs
+docker compose logs userbot --tail 100 | rg "API:"
+
+# Health check (local)
+curl http://localhost:${API_PORT:-3001}/health
+```
+
+If you use a domain, make sure your reverse proxy routes the domain to `http://127.0.0.1:$API_PORT`.
+
+### Check Nginx
+```bash
+# Test Nginx config
+sudo nginx -t
+
+# View Nginx logs
+sudo tail -f /var/log/nginx/error.log
+
+# Check sites enabled
+ls -la /etc/nginx/sites-enabled/
+```
+
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| **502 Bad Gateway** | API server not running. Check `docker compose logs` |
+| **Connection refused** | Port not open. Run `ufw allow 3001` |
+| **Unauthorized** | Check `API_KEYS` in .env matches your request |
+| **WebSocket fails** | Check Nginx has `proxy_set_header Upgrade` |
+
+### Restart Services
+```bash
+cd /opt/qubot
+docker compose down
+docker compose up -d --build
+docker compose logs -f
+```
+
+---
 
 ## Adding a New Bot
 
 1. Create `src/bots/your-bot/index.js`
 2. Extend `BotInstance`
-3. Register in `App.js`
-4. Add `YOUR_BOT_TOKEN` to secrets
-
-## Local Development
-
-```bash
-cp .env.example .env  # Edit values
-docker compose up -d
-docker compose logs -f
-```
+3. Create `src/services/YourService.js` for business logic
+4. Register in `App.js`
+5. Add `YOUR_BOT_TOKEN` to GitHub Secrets
 
 ## License
 

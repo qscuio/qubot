@@ -1,20 +1,26 @@
 const BotInstance = require("../../core/BotInstance");
-const { getProvider, listProviders, fetchModels, callAI } = require("../../providers");
-const { sendLongHtmlMessage, markdownToHtml, escapeHtml, sleep } = require("../../core/TelegramUtils");
-
-const DEFAULT_PROVIDER = "groq";
+const { getProvider, listProviders } = require("../../providers");
+const { sendLongHtmlMessage, markdownToHtml, escapeHtml } = require("../../core/TelegramUtils");
 
 /**
- * AiBot - Full-featured AI chat bot like ChatGPT.
- * Features: Chat history, multiple providers, long messages, GitHub export.
+ * AiBot - Telegram interface for AI chat.
+ * Delegates all business logic to AiService.
+ * Handles only Telegram-specific formatting and interactions.
  */
 class AiBot extends BotInstance {
-    constructor(token, config, storage, githubService, allowedUsers) {
+    constructor(token, config, storage, githubService, allowedUsers, aiService = null) {
         super("ai-bot", token, allowedUsers);
         this.config = config;
         this.storage = storage;
         this.githubService = githubService;
-        this.cachedModels = new Map();
+        this.aiService = aiService;
+    }
+
+    /**
+     * Set the AI service (allows injection after construction).
+     */
+    setService(aiService) {
+        this.aiService = aiService;
     }
 
     async setup() {
@@ -52,50 +58,6 @@ class AiBot extends BotInstance {
         this.logger.info("AiBot commands registered.");
     }
 
-    async _getSettings(userId) {
-        if (!this.storage) {
-            return { provider: DEFAULT_PROVIDER, model: getProvider(DEFAULT_PROVIDER)?.defaultModel || "" };
-        }
-        const settings = await this.storage.getAiSettings(userId);
-        return { provider: settings.provider, model: settings.model };
-    }
-
-    async _updateSettings(userId, provider, model) {
-        if (this.storage) {
-            await this.storage.updateAiSettings(userId, provider, model);
-        }
-    }
-
-    /**
-     * Call AI provider with retry logic (1 retry with 1s backoff).
-     */
-    async _callAIWithRetry(provider, prompt, model, history, contextPrefix, retries = 1) {
-        let lastError;
-
-        for (let attempt = 0; attempt <= retries; attempt++) {
-            try {
-                return await callAI(
-                    provider,
-                    this.config,
-                    prompt,
-                    model,
-                    history,
-                    contextPrefix
-                );
-            } catch (err) {
-                lastError = err;
-                this.logger.warn(`AI call attempt ${attempt + 1} failed: ${err.message}`);
-
-                if (attempt < retries) {
-                    // Wait before retry (exponential backoff: 1s, 2s, etc.)
-                    await sleep((attempt + 1) * 1000);
-                }
-            }
-        }
-
-        throw lastError;
-    }
-
     async _handleAi(ctx) {
         const userId = ctx.from?.id;
         const prompt = (ctx.message.text || "").replace(/^\/ai\s*/i, "").trim();
@@ -124,7 +86,11 @@ class AiBot extends BotInstance {
     }
 
     async _processAI(ctx, userId, prompt) {
-        const settings = await this._getSettings(userId);
+        if (!this.aiService) {
+            return ctx.reply("❌ AI service not available.");
+        }
+
+        const settings = await this.aiService.getSettings(userId);
         const provider = getProvider(settings.provider);
 
         if (!provider || !provider.isConfigured(this.config)) {
@@ -132,22 +98,6 @@ class AiBot extends BotInstance {
                 `❌ ${provider?.name || settings.provider} API Key not configured.\n\n` +
                 `Use /providers to switch to a configured provider.`
             );
-        }
-
-        // Get/create active chat
-        let activeChat = null;
-        if (this.storage) {
-            activeChat = await this.storage.getOrCreateActiveChat(userId);
-
-            // Save user message
-            await this.storage.saveMessage(activeChat.id, "user", prompt);
-
-            // Auto-title on first message
-            const messageCount = await this.storage.getMessageCount(activeChat.id);
-            if (messageCount === 1 && activeChat.title === "New Chat") {
-                const shortTitle = prompt.substring(0, 40) + (prompt.length > 40 ? "..." : "");
-                await this.storage.renameChat(activeChat.id, shortTitle);
-            }
         }
 
         await ctx.sendChatAction("typing");
@@ -161,30 +111,8 @@ class AiBot extends BotInstance {
         }, 4000);
 
         try {
-            // Build context from history
-            let history = [];
-            let contextPrefix = "";
-
-            if (this.storage && activeChat) {
-                const recentMessages = await this.storage.getChatMessages(activeChat.id, 4);
-                history = recentMessages.reverse().map((m) => ({
-                    role: m.role,
-                    content: m.content,
-                }));
-
-                if (activeChat.summary) {
-                    contextPrefix = `[Previous conversation summary: ${activeChat.summary}]\n\n`;
-                }
-            }
-
-            // Call AI with retry (1 retry on failure)
-            const response = await this._callAIWithRetry(
-                settings.provider,
-                prompt,
-                settings.model,
-                history,
-                contextPrefix
-            );
+            // Call AI service
+            const response = await this.aiService.chat(userId, prompt);
 
             clearInterval(typingInterval);
 
@@ -195,17 +123,6 @@ class AiBot extends BotInstance {
                 null,
                 "✅ Done!"
             );
-
-            // Save assistant message
-            if (this.storage && activeChat && response.content) {
-                await this.storage.saveMessage(activeChat.id, "assistant", response.content);
-
-                // Update summary every 6 messages
-                const newCount = await this.storage.getMessageCount(activeChat.id);
-                if (newCount % 6 === 0) {
-                    this._updateSummary(activeChat.id, settings).catch(() => { });
-                }
-            }
 
             // Send thinking process
             if (response.thinking) {
@@ -242,44 +159,13 @@ class AiBot extends BotInstance {
         }
     }
 
-    async _updateSummary(chatId, settings) {
-        if (!this.storage) return;
-
-        try {
-            const messages = await this.storage.getChatMessages(chatId, 20);
-            if (messages.length < 4) return;
-
-            const messagesText = messages
-                .reverse()
-                .map((m) => `${m.role}: ${m.content.substring(0, 200)}`)
-                .join("\n");
-
-            const summaryPrompt = `Summarize this conversation in 2-3 sentences:\n\n${messagesText}`;
-
-            const response = await callAI(
-                settings.provider,
-                this.config,
-                summaryPrompt,
-                settings.model,
-                [],
-                ""
-            );
-
-            if (response.content) {
-                await this.storage.updateChatSummary(chatId, response.content);
-            }
-        } catch (err) {
-            this.logger.warn("Failed to update summary", err.message);
-        }
-    }
-
     async _handleNew(ctx) {
         const userId = ctx.from?.id;
 
-        if (this.storage) {
-            const chat = await this.storage.createNewChat(userId);
-            await ctx.reply(`✨ Started new chat (ID: ${chat.id})\n\nSend any message to begin.`);
-        } else {
+        try {
+            const chat = await this.aiService.createChat(userId);
+            await ctx.reply(`✨ Started new chat${chat.id ? ` (ID: ${chat.id})` : ""}\n\nSend any message to begin.`);
+        } catch (err) {
             await ctx.reply("✨ New chat started.\n\n(Note: Chat history not available without database)");
         }
 
@@ -291,24 +177,24 @@ class AiBot extends BotInstance {
     async _handleChats(ctx) {
         const userId = ctx.from?.id;
 
-        if (!this.storage) {
-            return ctx.reply("❌ Chat history not available (no database).");
+        try {
+            const chats = await this.aiService.getChats(userId, 10);
+
+            if (chats.length === 0) {
+                return ctx.reply("📭 No chats yet. Use /ai to start one.");
+            }
+
+            const buttons = chats.map((c) => [{
+                text: `${c.is_active ? "✅ " : ""}${c.title.substring(0, 30)}`,
+                callback_data: `chat:${c.id}`,
+            }]);
+
+            await ctx.reply("📂 Your chats:", {
+                reply_markup: { inline_keyboard: buttons },
+            });
+        } catch (err) {
+            await ctx.reply("❌ Chat history not available (no database).");
         }
-
-        const chats = await this.storage.getUserChats(userId, 10);
-
-        if (chats.length === 0) {
-            return ctx.reply("📭 No chats yet. Use /ai to start one.");
-        }
-
-        const buttons = chats.map((c) => [{
-            text: `${c.is_active ? "✅ " : ""}${c.title.substring(0, 30)}`,
-            callback_data: `chat:${c.id}`,
-        }]);
-
-        await ctx.reply("📂 Your chats:", {
-            reply_markup: { inline_keyboard: buttons },
-        });
 
         if (ctx.callbackQuery) {
             await ctx.answerCbQuery();
@@ -319,16 +205,15 @@ class AiBot extends BotInstance {
         const userId = ctx.from?.id;
         const chatId = parseInt(ctx.match[1], 10);
 
-        if (this.storage) {
-            await this.storage.setActiveChat(userId, chatId);
-            const chat = await this.storage.getChatById(chatId);
+        try {
+            const chat = await this.aiService.switchChat(userId, chatId);
             await ctx.answerCbQuery(`Switched to: ${chat?.title || "Chat"}`);
             await ctx.editMessageText(`✅ Switched to: <b>${escapeHtml(chat?.title || "Chat")}</b>`, { parse_mode: "HTML" });
 
             // Display recent chat history
-            const messages = await this.storage.getChatMessages(chatId, 10);
-            if (messages.length > 0) {
-                const historyLines = messages.reverse().map((m) => {
+            const fullChat = await this.aiService.getChat(userId, chatId, 10);
+            if (fullChat?.messages?.length > 0) {
+                const historyLines = fullChat.messages.map((m) => {
                     const icon = m.role === "user" ? "👤" : "🤖";
                     const content = m.content.length > 150
                         ? m.content.substring(0, 150) + "..."
@@ -336,11 +221,13 @@ class AiBot extends BotInstance {
                     return `${icon} <b>${m.role === "user" ? "You" : "AI"}:</b>\n${escapeHtml(content)}`;
                 });
 
-                const historyHtml = `📜 <b>Recent History (${messages.length} messages):</b>\n\n${historyLines.join("\n\n───────────\n\n")}`;
+                const historyHtml = `📜 <b>Recent History (${fullChat.messages.length} messages):</b>\n\n${historyLines.join("\n\n───────────\n\n")}`;
                 await sendLongHtmlMessage(ctx, historyHtml);
             } else {
                 await ctx.reply("📭 This chat has no messages yet. Send a message to start.");
             }
+        } catch (err) {
+            await ctx.answerCbQuery("Error switching chat");
         }
     }
 
@@ -352,127 +239,79 @@ class AiBot extends BotInstance {
             return ctx.reply("📌 Usage: /rename <new title>\nExample: /rename Project Discussion");
         }
 
-        if (!this.storage) {
-            return ctx.reply("❌ Chat history not available.");
+        try {
+            const chats = await this.aiService.getChats(userId, 1);
+            if (chats.length === 0) {
+                return ctx.reply("❌ No active chat to rename.");
+            }
+            const activeChat = chats.find(c => c.is_active) || chats[0];
+            await this.aiService.renameChat(activeChat.id, newTitle);
+            await ctx.reply(`✅ Chat renamed to: <b>${escapeHtml(newTitle)}</b>`, { parse_mode: "HTML" });
+        } catch (err) {
+            await ctx.reply("❌ Chat history not available.");
         }
-
-        const chat = await this.storage.getOrCreateActiveChat(userId);
-        await this.storage.renameChat(chat.id, newTitle);
-        await ctx.reply(`✅ Chat renamed to: <b>${escapeHtml(newTitle)}</b>`, { parse_mode: "HTML" });
     }
 
     async _handleClear(ctx) {
         const userId = ctx.from?.id;
 
-        if (!this.storage) {
-            return ctx.reply("❌ Chat history not available.");
+        try {
+            const chats = await this.aiService.getChats(userId, 1);
+            if (chats.length === 0) {
+                return ctx.reply("❌ No active chat to clear.");
+            }
+            const activeChat = chats.find(c => c.is_active) || chats[0];
+            await this.aiService.clearChat(activeChat.id);
+            await ctx.reply("🗑️ Chat history cleared.");
+        } catch (err) {
+            await ctx.reply("❌ Chat history not available.");
         }
-
-        const chat = await this.storage.getOrCreateActiveChat(userId);
-        await this.storage.clearChatMessages(chat.id);
-        await ctx.reply("🗑️ Chat history cleared.");
     }
 
     async _handleExport(ctx) {
         const userId = ctx.from?.id;
 
-        if (!this.storage) {
-            return ctx.reply("❌ Chat history not available.");
-        }
-
-        const chat = await this.storage.getOrCreateActiveChat(userId);
-        const messages = await this.storage.getChatMessages(chat.id, 100);
-
-        if (messages.length === 0) {
-            return ctx.reply("📭 No messages to export.");
-        }
-
-        await ctx.reply("📝 Exporting chat...");
-
-        // Generate filename
-        const date = new Date();
-        const mmdd = `${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
-        const words = (chat.title || "chat").split(/\s+/).slice(0, 3).join("-");
-        const safeWords = words.replace(/[^a-zA-Z0-9\u4e00-\u9fa5-]/g, "").substring(0, 30);
-        const filename = `${mmdd}-${safeWords || "chat"}.md`;
-
-        // Build raw content
-        const rawContent = messages.reverse()
-            .map((m) => `**${m.role === "user" ? "User" : "Assistant"}:**\n${m.content}`)
-            .join("\n\n---\n\n");
-
-        const rawMarkdown = `# ${chat.title}\n\n> Exported: ${date.toLocaleString()} | ${messages.length} messages\n\n${rawContent}\n\n---\n*Exported from QuBot*`;
-
-        // Generate AI Summary
-        let summaryMarkdown = "";
         try {
-            await ctx.reply("🧠 Generating summary...");
-            const settings = await this._getSettings(userId);
-            const summaryPrompt = `Analyze this conversation and create a structured knowledge summary.
-Extract key points, insights, code examples, and actionable information.
-Use headers (##), bullet points, and code blocks.
-Be concise but comprehensive.
+            const chats = await this.aiService.getChats(userId, 1);
+            if (chats.length === 0) {
+                return ctx.reply("❌ No active chat to export.");
+            }
+            const activeChat = chats.find(c => c.is_active) || chats[0];
 
-Conversation:
-${rawContent.substring(0, 15000)}`;
+            await ctx.reply("📝 Exporting chat...");
 
-            const response = await callAI(
-                settings.provider,
-                this.config,
-                summaryPrompt,
-                settings.model,
-                [],
-                ""
-            );
+            const result = await this.aiService.exportChat(userId, activeChat.id);
 
-            const summary = response.content || "Summary generation failed.";
-            summaryMarkdown = `# ${chat.title} - Notes\n\n> Summary of ${messages.length} messages | ${date.toLocaleString()}\n\n${summary}\n\n---\n*AI-generated summary from QuBot*`;
+            if (result.urls) {
+                await sendLongHtmlMessage(ctx,
+                    `✅ <b>Chat exported!</b>\n\n` +
+                    `📄 <a href="${result.urls.raw}">Raw Conversation</a>\n` +
+                    `📝 <a href="${result.urls.notes}">AI Notes</a>`
+                );
+            } else {
+                // Fallback: send as file
+                await ctx.replyWithDocument({
+                    source: Buffer.from(result.rawMarkdown, "utf-8"),
+                    filename: result.filename,
+                });
+                await ctx.reply("ℹ️ GitHub export not configured. Set NOTES_REPO to enable.");
+            }
         } catch (err) {
-            this.logger.error("Summary generation failed", err);
-            summaryMarkdown = `# ${chat.title} - Notes\n\n> Summary generation failed\n\nSee raw file for full conversation.\n\n---\n*Exported from QuBot*`;
+            await ctx.reply(`❌ Export failed: ${err.message}`);
         }
 
-        // Push to GitHub (primary), or send as file (fallback)
-        if (this.githubService && this.githubService.isReady) {
-            try {
-                await ctx.reply("⏳ Pushing to GitHub...");
-
-                const rawUrl = await this.githubService.saveNote(
-                    `raw/${filename}`,
-                    rawMarkdown,
-                    `Export raw: ${chat.title} (QuBot)`
-                );
-
-                const notesUrl = await this.githubService.saveNote(
-                    `notes/${filename}`,
-                    summaryMarkdown,
-                    `Export notes: ${chat.title} (QuBot)`
-                );
-
-                await sendLongHtmlMessage(ctx, `✅ <b>Chat exported!</b>\n\n📄 <a href="${rawUrl}">Raw Conversation</a>\n📝 <a href="${notesUrl}">AI Notes</a>`);
-            } catch (err) {
-                this.logger.error("GitHub push failed", err);
-                await ctx.reply(`❌ GitHub push failed: ${err.message}`);
-            }
-        } else if (this.config.get("NOTES_REPO")) {
-            const errorDetail = this.githubService?.initError || "Unknown error";
-            await ctx.reply(`⚠️ GitHub export failed during init:\n<code>${escapeHtml(errorDetail)}</code>\n\nCheck server SSH key is added to GitHub.`, { parse_mode: "HTML" });
-        } else {
-            // Fallback: send as file if no GitHub configured
-            await ctx.replyWithDocument({
-                source: Buffer.from(rawMarkdown, "utf-8"),
-                filename: `raw-${filename}`,
-            });
-            await ctx.reply("ℹ️ GitHub export not configured. Set NOTES_REPO to enable.");
+        if (ctx.callbackQuery) {
+            await ctx.answerCbQuery();
         }
     }
 
     async _handleProviders(ctx) {
         const userId = ctx.from?.id;
-        const settings = await this._getSettings(userId);
+        const settings = await this.aiService.getSettings(userId);
+        const providers = this.aiService.listProviders();
 
-        const buttons = listProviders().map((p) => [{
-            text: `${p.key === settings.provider ? "✅ " : ""}${p.name}`,
+        const buttons = providers.map((p) => [{
+            text: `${p.key === settings.provider ? "✅ " : ""}${p.name}${p.configured ? "" : " ⚠️"}`,
             callback_data: `provider:${p.key}`,
         }]);
 
@@ -494,7 +333,7 @@ ${rawContent.substring(0, 15000)}`;
             return ctx.answerCbQuery("❌ Unknown provider");
         }
 
-        await this._updateSettings(userId, providerKey, provider.defaultModel);
+        await this.aiService.updateSettings(userId, providerKey, provider.defaultModel);
 
         await ctx.answerCbQuery(`Switched to ${provider.name}`);
         await ctx.editMessageText(
@@ -505,18 +344,12 @@ ${rawContent.substring(0, 15000)}`;
 
     async _handleModels(ctx) {
         const userId = ctx.from?.id;
-        const settings = await this._getSettings(userId);
+        const settings = await this.aiService.getSettings(userId);
         const provider = getProvider(settings.provider);
 
         await ctx.reply("⏳ Fetching model list...");
 
-        let models;
-        if (this.cachedModels.has(settings.provider)) {
-            models = this.cachedModels.get(settings.provider);
-        } else {
-            models = await fetchModels(settings.provider, this.config);
-            this.cachedModels.set(settings.provider, models);
-        }
+        const models = await this.aiService.getModels(settings.provider);
 
         if (models.length === 0) {
             return ctx.reply("❌ No models available for this provider");
@@ -536,9 +369,9 @@ ${rawContent.substring(0, 15000)}`;
     async _handleModelSelect(ctx) {
         const userId = ctx.from?.id;
         const modelId = ctx.match[1];
-        const settings = await this._getSettings(userId);
+        const settings = await this.aiService.getSettings(userId);
 
-        await this._updateSettings(userId, settings.provider, modelId);
+        await this.aiService.updateSettings(userId, settings.provider, modelId);
 
         await ctx.answerCbQuery("Model switched");
         await ctx.editMessageText(`✅ Selected model: <code>${escapeHtml(modelId)}</code>`, { parse_mode: "HTML" });
@@ -546,7 +379,7 @@ ${rawContent.substring(0, 15000)}`;
 
     async _handleStart(ctx) {
         const userId = ctx.from?.id;
-        const settings = await this._getSettings(userId);
+        const settings = await this.aiService.getSettings(userId);
         const provider = getProvider(settings.provider);
 
         const buttons = [
@@ -565,28 +398,23 @@ ${rawContent.substring(0, 15000)}`;
 
     async _handleStatus(ctx) {
         const userId = ctx.from?.id;
-        const settings = await this._getSettings(userId);
+        const settings = await this.aiService.getSettings(userId);
         const provider = getProvider(settings.provider);
 
         const dbStatus = this.storage ? "✅ Connected" : "❌ Unavailable";
         const githubStatus = this.githubService?.isReady ? "✅ Ready" : "⚠️ Not configured";
 
         let chatCount = 0;
-        if (this.storage) {
-            try {
-                const chats = await this.storage.getUserChats(userId, 100);
-                chatCount = chats.length;
-            } catch (err) {
-                // Ignore
-            }
+        try {
+            const chats = await this.aiService.getChats(userId, 100);
+            chatCount = chats.length;
+        } catch (err) {
+            // Ignore
         }
 
         // Check which providers are configured
-        const configuredProviders = listProviders()
-            .filter(p => {
-                const providerInstance = getProvider(p.key);
-                return providerInstance?.isConfigured?.(this.config);
-            })
+        const configuredProviders = this.aiService.listProviders()
+            .filter(p => p.configured)
             .map(p => p.name);
 
         await ctx.reply(
