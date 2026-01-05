@@ -295,6 +295,8 @@ jobs:
             
             # GitHub Export
             NOTES_REPO=${{ secrets.NOTES_REPO }}
+            GIT_SSH_KEY_PATH=${{ secrets.GIT_SSH_KEY_PATH }}
+            GIT_SSH_COMMAND=${{ secrets.GIT_SSH_COMMAND }}
             
             # REST API
             API_ENABLED=${{ secrets.API_ENABLED || 'true' }}
