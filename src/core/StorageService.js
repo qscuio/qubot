@@ -143,8 +143,20 @@ class StorageService {
             );
         `;
 
+        const createMonitorChannelsTable = `
+            CREATE TABLE IF NOT EXISTS monitor_channels (
+                id SERIAL PRIMARY KEY,
+                channel_id VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                enabled BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        `;
+
         await this.pool.query(createMonitorFiltersTable);
         await this.pool.query(createMonitorHistoryTable);
+        await this.pool.query(createMonitorChannelsTable);
         await this.pool.query(`
             ALTER TABLE monitor_history
             ADD COLUMN IF NOT EXISTS user_id BIGINT
@@ -153,6 +165,45 @@ class StorageService {
             CREATE INDEX IF NOT EXISTS monitor_history_user_id_idx
             ON monitor_history (user_id)
         `);
+    }
+
+    // ============= Monitor Channel Methods =============
+
+    async getMonitorChannels() {
+        if (!this.pool) return [];
+        const result = await this.pool.query(
+            "SELECT channel_id, name, enabled FROM monitor_channels ORDER BY created_at"
+        );
+        return result.rows;
+    }
+
+    async addMonitorChannel(channelId, name = null) {
+        if (!this.pool) return null;
+        const result = await this.pool.query(
+            `INSERT INTO monitor_channels (channel_id, name) VALUES ($1, $2)
+             ON CONFLICT (channel_id) DO UPDATE SET name = COALESCE(EXCLUDED.name, monitor_channels.name), updated_at = NOW()
+             RETURNING *`,
+            [channelId, name]
+        );
+        return result.rows[0];
+    }
+
+    async removeMonitorChannel(channelId) {
+        if (!this.pool) return false;
+        const result = await this.pool.query(
+            "DELETE FROM monitor_channels WHERE channel_id = $1",
+            [channelId]
+        );
+        return result.rowCount > 0;
+    }
+
+    async setMonitorChannelEnabled(channelId, enabled) {
+        if (!this.pool) return false;
+        const result = await this.pool.query(
+            "UPDATE monitor_channels SET enabled = $1, updated_at = NOW() WHERE channel_id = $2",
+            [enabled, channelId]
+        );
+        return result.rowCount > 0;
     }
 
     // ============= Source Methods =============

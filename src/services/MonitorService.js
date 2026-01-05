@@ -33,10 +33,37 @@ class MonitorService extends EventEmitter {
 
     /**
      * Initialize the monitor service.
+     * Loads source channels from both config and database.
      */
     async init() {
-        this.sourceChannels = this.config.get("SOURCE_CHANNELS") || [];
-        this.logger.info(`MonitorService initialized with ${this.sourceChannels.length} source channels`);
+        // Load channels from config first
+        const configChannels = this.config.get("SOURCE_CHANNELS") || [];
+
+        // Load persisted channels from database
+        let dbChannels = [];
+        if (this.storage) {
+            try {
+                const storedChannels = await this.storage.getMonitorChannels();
+                dbChannels = storedChannels.map(c => c.channel_id);
+
+                // Restore disabled state from database
+                storedChannels.forEach(c => {
+                    if (!c.enabled) {
+                        this.disabledSources.add(c.channel_id);
+                    }
+                });
+
+                this.logger.info(`Loaded ${storedChannels.length} channels from database`);
+            } catch (err) {
+                this.logger.warn(`Failed to load channels from database: ${err.message}`);
+            }
+        }
+
+        // Merge config channels with database channels (no duplicates)
+        const allChannels = [...new Set([...configChannels, ...dbChannels])];
+        this.sourceChannels = allChannels;
+
+        this.logger.info(`MonitorService initialized with ${this.sourceChannels.length} source channels (${configChannels.length} from config, ${dbChannels.length} from database)`);
     }
 
     /**
@@ -156,6 +183,10 @@ class MonitorService extends EventEmitter {
     async enableSource(channelId) {
         if (this.disabledSources.has(channelId)) {
             this.disabledSources.delete(channelId);
+            // Persist to database
+            if (this.storage) {
+                await this.storage.setMonitorChannelEnabled(channelId, true);
+            }
             this.logger.info(`Enabled source channel: ${channelId}`);
         }
         return { enabled: true, channel: channelId };
@@ -167,6 +198,10 @@ class MonitorService extends EventEmitter {
     async disableSource(channelId) {
         if (this.sourceChannels.includes(channelId)) {
             this.disabledSources.add(channelId);
+            // Persist to database
+            if (this.storage) {
+                await this.storage.setMonitorChannelEnabled(channelId, false);
+            }
             this.logger.info(`Disabled source channel: ${channelId}`);
         }
         return { enabled: false, channel: channelId };
@@ -200,14 +235,22 @@ class MonitorService extends EventEmitter {
     async addSource(channelId) {
         if (!this.sourceChannels.includes(channelId)) {
             // Resolve the entity first to ensure gramjs can receive updates from it
+            let channelName = null;
             if (this.telegram) {
                 const entity = await this.telegram.resolveEntity(channelId);
                 if (entity) {
-                    this.logger.info(`Resolved new source: ${entity.title || entity.username || channelId}`);
+                    channelName = entity.title || entity.username || null;
+                    this.logger.info(`Resolved new source: ${channelName || channelId}`);
                 } else {
                     this.logger.warn(`Could not resolve channel: ${channelId}`);
                 }
             }
+
+            // Persist to database
+            if (this.storage) {
+                await this.storage.addMonitorChannel(channelId, channelName);
+            }
+
             this.sourceChannels.push(channelId);
             this.logger.info(`Added source channel: ${channelId}`);
             await this._refreshHandlers();
@@ -222,6 +265,13 @@ class MonitorService extends EventEmitter {
         const index = this.sourceChannels.indexOf(channelId);
         if (index > -1) {
             this.sourceChannels.splice(index, 1);
+            this.disabledSources.delete(channelId); // Also remove from disabled set
+
+            // Remove from database
+            if (this.storage) {
+                await this.storage.removeMonitorChannel(channelId);
+            }
+
             this.logger.info(`Removed source channel: ${channelId}`);
             await this._refreshHandlers();
         }
