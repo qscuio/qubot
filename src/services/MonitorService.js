@@ -272,8 +272,12 @@ class MonitorService extends EventEmitter {
             }
 
             // Keyword filter (global config)
+            // Skip filtering if keywords is empty or set to "none"
             const keywords = this.config.get("KEYWORDS") || [];
-            if (keywords.length > 0) {
+            const skipKeywordFilter = keywords.length === 0 ||
+                (keywords.length === 1 && keywords[0].toLowerCase() === "none");
+
+            if (!skipKeywordFilter) {
                 const lowerText = msg.message.toLowerCase();
                 const hasKeyword = keywords.some(k => lowerText.includes(k));
                 if (!hasKeyword) {
