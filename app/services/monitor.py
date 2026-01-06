@@ -60,6 +60,7 @@ class MonitorService:
         # Changed from list of strings to dict: channel_id -> {id, name, enabled}
         self.channels: Dict[str, dict] = {}
         self.target_channel = settings.TARGET_CHANNEL
+        self.vip_target_channel = settings.VIP_TARGET_CHANNEL  # Separate channel for VIP
         # Deduplication cache: stores (chat_id, message_id) tuples
         # Using OrderedDict to maintain insertion order for LRU eviction
         self._processed_messages = OrderedDict()
@@ -76,6 +77,7 @@ class MonitorService:
             max_age_seconds=settings.MONITOR_BUFFER_TIMEOUT
         )
         self._flush_task = None
+        self._report_task = None  # Daily report scheduler
     
     @property
     def source_channels(self) -> List[str]:
@@ -154,6 +156,10 @@ class MonitorService:
             self._flush_task = asyncio.create_task(self._periodic_flush())
             logger.info("📝 Summarization enabled")
         
+        # Start daily report scheduler
+        self._report_task = asyncio.create_task(self._schedule_reports())
+        logger.info("📅 Daily report scheduler started (8:00/20:00)")
+        
         logger.info("✅ MonitorService started.")
 
     async def stop(self):
@@ -162,6 +168,12 @@ class MonitorService:
             self._flush_task.cancel()
             try:
                 await self._flush_task
+            except asyncio.CancelledError:
+                pass
+        if self._report_task:
+            self._report_task.cancel()
+            try:
+                await self._report_task
             except asyncio.CancelledError:
                 pass
         logger.info("MonitorService stopped.")
@@ -178,6 +190,191 @@ class MonitorService:
                 break
             except Exception as e:
                 logger.error(f"Error in periodic flush: {e}")
+    
+    async def _schedule_reports(self):
+        """Schedule daily reports at 8:00 and 20:00."""
+        from datetime import timedelta
+        
+        while self.is_running:
+            try:
+                now = datetime.now()
+                
+                # Calculate next report time (8:00 or 20:00)
+                today_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
+                today_8pm = now.replace(hour=20, minute=0, second=0, microsecond=0)
+                
+                if now < today_8am:
+                    next_report = today_8am
+                elif now < today_8pm:
+                    next_report = today_8pm
+                else:
+                    next_report = today_8am + timedelta(days=1)
+                
+                wait_seconds = (next_report - now).total_seconds()
+                logger.info(f"📅 Next report scheduled at {next_report.strftime('%Y-%m-%d %H:%M')}")
+                
+                await asyncio.sleep(wait_seconds)
+                
+                if self.is_running:
+                    await self._generate_all_reports()
+                    
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in report scheduler: {e}")
+                await asyncio.sleep(60)  # Wait before retry
+    
+    async def _generate_all_reports(self):
+        """Generate reports for all channels with cached messages."""
+        if not db.pool:
+            logger.warn("Database not available for report generation")
+            return
+        
+        try:
+            # Get all channels with cached messages
+            channels = await db.pool.fetch("""
+                SELECT DISTINCT channel_id, channel_name 
+                FROM monitor_message_cache 
+                ORDER BY channel_name
+            """)
+            
+            if not channels:
+                logger.info("📊 No cached messages for report generation")
+                return
+            
+            logger.info(f"📊 Generating reports for {len(channels)} channels...")
+            
+            for channel in channels:
+                try:
+                    await self._generate_channel_report(
+                        channel['channel_id'], 
+                        channel['channel_name'] or channel['channel_id']
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to generate report for {channel['channel_name']}: {e}")
+            
+        except Exception as e:
+            logger.error(f"Error generating reports: {e}")
+    
+    async def _generate_channel_report(self, channel_id: str, channel_name: str):
+        """Generate report for a single channel."""
+        if not db.pool:
+            return
+        
+        # Fetch cached messages
+        messages = await db.pool.fetch("""
+            SELECT sender_name, message_text, created_at
+            FROM monitor_message_cache
+            WHERE channel_id = $1
+            ORDER BY created_at ASC
+        """, channel_id)
+        
+        if not messages:
+            return
+        
+        logger.info(f"📝 Generating report for {channel_name} ({len(messages)} messages)")
+        
+        # Format messages for AI
+        msg_list = "\n".join([
+            f"[{m['created_at'].strftime('%H:%M')}] {m['sender_name']}: {(m['message_text'] or '')[:200]}"
+            for m in messages
+        ])
+        
+        # Professional report prompt
+        now = datetime.now()
+        report_type = "早报" if now.hour < 12 else "晚报"
+        date_str = now.strftime("%Y年%m月%d日")
+        
+        prompt = f"""你是一个专业的新闻分析师。请为「{channel_name}」生成{report_type}。
+
+要求：
+1. 使用专业、简洁的语言
+2. 提取最重要的信息
+3. 使用 Markdown 格式
+
+格式模板：
+# {channel_name} {report_type}
+> {date_str} | 共 {len(messages)} 条消息
+
+## 📰 今日要闻
+（列出 3-5 条最重要的消息）
+
+## 📊 数据亮点
+（如有数字或数据，列出关键数据点）
+
+## 💡 值得关注
+（1-2 条需要持续关注的内容）
+
+---
+
+消息记录：
+{msg_list[:8000]}
+"""
+        
+        try:
+            from app.services.ai import ai_service
+            result = await ai_service.quick_chat(prompt)
+            report_content = result.get('content', '报告生成失败')
+            
+            # Add footer
+            report_markdown = f"{report_content}\n\n---\n*由 QuBot 自动生成 | {now.isoformat()}*"
+            
+            # Save to GitHub and get download link
+            download_url = None
+            try:
+                from app.services.github import github_service
+                if github_service.is_ready:
+                    filename = f"reports/{channel_name.replace(' ', '_')}_{now.strftime('%Y%m%d_%H%M')}.md"
+                    download_url = github_service.save_note(
+                        filename, 
+                        report_markdown, 
+                        f"Report: {channel_name} {report_type}"
+                    )
+                    logger.info(f"📎 Report saved: {download_url}")
+            except Exception as e:
+                logger.warn(f"Failed to save report to GitHub: {e}")
+            
+            # Send report to target channel
+            if self.target_channel:
+                # Truncate for Telegram if too long
+                tg_report = report_content
+                if len(tg_report) > 4000:
+                    tg_report = tg_report[:4000] + "\n\n... (内容已截断)"
+                
+                formatted = f"📊 <b>{channel_name} {report_type}</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+                formatted += tg_report.replace("**", "").replace("##", "📌").replace("# ", "📋 ")
+                
+                if download_url:
+                    formatted += f"\n\n📎 <a href='{download_url}'>下载完整报告</a>"
+                
+                target = self.target_channel
+                if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
+                    target = int(target)
+                
+                await telegram_service.send_message(target, formatted, parse_mode='html')
+                logger.info(f"✅ Report sent for {channel_name}")
+            
+            # Clear cache for this channel
+            await db.pool.execute("""
+                DELETE FROM monitor_message_cache WHERE channel_id = $1
+            """, channel_id)
+            logger.info(f"🗑️ Cleared cache for {channel_name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to generate report: {e}")
+    
+    async def _cache_message(self, channel_id: str, channel_name: str, sender_name: str, message_text: str):
+        """Cache a message for daily report."""
+        if not db.pool:
+            return
+        
+        try:
+            await db.pool.execute("""
+                INSERT INTO monitor_message_cache (channel_id, channel_name, sender_name, message_text)
+                VALUES ($1, $2, $3, $4)
+            """, channel_id, channel_name, sender_name, message_text)
+        except Exception as e:
+            logger.warn(f"Failed to cache message: {e}")
     
     async def resolve_channel_info(self, channel: str) -> dict:
         """Resolve channel ID and name from Telegram."""
@@ -590,9 +787,14 @@ class MonitorService:
                         source_handle=source_handle,
                         has_media=has_media
                     )
-                    logger.info(f"📤 {'⭐ VIP - ' if is_vip else ''}{'🛡️ Admin - ' if is_admin else ''}Forwarding to {self.target_channel}")
+                    logger.info(f"📤 {'⭐ VIP - ' if is_vip else ''}{'🛡️ Admin - ' if is_admin else ''}Forwarding...")
                     try:
-                        target = self.target_channel
+                        # VIP messages go to VIP channel if configured
+                        if is_vip and self.vip_target_channel:
+                            target = self.vip_target_channel
+                        else:
+                            target = self.target_channel
+                        
                         if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
                              target = int(target)
                         
@@ -603,7 +805,7 @@ class MonitorService:
                             file=event.message.media,
                             link_preview=False 
                         )
-                        logger.info("✅ Message forwarded successfully")
+                        logger.info(f"✅ Message forwarded to {target}")
                     except Exception as e:
                         logger.error(f"❌ Failed to forward message: {e}")
                 else:
@@ -624,7 +826,10 @@ class MonitorService:
             else:
                 logger.warn("No TARGET_CHANNEL configured, skipping forward")
 
-            # 6. Save History
+            # 7. Cache message for daily reports
+            await self._cache_message(chat_id, chat_title, sender_name, event.message.message)
+            
+            # 8. Save History
             await self._save_to_history(chat_title, chat_id, event.message.message)
 
         except Exception as e:

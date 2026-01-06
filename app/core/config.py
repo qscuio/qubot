@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # Monitoring - stored as comma-separated strings to avoid pydantic-settings JSON parsing
     SOURCE_CHANNELS: Optional[str] = None
     TARGET_CHANNEL: Optional[str] = None
+    VIP_TARGET_CHANNEL: Optional[str] = None  # Separate channel for VIP user messages
     KEYWORDS: Optional[str] = None
     FROM_USERS: Optional[str] = None
     ALLOWED_USERS: Optional[str] = None
@@ -55,7 +56,7 @@ class Settings(BaseSettings):
     # Summarization settings
     MONITOR_SUMMARIZE: bool = True  # Enable message summarization
     MONITOR_BUFFER_SIZE: int = 200   # Summarize after N messages
-    MONITOR_BUFFER_TIMEOUT: int = 300  # Summarize after N seconds (5 min)
+    MONITOR_BUFFER_TIMEOUT: int = 7200  # Summarize after N seconds (2 hours)
 
     @property
     def source_channels_list(self) -> list:

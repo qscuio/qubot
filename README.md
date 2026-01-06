@@ -45,6 +45,9 @@ A modular Telegram application with REST API support, built with Python (FastAPI
 | `/sources` | Manage source channels (with inline buttons) |
 | `/add <channel>` | Add source channel |
 | `/remove <channel>` | Remove source channel |
+| `/vip <user>` | Add VIP user (instant forward) |
+| `/unvip <user>` | Remove VIP user |
+| `/vips` | Manage VIP users |
 | `/clear` | Remove all sources |
 | `/status` | Show current status |
 | `/history` | Recent forwarded messages |
@@ -226,6 +229,7 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 |----------|-------------|---------|
 | `SOURCE_CHANNELS` | Channels to monitor | `-1001234567890,-1009876543210` |
 | `TARGET_CHANNEL` | Forward destination | `-1001111111111` |
+| `VIP_TARGET_CHANNEL` | VIP user messages destination | `-1002222222222` |
 | `KEYWORDS` | Filter keywords (or `none`) | `bitcoin,crypto` |
 | `FROM_USERS` | Filter by usernames | `@user1,@user2` |
 

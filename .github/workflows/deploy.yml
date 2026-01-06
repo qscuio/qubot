@@ -281,6 +281,7 @@ jobs:
             printf 'OPENROUTER_API_KEY=%s\n' '${{ secrets.OPENROUTER_API_KEY }}' >> .env
             printf 'SOURCE_CHANNELS=%s\n' '${{ secrets.SOURCE_CHANNELS }}' >> .env
             printf 'TARGET_CHANNEL=%s\n' '${{ secrets.TARGET_CHANNEL }}' >> .env
+            printf 'VIP_TARGET_CHANNEL=%s\n' '${{ secrets.VIP_TARGET_CHANNEL }}' >> .env
             printf 'KEYWORDS=%s\n' '${{ secrets.KEYWORDS }}' >> .env
             printf 'FROM_USERS=%s\n' '${{ secrets.FROM_USERS }}' >> .env
             printf 'NOTES_REPO=%s\n' '${{ secrets.NOTES_REPO }}' >> .env

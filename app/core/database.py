@@ -85,6 +85,28 @@ class Database:
                 );
             """)
 
+            # Monitor Message Cache (for daily reports)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS monitor_message_cache (
+                    id SERIAL PRIMARY KEY,
+                    channel_id TEXT NOT NULL,
+                    channel_name TEXT,
+                    sender_name TEXT,
+                    message_text TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            
+            # Index for efficient queries by channel and time
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cache_channel 
+                ON monitor_message_cache(channel_id);
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cache_time 
+                ON monitor_message_cache(created_at);
+            """)
+
             # RSS Sources Table
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS rss_sources (
