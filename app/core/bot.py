@@ -124,7 +124,7 @@ class TelegramService:
             await callback(event)
         logger.info(f"Registered message handler on client {index}")
 
-    async def send_message(self, peer, message, parse_mode=None, file=None):
+    async def send_message(self, peer, message, parse_mode=None, file=None, link_preview=None):
         """Send message using the MAIN client."""
         if not self.connected or not self.main_client:
             logger.warn("Cannot send message, no main client connected")
@@ -133,6 +133,8 @@ class TelegramService:
         # Process media types
         sendable_file = None
         enable_link_preview = True  # Default: allow link previews
+        if link_preview is not None:
+            enable_link_preview = bool(link_preview)
         
         if file:
             from telethon.tl.types import (
@@ -146,7 +148,6 @@ class TelegramService:
                 # WebPage previews - Telegram will regenerate from URLs in text
                 # Just enable link preview, the URLs in HTML will create the preview
                 sendable_file = None
-                enable_link_preview = True
             elif hasattr(file, 'photo') or hasattr(file, 'document'):
                 sendable_file = file
         
