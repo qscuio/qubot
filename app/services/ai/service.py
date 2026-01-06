@@ -143,9 +143,34 @@ class AiService:
             context_prefix=system_prompt
         )
 
-    async def summarize(self, text: str, max_length: int = 200, options: Dict = None) -> str:
-        """Summarize text content."""
-        prompt = f"Summarize the following text in {max_length} characters or less:\n\n{text}"
+    async def summarize(self, text: str, max_length: int = 200, language: str = "en", options: Dict = None) -> str:
+        """Summarize text content in specified language (en or zh)."""
+        if language == "zh":
+            prompt = f"""请用中文对以下内容进行专业总结（限{max_length}字以内）。
+
+要求：
+1. 提取核心观点和关键信息
+2. 保留重要的数据、名称和结论
+3. 使用简洁专业的语言
+4. 突出可操作的信息或建议
+
+内容：
+{text}
+
+总结："""
+        else:
+            prompt = f"""Provide a professional summary of the following content ({max_length} chars max).
+
+Requirements:
+1. Extract core points and key information
+2. Preserve important data, names, and conclusions
+3. Use concise, professional language
+4. Highlight actionable insights
+
+Content:
+{text}
+
+Summary:"""
         result = await self.analyze(prompt, options)
         return result.get("content", "")
 

@@ -24,6 +24,12 @@ class ChatResponse(BaseModel):
     model: Optional[str] = None
 
 
+class SummarizeRequest(BaseModel):
+    text: str
+    max_length: Optional[int] = 200
+    language: Optional[str] = "en"  # "en" or "zh"
+
+
 class SubscribeRequest(BaseModel):
     url: str
     chat_id: Optional[str] = None
@@ -91,6 +97,15 @@ async def ai_chat(req: ChatRequest, user_id: str = Depends(verify_api_key)):
         model=None
     )
 
+
+@router.post("/ai/summarize")
+async def ai_summarize(req: SummarizeRequest, user_id: str = Depends(verify_api_key)):
+    """Summarize text in English or Chinese."""
+    if not ai_service.is_available():
+        raise HTTPException(status_code=503, detail="AI service not configured")
+    
+    result = await ai_service.summarize(req.text, req.max_length, req.language)
+    return {"summary": result, "language": req.language}
 
 # RSS Endpoints
 @router.get("/rss/subscriptions")

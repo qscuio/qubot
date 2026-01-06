@@ -554,25 +554,30 @@ class MonitorService:
             # Build summary using AI
             from app.services.ai import ai_service
             
-            # Format messages for summarization
+            # Format messages for summarization (with sender preserved)
             msg_list = "\n".join([
                 f"[{m['time']}] {m['sender']}: {m['text'][:200]}" 
                 for m in messages
             ])
             
-            prompt = f"""Summarize the following group chat messages concisely. 
-Focus on the main topics discussed and any important information shared.
-Keep the summary brief (2-3 sentences max).
+            # Chinese prompt for group chat summarization
+            prompt = f"""你是一个专业的群聊消息分析助手。请用中文对以下群聊消息进行结构化总结。
 
-Messages:
+分析要求：
+1. 【讨论主题】：识别主要讨论的话题（1-3个）
+2. 【关键信息】：提取重要的数据、链接、资源或结论
+3. 【决策与共识】：总结任何达成的决定或共识
+4. 【待跟进事项】：列出需要后续关注的行动项
+
+消息记录:
 {msg_list}
 
-Summary:"""
+请直接输出总结内容，不需要严格按照上述格式，保持自然流畅："""
             
             result = await ai_service.quick_chat(prompt)
-            summary = result.get('content', 'Unable to summarize')
+            summary = result.get('content', '无法生成摘要')
             
-            # Format and send summary
+            # Format time range
             times = [m.get('time') for m in messages if m.get('time')]
             time_range = None
             if times:
@@ -583,14 +588,26 @@ Summary:"""
             meta_bits = []
             if time_range:
                 meta_bits.append(f"🕒 {time_range}")
-            meta_bits.append(f"💬 {len(messages)} messages")
+            meta_bits.append(f"💬 {len(messages)} 条消息")
             meta_line = " • ".join(meta_bits)
             
+            # Build raw history (preserving sender names)
+            raw_history = "\n".join([
+                f"[{m['time']}] {m['sender']}: {m['text'][:150]}" 
+                for m in messages
+            ])
+            
+            # Truncate raw history if too long (Telegram message limit)
+            if len(raw_history) > 3000:
+                raw_history = raw_history[:3000] + "\n... (更多消息已省略)"
+            
             formatted_summary = (
-                f"📊 <b>Summary from {source_name}</b>\n"
+                f"📊 <b>群组消息汇总 - {source_name}</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━\n"
                 f"{meta_line}\n\n"
-                f"{summary.strip()}"
+                f"<b>📝 摘要:</b>\n{summary.strip()}\n\n"
+                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"<b>📜 原始消息:</b>\n<code>{raw_history}</code>"
             )
             
             target = self.target_channel
@@ -603,7 +620,7 @@ Summary:"""
         except Exception as e:
             logger.error(f"❌ Failed to summarize: {e}")
             # Fallback: send a simple count message
-            fallback_msg = f"📊 {len(messages)} messages from {source_name} (summarization failed)"
+            fallback_msg = f"📊 {len(messages)} 条消息来自 {source_name} (摘要生成失败)"
             try:
                 target = self.target_channel
                 if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
