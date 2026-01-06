@@ -2,3 +2,9 @@ node_modules/
 .env
 .DS_Store
 logs/
+
+# Virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc

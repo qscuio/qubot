@@ -1,27 +1,17 @@
-# Build stage
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
+FROM python:3.11-slim
 
-# Production stage
-FROM node:20-alpine
 WORKDIR /app
 
-# Install git for /export command and curl for runtime/debug probes
-RUN apk add --no-cache git openssh-client curl
+# Install system dependencies (git for gitpython, nodejs/npm for legacy hooks)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
-# Install production dependencies only
-COPY package*.json ./
-RUN npm ci --omit=dev
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY src ./src/
-COPY web ./web/
-COPY scripts ./scripts/
+COPY . .
 
-# Health check (optional - bot doesn't have HTTP endpoint by default)
-# HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-#   CMD node -e "console.log('ok')"
+# Set python path
+ENV PYTHONPATH=/app
 
-CMD ["npm", "start"]
+# Run the application
+CMD ["python", "app/main.py"]
