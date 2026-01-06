@@ -263,51 +263,32 @@ jobs:
             git checkout -B "$DEPLOY_BRANCH" "origin/$DEPLOY_BRANCH"
             git reset --hard "origin/$DEPLOY_BRANCH"
             
-            # Create .env file
-            cat > .env << 'EOF'
-            # Telegram API
-            API_ID=${{ secrets.API_ID }}
-            API_HASH=${{ secrets.API_HASH }}
-            TG_SESSION=${{ secrets.TG_SESSION }}
-            
-            # Bot Tokens
-            RSS_BOT_TOKEN=${{ secrets.RSS_BOT_TOKEN }}
-            AI_BOT_TOKEN=${{ secrets.AI_BOT_TOKEN }}
-            MONITOR_BOT_TOKEN=${{ secrets.MONITOR_BOT_TOKEN }}
-            
-            # Webhook Config
-            WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}
-            BOT_PORT=${{ secrets.BOT_PORT || '3000' }}
-            BOT_SECRET=${{ secrets.BOT_SECRET }}
-            
-            # AI Provider Keys
-            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
-            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
-            NVIDIA_API_KEY=${{ secrets.NVIDIA_API_KEY }}
-            
-            # Monitoring
-            SOURCE_CHANNELS=${{ secrets.SOURCE_CHANNELS }}
-            TARGET_CHANNEL=${{ secrets.TARGET_CHANNEL }}
-            KEYWORDS=${{ secrets.KEYWORDS }}
-            FROM_USERS=${{ secrets.FROM_USERS }}
-            
-            # GitHub Export
-            NOTES_REPO=${{ secrets.NOTES_REPO }}
-            GIT_SSH_KEY_PATH=${{ secrets.GIT_SSH_KEY_PATH }}
-            GIT_SSH_COMMAND=${{ secrets.GIT_SSH_COMMAND }}
-            
-            # REST API
-            API_ENABLED=${{ secrets.API_ENABLED || 'true' }}
-            API_PORT=${{ secrets.API_PORT || '3001' }}
-            API_KEYS=${{ secrets.API_KEYS }}
-            WEBFRONT_URL=${{ secrets.WEBFRONT_URL }}
-            
-            # Misc
-            RATE_LIMIT_MS=${{ secrets.RATE_LIMIT_MS }}
-            LOG_LEVEL=${{ secrets.LOG_LEVEL }}
-            EOF
+            # Create .env file - use printf to preserve special characters in secrets
+            printf 'TG_SESSIONS_JSON=%s\n' '${{ secrets.TG_SESSIONS_JSON }}' > .env
+            printf 'RSS_BOT_TOKEN=%s\n' '${{ secrets.RSS_BOT_TOKEN }}' >> .env
+            printf 'AI_BOT_TOKEN=%s\n' '${{ secrets.AI_BOT_TOKEN }}' >> .env
+            printf 'MONITOR_BOT_TOKEN=%s\n' '${{ secrets.MONITOR_BOT_TOKEN }}' >> .env
+            printf 'WEBHOOK_URL=%s\n' '${{ secrets.WEBHOOK_URL }}' >> .env
+            printf 'BOT_PORT=%s\n' '${{ secrets.BOT_PORT }}' >> .env
+            printf 'BOT_SECRET=%s\n' '${{ secrets.BOT_SECRET }}' >> .env
+            printf 'GROQ_API_KEY=%s\n' '${{ secrets.GROQ_API_KEY }}' >> .env
+            printf 'GEMINI_API_KEY=%s\n' '${{ secrets.GEMINI_API_KEY }}' >> .env
+            printf 'OPENAI_API_KEY=%s\n' '${{ secrets.OPENAI_API_KEY }}' >> .env
+            printf 'CLAUDE_API_KEY=%s\n' '${{ secrets.CLAUDE_API_KEY }}' >> .env
+            printf 'NVIDIA_API_KEY=%s\n' '${{ secrets.NVIDIA_API_KEY }}' >> .env
+            printf 'SOURCE_CHANNELS=%s\n' '${{ secrets.SOURCE_CHANNELS }}' >> .env
+            printf 'TARGET_CHANNEL=%s\n' '${{ secrets.TARGET_CHANNEL }}' >> .env
+            printf 'KEYWORDS=%s\n' '${{ secrets.KEYWORDS }}' >> .env
+            printf 'FROM_USERS=%s\n' '${{ secrets.FROM_USERS }}' >> .env
+            printf 'NOTES_REPO=%s\n' '${{ secrets.NOTES_REPO }}' >> .env
+            printf 'GIT_SSH_KEY_PATH=%s\n' '${{ secrets.GIT_SSH_KEY_PATH }}' >> .env
+            printf 'GIT_SSH_COMMAND=%s\n' '${{ secrets.GIT_SSH_COMMAND }}' >> .env
+            printf 'API_ENABLED=%s\n' '${{ secrets.API_ENABLED }}' >> .env
+            printf 'API_PORT=%s\n' '${{ secrets.API_PORT }}' >> .env
+            printf 'API_KEYS=%s\n' '${{ secrets.API_KEYS }}' >> .env
+            printf 'WEBFRONT_URL=%s\n' '${{ secrets.WEBFRONT_URL }}' >> .env
+            printf 'RATE_LIMIT_MS=%s\n' '${{ secrets.RATE_LIMIT_MS }}' >> .env
+            printf 'LOG_LEVEL=%s\n' '${{ secrets.LOG_LEVEL }}' >> .env
             
             # Deploy
             docker compose down || true
@@ -347,7 +328,7 @@ jobs:
             fi
             
             if docker compose ps userbot | grep -q "Up"; then
-              docker compose exec -T userbot npm run setup-webhook
+              docker compose exec -T userbot python scripts/setup_webhook.py
             else
               echo "❌ Container not running"
               exit 1

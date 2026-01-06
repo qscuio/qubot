@@ -1,16 +1,16 @@
 # QuBot - Multi-Bot Telegram Application
 
-A professional, modular Telegram application with REST API support for building alternative frontends.
+A modular Telegram application with REST API support, built with Python (FastAPI + Aiogram + Telethon).
 
 ## Features
 
-- 🤖 **Multi-Bot Architecture** - 1 Userbot (MTProto) + unlimited Bot API bots
-- 🌐 **REST API** - Full API for AI, RSS, and monitoring (run your own UI!)
-- 🔌 **WebSocket** - Real-time message streaming from monitored channels
-- 📡 **Channel Monitoring** - Monitor Telegram channels with keyword filters
+- 🤖 **Multi-Bot Architecture** - Multiple Userbots (MTProto) + unlimited Bot API bots
+- 🔀 **Master-Slave Monitoring** - First session forwards to target, others monitor only
+- 🌐 **REST API** - Full API for AI, RSS, and monitoring
+-  **Channel Monitoring** - Monitor Telegram channels with keyword filters
 - 📰 **RSS Subscriptions** - User-managed subscriptions delivered to TARGET_CHANNEL
 - 🧠 **AI Chat** - Multi-provider AI (Groq, Gemini, OpenAI, Claude, NVIDIA) with chat history
-- 🔗 **Webhook Mode** - Nginx reverse proxy with Let's Encrypt SSL
+- 🔗 **Webhook Mode** - Production-ready with webhook support
 - 💾 **PostgreSQL Storage** - Persistent subscriptions, chat history, settings
 - 🐳 **Dockerized** - Easy deployment with Docker Compose
 
@@ -19,18 +19,17 @@ A professional, modular Telegram application with REST API support for building 
 ### 📰 RSS Bot
 | Command | Description |
 |---------|-------------|
-| `/start` | Welcome & quick actions |
+| `/start` | Main menu with status |
 | `/sub <url>` | Subscribe to RSS feed |
-| `/unsub <id>` | Unsubscribe |
+| `/unsub` | Unsubscribe (with inline buttons) |
 | `/list` | List subscriptions |
-| `/status` | Check bot status |
 
 **Token:** `RSS_BOT_TOKEN`
 
 ### 🧠 AI Bot
 | Command | Description |
 |---------|-------------|
-| `/ai <text>` | Ask AI (or just send a message) |
+| `/start` | Main menu with provider/model info |
 | `/new` | Start new chat |
 | `/chats` | List/switch chats |
 | `/providers` | Select AI provider |
@@ -42,12 +41,14 @@ A professional, modular Telegram application with REST API support for building 
 ### 🔔 Monitor Bot
 | Command | Description |
 |---------|-------------|
-| `/sources` | List source channels |
+| `/start` | Main menu with start/stop controls |
+| `/sources` | Manage source channels (with inline buttons) |
 | `/add <channel>` | Add source channel |
-| `/remove <channel>` | Remove source |
+| `/remove <channel>` | Remove source channel |
+| `/clear` | Remove all sources |
+| `/status` | Show current status |
 | `/history` | Recent forwarded messages |
-| `/monitor` | Start/stop monitoring |
-| `/filters` | Show filter policies |
+| `/help` | Show all commands |
 
 **Token:** `MONITOR_BOT_TOKEN`
 
@@ -57,7 +58,7 @@ A professional, modular Telegram application with REST API support for building 
                            ┌─────────────────────────────────────┐
                            │            Frontends                │
                            ├─────────────┬───────────────────────┤
-                           │  Telegram   │     REST API / WS     │
+                           │  Telegram   │     REST API          │
                            │    Bots     │     (Web UI, etc.)    │
                            └──────┬──────┴───────────┬───────────┘
                                   │                  │
@@ -65,10 +66,10 @@ A professional, modular Telegram application with REST API support for building 
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Service Layer                             │
 ├─────────────────┬─────────────────┬─────────────────────────────┤
-│   AiService     │   RssService    │       MonitorService        │
+│   ai_service    │   rss_service   │       monitor_service       │
 │   - Chat        │   - Subscribe   │   - Source management       │
-│   - Providers   │   - Validate    │   - Real-time streaming     │
-│   - Export      │   - Unsubscribe │   - Filter policies         │
+│   - Providers   │   - Validate    │   - Keyword filtering       │
+│   - Export      │   - Unsubscribe │   - Multi-session monitor   │
 └─────────────────┴─────────────────┴─────────────────────────────┘
                                   │
                                   ▼
@@ -78,85 +79,41 @@ A professional, modular Telegram application with REST API support for building 
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Project Structure
+
 ```
-src/
-├── api/                    # REST API
-│   ├── ApiServer.js        # Express server
-│   ├── WebSocketHandler.js # Real-time streaming
-│   └── auth.js             # API key auth
-├── services/               # Business logic (decoupled from Telegram)
-│   ├── AiService.js        # AI chat logic
-│   ├── RssService.js       # RSS subscription logic
-│   └── MonitorService.js   # Channel monitoring logic
-├── bots/                   # Telegram bots (thin wrappers)
-│   ├── ai-bot/             # AI chat commands
-│   ├── rss-bot/            # RSS subscription commands
-│   └── monitor-bot/        # Channel monitoring commands
-├── core/                   # Core infrastructure
-│   ├── App.js              # Main entry
-│   ├── BotManager.js       # Manages bots
-│   ├── StorageService.js   # PostgreSQL
-│   └── TelegramService.js  # Userbot (MTProto)
-└── providers/              # AI providers
-```
-
-## REST API
-
-Full API documentation: [docs/api.md](docs/api.md)
-
-**Quick start:**
-```bash
-# Add to .env
-API_KEYS=myapikey:1
-
-# Start app
-npm start
-
-# Test API
-curl http://localhost:3001/health
-curl -H "Authorization: Bearer myapikey" http://localhost:3001/api/ai/providers
-```
-
-**Key endpoints:**
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/api/ai/chat` | Send message, get AI response |
-| GET | `/api/ai/jobs` | List AI job types |
-| POST | `/api/ai/jobs/:id` | Run a job by id |
-| GET | `/api/rss/subscriptions` | List subscriptions |
-| GET | `/api/monitor/sources` | List source channels |
-| WS | `/ws/monitor` | Real-time message stream |
-
-### AI Job Endpoints (Examples)
-
-List jobs:
-```bash
-curl -H "Authorization: Bearer myapikey" \
-  http://localhost:3001/api/ai/jobs
-```
-
-Run a job with a structured payload:
-```bash
-curl -H "Authorization: Bearer myapikey" \
-  -H "Content-Type: application/json" \
-  -d '{"payload":{"text":"Hello","targetLanguage":"French"}}' \
-  http://localhost:3001/api/ai/jobs/translate
-```
-
-Convenience endpoints map to jobs:
-```bash
-# Summarize
-curl -H "Authorization: Bearer myapikey" \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Long text...","maxLength":200}' \
-  http://localhost:3001/api/ai/summarize
-
-# Function call routing
-curl -H "Authorization: Bearer myapikey" \
-  -H "Content-Type: application/json" \
-  -d '{"task":"Create a user","functions":[{"name":"createUser","description":"Create user","parameters":{}}]}' \
-  http://localhost:3001/api/ai/function-call
+qubot/
+├── app/
+│   ├── api/                 # REST API endpoints
+│   │   └── routes.py        # API router
+│   ├── bots/                # Telegram bot handlers
+│   │   ├── ai/              # AI bot commands
+│   │   ├── rss/             # RSS bot commands
+│   │   ├── monitor/         # Monitor bot commands
+│   │   └── dispatcher.py    # Bot dispatcher
+│   ├── services/            # Business logic
+│   │   ├── ai/              # AI service + providers
+│   │   ├── rss.py           # RSS subscription service
+│   │   ├── monitor.py       # Channel monitoring service
+│   │   └── github.py        # GitHub export service
+│   ├── providers/           # AI providers
+│   │   ├── groq.py
+│   │   ├── gemini.py
+│   │   ├── openai.py
+│   │   ├── claude.py
+│   │   └── nvidia.py
+│   ├── core/                # Core infrastructure
+│   │   ├── config.py        # Settings (pydantic)
+│   │   ├── database.py      # PostgreSQL + Redis
+│   │   ├── bot.py           # TelegramService (Telethon)
+│   │   └── logger.py        # Logging
+│   └── main.py              # FastAPI entry point
+├── scripts/
+│   ├── generate_session.py  # Generate Telethon sessions
+│   └── setup_webhook.py     # Register webhooks
+├── docker-compose.yml
+├── Dockerfile
+└── requirements.txt
 ```
 
 ## Quick Deploy
@@ -169,12 +126,42 @@ cp .env.example .env
 ```
 
 **Required:**
-- `API_ID`, `API_HASH`, `TG_SESSION` - Telegram API credentials
+- `TG_SESSIONS_JSON` - Telegram sessions (JSON array, see below)
 - Bot tokens: `RSS_BOT_TOKEN`, `AI_BOT_TOKEN`, `MONITOR_BOT_TOKEN`
 
-**Optional:**
-- `API_KEYS` - For REST API access
-- AI provider keys: `GROQ_API_KEY`, `GEMINI_API_KEY`, etc.
+**Sessions JSON Format:**
+```json
+[
+  {
+    "session": "1BVtsOH...",
+    "api_id": 12345678,
+    "api_hash": "abc123def456...",
+    "master": true
+  },
+  {
+    "session": "1CWutPI...",
+    "api_id": 87654321,
+    "api_hash": "xyz789ghi012..."
+  }
+]
+```
+
+> **Note:** The session with `"master": true` forwards messages to TARGET_CHANNEL. Other sessions are slaves (monitor only).
+>
+> **Important:** The JSON must be on a **single line** when stored as GitHub secret.
+
+**Generating Session Strings:**
+
+```bash
+# Run the session generator
+docker compose exec userbot python scripts/generate_session.py
+```
+
+When prompted:
+1. Enter your **API_ID** (from my.telegram.org)
+2. Enter your **API_HASH** (from my.telegram.org)
+3. Enter your **phone number** (e.g., `+1234567890`)
+4. Enter the **login code** sent to your Telegram
 
 ### Step 2: Run
 
@@ -187,187 +174,155 @@ docker compose logs -f
 
 **Telegram:** Message your bot with `/start`
 
-**REST API:**
+**Health Check:**
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:3888/health
 ```
 
-## GitHub Secrets (for CI/CD)
+## Environment Variables
 
-### Required Secrets
+### Telegram Sessions
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| **VPS** | | |
-| `VPS_HOST` | VPS IP address | `123.45.67.89` |
-| `VPS_USER` | SSH user | `root` |
-| `VPS_SSH_KEY` | Private SSH key | `-----BEGIN OPENSSH...` |
-| **Telegram API** | | |
-| `API_ID` | Telegram API ID | `12345678` |
-| `API_HASH` | Telegram API Hash | `abc123...` |
-| `TG_SESSION` | Session string | `1BVtsOH...` |
-| **Bot Tokens** | | |
-| `RSS_BOT_TOKEN` | RSS Bot token | `123:ABC...` |
-| `AI_BOT_TOKEN` | AI Bot token | `456:DEF...` |
-| `MONITOR_BOT_TOKEN` | Monitor Bot token | `789:GHI...` |
+| Variable | Description |
+|----------|-------------|
+| `TG_SESSIONS_JSON` | Sessions JSON array (see format above) |
 
-### Webhook & Web Frontend
+### Bot Tokens
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `WEBHOOK_URL` | Bot webhook domain | `https://bot.yourdomain.com` |
-| `WEBFRONT_URL` | Web frontend domain | `https://app.yourdomain.com` |
-| `BOT_PORT` | Webhook server port | `3000` |
+| Variable | Description |
+|----------|-------------|
+| `MONITOR_BOT_TOKEN` | Monitor bot (@BotFather) |
+| `AI_BOT_TOKEN` | AI bot (@BotFather) |
+| `RSS_BOT_TOKEN` | RSS bot (@BotFather) |
+
+### Webhook
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `WEBHOOK_URL` | Webhook base URL | `https://bot.yourdomain.com` |
+| `BOT_PORT` | Webhook server port | `3888` |
 | `BOT_SECRET` | Webhook security token | Random string |
 
-### REST API
+### AI Providers
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `API_ENABLED` | Enable/disable REST API | `true` |
-| `API_PORT` | REST API server port | `3001` |
-| `API_KEYS` | API keys (key:userId,...) | `mykey:1,otherkey:2` |
-
-### AI Providers (Optional)
-
-| Secret | Description |
-|--------|-------------|
+| Variable | Description |
+|----------|-------------|
 | `GROQ_API_KEY` | Groq API key |
 | `GEMINI_API_KEY` | Google Gemini API key |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `CLAUDE_API_KEY` | Anthropic Claude key |
 | `NVIDIA_API_KEY` | NVIDIA NIM key |
 
-### Monitoring (Optional)
+### Monitoring
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `SOURCE_CHANNELS` | Channels to monitor | `@channel1,@channel2` |
-| `TARGET_CHANNEL` | Forward destination | `@mychannel` |
-| `KEYWORDS` | Filter keywords | `bitcoin,crypto` |
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `SOURCE_CHANNELS` | Channels to monitor | `-1001234567890,-1009876543210` |
+| `TARGET_CHANNEL` | Forward destination | `-1001111111111` |
+| `KEYWORDS` | Filter keywords (or `none`) | `bitcoin,crypto` |
 | `FROM_USERS` | Filter by usernames | `@user1,@user2` |
 
-### Access Control (Optional)
+### Access Control
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `ALLOWED_USERS` | Allowed Telegram usernames/IDs | `@user1,123456789` |
+| Variable | Description |
+|----------|-------------|
+| `ALLOWED_USERS` | Allowed Telegram user IDs | `123456789,987654321` |
 
-### RSS (Optional)
+### REST API
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `RSS_SOURCES` | RSS sources JSON override | `[{\"name\":\"HN\",\"url\":\"https://news.ycombinator.com/rss\"}]` |
-| `RSS_POLL_INTERVAL_MS` | RSS poll interval (ms) | `300000` |
+| Variable | Description |
+|----------|-------------|
+| `API_ENABLED` | Enable REST API | `true` |
+| `API_KEYS` | API keys (key=userId,...) | `mykey=1` |
 
-### Database & Cache
+### GitHub Export
 
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://qubot:qubot@postgres:5432/qubot` |
-| `REDIS_URL` | Redis connection string | `redis://redis:6379` |
-
-### GitHub Export (Optional)
-
-| Secret | Description |
-|--------|-------------|
-| `NOTES_REPO` | GitHub repo for exports |
-| `GIT_SSH_COMMAND` | Custom SSH command for GitHub |
-| `GIT_SSH_KEY_PATH` | SSH key path for GitHub |
-| `GIT_KNOWN_HOSTS` | Known hosts file for GitHub |
+| Variable | Description |
+|----------|-------------|
+| `NOTES_REPO` | GitHub repo for exports | `git@github.com:user/notes.git` |
+| `GIT_SSH_KEY_PATH` | SSH key path | `/root/.ssh/github_actions` |
 
 ### Other
 
+| Variable | Description |
+|----------|-------------|
+| `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` |
+| `RATE_LIMIT_MS` | Rate limiting (ms) | `5000` |
+
+## GitHub Actions Deployment
+
+Add these secrets to your GitHub repository:
+
 | Secret | Description |
 |--------|-------------|
-| `RATE_LIMIT_MS` | Bot rate limiting interval |
-| `LOG_LEVEL` | `debug`, `info`, `warn`, `error` |
-
----
+| `VPS_HOST` | VPS IP address |
+| `VPS_USER` | SSH user |
+| `VPS_SSH_KEY` | Private SSH key |
+| `TG_SESSIONS_JSON` | Sessions JSON (single line) |
+| `MONITOR_BOT_TOKEN` | Monitor bot token |
+| `AI_BOT_TOKEN` | AI bot token |
+| `RSS_BOT_TOKEN` | RSS bot token |
+| `WEBHOOK_URL` | Webhook URL |
+| `BOT_SECRET` | Webhook secret |
+| ... | (other env variables) |
 
 ## Debugging
 
-### Check Service Status
+### Check Logs
 ```bash
-# SSH to VPS
-ssh your-vps
-cd /opt/qubot
+docker compose logs -f userbot
+docker compose logs userbot | grep -i error
+```
 
-# Container status
-docker compose ps
+### Check Webhook Status
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
+```
 
-# View logs
+### Restart Services
+```bash
+docker compose down && docker compose up -d
 docker compose logs -f
-docker compose logs userbot --tail 100
-
-# Check specific service
-docker compose logs userbot 2>&1 | grep -i error
-```
-
-### Check API Server
-```bash
-# On VPS - is port 3001 listening?
-curl http://localhost:3001/health
-
-# From outside - through Nginx
-curl https://app.yourdomain.com/health
-```
-
-### Debug API_PORT Mapping
-```bash
-# Confirm compose resolved your port mappings
-docker compose config | rg -n "ports:|API_PORT|3001"
-
-# Confirm container env is set
-docker compose exec userbot printenv | rg "API_(ENABLED|PORT|KEYS)"
-
-# Confirm API startup logs
-docker compose logs userbot --tail 100 | rg "API:"
-
-# Health check (local)
-curl http://localhost:${API_PORT:-3001}/health
-```
-
-If you use a domain, make sure your reverse proxy routes the domain to `http://127.0.0.1:$API_PORT`.
-
-### Check Nginx
-```bash
-# Test Nginx config
-sudo nginx -t
-
-# View Nginx logs
-sudo tail -f /var/log/nginx/error.log
-
-# Check sites enabled
-ls -la /etc/nginx/sites-enabled/
 ```
 
 ### Common Issues
 
 | Issue | Solution |
 |-------|----------|
-| **502 Bad Gateway** | API server not running. Check `docker compose logs` |
-| **Connection refused** | Port not open. Run `ufw allow 3001` |
-| **Unauthorized** | Check `API_KEYS` in .env matches your request |
-| **WebSocket fails** | Check Nginx has `proxy_set_header Upgrade` |
+| **Webhook rejected: invalid secret** | Restart container to re-register webhooks |
+| **Bot not responding** | Check `ALLOWED_USERS` or logs for errors |
+| **AI timeout** | Provider may be slow, check logs |
 
-### Restart Services
+## Development
+
+### Local Development
+
 ```bash
-cd /opt/qubot
-docker compose down
-docker compose up -d --build
-docker compose logs -f
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run locally
+python -m app.main
 ```
 
----
+### Adding a New AI Provider
 
-## Adding a New Bot
+1. Create `app/providers/yourprovider.py`
+2. Extend `BaseProvider` class
+3. Implement `chat()` and `list_models()` methods
+4. Register in `app/services/ai/__init__.py`
+5. Add API key to config
 
-1. Create `src/bots/your-bot/index.js`
-2. Extend `BotInstance`
-3. Create `src/services/YourService.js` for business logic
-4. Register in `App.js`
-5. Add `YOUR_BOT_TOKEN` to GitHub Secrets
+### Adding a New Bot
+
+1. Create `app/bots/yourbot/handlers.py`
+2. Create router with command handlers
+3. Register in `app/bots/dispatcher.py`
+4. Add `YOUR_BOT_TOKEN` to config
 
 ## License
 

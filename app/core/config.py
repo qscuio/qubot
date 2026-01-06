@@ -1,0 +1,140 @@
+import os
+from pydantic_settings import BaseSettings
+from pydantic import field_validator, Field
+from typing import List, Optional
+
+def parse_comma_list(v):
+    """Parse comma-separated string into list. 'none' means empty/no filtering."""
+    if isinstance(v, list):
+        return v
+    if isinstance(v, str):
+        # Treat 'none' as no filtering
+        if v.strip().lower() == 'none':
+            return []
+        return [x.strip() for x in v.split(',') if x.strip() and x.strip().lower() != 'none']
+    return []
+
+class Settings(BaseSettings):
+    # Telegram Sessions (JSON format)
+    # Format: [{"session": "...", "api_id": 123, "api_hash": "...", "master": true}, ...]
+    SESSIONS_JSON: Optional[str] = Field(default=None, validation_alias='TG_SESSIONS_JSON')
+    
+    # Bot Tokens (from @BotFather)
+    MONITOR_BOT_TOKEN: Optional[str] = None
+    AI_BOT_TOKEN: Optional[str] = None
+    RSS_BOT_TOKEN: Optional[str] = None
+    BOT_TOKEN: Optional[str] = None  # Legacy single token
+    
+    # Webhook
+    WEBHOOK_URL: Optional[str] = None
+    BOT_SECRET: Optional[str] = None
+    BOT_PORT: int = 3000
+    API_PORT: int = 3001
+    DOMAIN: Optional[str] = None
+    
+    # App Settings
+    LOG_LEVEL: str = "INFO"
+    RATE_LIMIT_MS: Optional[int] = 5000
+    RSS_POLL_INTERVAL_MS: Optional[int] = 300000
+
+    @field_validator('RATE_LIMIT_MS', 'RSS_POLL_INTERVAL_MS', 'BOT_PORT', 'API_PORT', mode='before')
+    @classmethod
+    def parse_optional_int(cls, v, info):
+        if v is None or v == '':
+            defaults = {'RATE_LIMIT_MS': 5000, 'RSS_POLL_INTERVAL_MS': 300000, 'BOT_PORT': 3000, 'API_PORT': 3001}
+            return defaults.get(info.field_name)
+        return int(v)
+    
+    # Monitoring - stored as comma-separated strings to avoid pydantic-settings JSON parsing
+    SOURCE_CHANNELS: Optional[str] = None
+    TARGET_CHANNEL: Optional[str] = None
+    KEYWORDS: Optional[str] = None
+    FROM_USERS: Optional[str] = None
+    ALLOWED_USERS: Optional[str] = None
+
+    @property
+    def source_channels_list(self) -> list:
+        return parse_comma_list(self.SOURCE_CHANNELS)
+
+    @property
+    def sessions_list(self) -> List[dict]:
+        """
+        Parse SESSIONS_JSON into a list of dicts.
+        Format: [{"session": "...", "api_id": 123, "api_hash": "..."}]
+        """
+        if not self.SESSIONS_JSON:
+            return []
+        try:
+            import json
+            result = json.loads(self.SESSIONS_JSON)
+            return result if isinstance(result, list) else []
+        except Exception as e:
+            # Log the error for debugging
+            print(f"[Config] Failed to parse SESSIONS_JSON: {e}")
+            return []
+
+    @property
+    def keywords_list(self) -> list:
+        return parse_comma_list(self.KEYWORDS)
+
+    @property
+    def from_users_list(self) -> list:
+        return parse_comma_list(self.FROM_USERS)
+
+    @property
+    def allowed_users_list(self) -> list:
+        if not self.ALLOWED_USERS:
+            return []
+        if isinstance(self.ALLOWED_USERS, str):
+            return [int(x.strip()) for x in self.ALLOWED_USERS.split(',') if x.strip()]
+        return []
+
+    # Database
+    DATABASE_URL: Optional[str] = None
+    REDIS_URL: Optional[str] = None
+
+    # AI - Support multiple naming conventions
+    AI_PROVIDER: str = "groq"
+    AI_MODEL: Optional[str] = None
+    # Primary keys (new naming)
+    AI_API_KEY: Optional[str] = None
+    # Provider-specific keys (from .env.example)
+    OPENAI_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
+    CLAUDE_API_KEY: Optional[str] = None
+    NVIDIA_API_KEY: Optional[str] = None
+
+    def get_ai_key(self, provider: str = None) -> Optional[str]:
+        """Get API key for the specified or default provider."""
+        provider = provider or self.AI_PROVIDER
+        mapping = {
+            'openai': self.OPENAI_API_KEY or self.AI_API_KEY,
+            'groq': self.GROQ_API_KEY,
+            'gemini': self.GEMINI_API_KEY,
+            'claude': self.CLAUDE_API_KEY,
+            'nvidia': self.NVIDIA_API_KEY,
+        }
+        return mapping.get(provider.lower())
+    
+    # GitHub Export
+    NOTES_REPO: Optional[str] = None
+    GIT_SSH_KEY_PATH: Optional[str] = None
+    GIT_SSH_COMMAND: Optional[str] = None
+    GIT_KNOWN_HOSTS: Optional[str] = None
+
+    # Feature Flags
+    ENABLE_RSS: bool = True
+    ENABLE_AI: bool = True
+    ENABLE_MONITOR: bool = True
+    API_ENABLED: bool = True
+    
+    # API Keys (format: key1:userId1,key2:userId2)
+    API_KEYS: Optional[str] = None
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"  # Ignore unknown env vars
+
+settings = Settings()
