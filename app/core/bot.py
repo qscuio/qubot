@@ -130,19 +130,23 @@ class TelegramService:
             logger.warn("Cannot send message, no main client connected")
             return
         
-        # Filter out non-sendable media types (like WebPage previews)
+        # Process media types
         sendable_file = None
+        enable_link_preview = True  # Default: allow link previews
+        
         if file:
             from telethon.tl.types import (
                 MessageMediaPhoto, MessageMediaDocument,
                 MessageMediaWebPage
             )
-            # Only send actual media, not web page previews
+            # Photos and documents can be sent as files
             if isinstance(file, (MessageMediaPhoto, MessageMediaDocument)):
                 sendable_file = file
             elif isinstance(file, MessageMediaWebPage):
-                # WebPage previews can't be sent as files, skip
+                # WebPage previews - Telegram will regenerate from URLs in text
+                # Just enable link preview, the URLs in HTML will create the preview
                 sendable_file = None
+                enable_link_preview = True
             elif hasattr(file, 'photo') or hasattr(file, 'document'):
                 sendable_file = file
         
@@ -163,7 +167,7 @@ class TelegramService:
         for chunk in chunks:
             try:
                 async with rate_limiter:
-                    await self.main_client.send_message(peer, chunk, parse_mode=parse_mode)
+                    await self.main_client.send_message(peer, chunk, parse_mode=parse_mode, link_preview=enable_link_preview)
                 logger.debug(f"Sent message to {peer}")
             except Exception as e:
                 logger.error(f"Failed to send message to {peer}: {e}")

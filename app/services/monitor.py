@@ -427,7 +427,23 @@ class MonitorService:
                 
                 # Admin messages or summarization disabled: forward immediately
                 if is_admin or not self.summarize_enabled:
-                    formatted_msg = self._format_message(msg_html, source_name, is_admin)
+                    # Check for URLs to convert to Telegraph (if enabled)
+                    # For now, we auto-convert if it looks like a long article or user requests it
+                    # (Simple heuristic: if text has link and length > 500)
+                    telegraph_url = None
+                    if len(msg_html) > 500 and "http" in msg_html:
+                        try:
+                            from app.services.telegraph import telegraph_service
+                            page_title = f"{chat_title} - {datetime.now().strftime('%Y-%m-%d')}"
+                            telegraph_url = await telegraph_service.create_page(
+                                title=page_title,
+                                content_html=msg_html,
+                                author_name=source_name
+                            )
+                        except Exception as e:
+                            logger.warn(f"Failed to create Telegraph page: {e}")
+
+                    formatted_msg = self._format_message(msg_html, source_name, is_admin, telegraph_url)
                     logger.info(f"📤 {'Admin message - ' if is_admin else ''}Forwarding to {self.target_channel}")
                     try:
                         target = self.target_channel
@@ -438,7 +454,8 @@ class MonitorService:
                             target, 
                             formatted_msg, 
                             parse_mode='html', 
-                            file=event.message.media
+                            file=event.message.media,
+                            link_preview=True 
                         )
                         logger.info("✅ Message forwarded successfully")
                     except Exception as e:
@@ -529,10 +546,22 @@ Summary:"""
             except:
                 pass
 
-    def _format_message(self, html_text, source_name, is_admin=False):
+    def _format_message(self, html_text, source_name, is_admin=False, telegraph_url=None):
+        if telegraph_url:
+            # Shorten the text for the preview
+            clean_text = re.sub('<[^<]+?>', '', html_text)  # Strip HTML for preview
+            preview = clean_text[:200] + "..." if len(clean_text) > 200 else clean_text
+            
+            return (
+                f"📑 <b>{source_name}</b>\n\n"
+                f"{preview}\n\n"
+                f"👉 <b>Instant View</b>: <a href='{telegraph_url}'>Read Article</a>"
+            )
+            
         if is_admin:
-            return f"📢 <b>【Admin Announcement】</b>\n\n{html_text}\n\n— Source: {source_name}"
-        return f"🔔【New Alert】\n\n{html_text}\n\n— Source: {source_name}"
+            return f"📢 <b>{source_name}</b> (Admin)\n\n{html_text}"
+            
+        return f"<b>{source_name}</b>\n\n{html_text}"
 
     async def _save_to_history(self, source, source_id, message):
         if not db.pool:

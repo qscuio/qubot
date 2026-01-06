@@ -61,34 +61,43 @@ async def edit_main_menu(message: types.Message):
 def get_main_menu_ui():
     running = monitor_service.is_running
     status_icon = "🟢" if running else "🔴"
+    status_text = "Active" if running else "Stopped"
     source_count = len(monitor_service.source_channels)
     disabled_count = len(monitor_service.disabled_sources)
+    active_count = source_count - disabled_count
     
     text = (
-        f"🔔 <b>Channel Monitor</b>\n"
-        f"━━━━━━━━━━━━━━━━━━━━━\n"
-        f"📊 Status: {status_icon} <b>{'Running' if running else 'Stopped'}</b>\n"
-        f"📡 Sources: <b>{source_count}</b>"
+        f"🕵️ <b>Monitor Bot</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"<b>Status:</b> {status_icon} <code>{status_text}</code>\n"
+        f"<b>Sources:</b> <code>{active_count}</code> active <i>({disabled_count} off)</i>\n"
     )
-    if disabled_count > 0:
-        text += f" ({disabled_count} disabled)"
     
     if monitor_service.target_channel:
-        text += f"\n🎯 Target: <code>{monitor_service.target_channel}</code>"
+        text += f"<b>Target:</b> <code>{monitor_service.target_channel}</code>\n"
+    else:
+        text += f"<b>Target:</b> ⚠️ <i>Not Configured</i>\n"
     
+    # Add quick stats if available (placeholder for now)
+    text += f"\n<i>Forwarded today: 0</i>"
+
     builder = InlineKeyboardBuilder()
     
-    # Control row
+    # Control row: Big Start/Stop button
     if running:
-        builder.button(text="⏹️ Stop Monitoring", callback_data="mon:stop")
+        builder.button(text="🛑 Stop Monitoring", callback_data="mon:stop")
     else:
         builder.button(text="▶️ Start Monitoring", callback_data="mon:start")
     
-    # Navigation row
+    # Management row
     builder.button(text="📡 Sources", callback_data="nav:sources")
-    builder.button(text="🔄 Refresh", callback_data="nav:refresh")
+    builder.button(text="⚙️ Settings", callback_data="src:noop") # Placeholder
     
-    builder.adjust(1, 2)
+    # Utility row
+    builder.button(text="🔄 Sync", callback_data="nav:refresh")
+    builder.button(text="❓ Help", callback_data="nav:help") # Will need to add callback
+    
+    builder.adjust(1, 2, 2)
     return text, builder.as_markup()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -138,6 +147,29 @@ async def cb_sources(callback: types.CallbackQuery):
 async def cb_main(callback: types.CallbackQuery):
     await callback.answer()
     await edit_main_menu(callback.message)
+
+@router.callback_query(F.data == "nav:help")
+async def cb_help_callback(callback: types.CallbackQuery):
+    await callback.answer()
+    # Reuse existing help command logic but as edit if possible or new message
+    help_text = (
+        "🔔 <b>Monitor Bot Commands</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "<b>📋 Navigation</b>\n"
+        "/start - Main menu with controls\n"
+        "/sources - Manage source channels\n"
+        "/help - This message\n\n"
+        "<b>📡 Channel Management</b>\n"
+        "/add &lt;channel&gt; - Add source channel\n"
+        "/remove &lt;channel&gt; - Remove source channel\n"
+        "/clear - Remove all sources\n\n"
+        "<b>📊 Status & History</b>\n"
+        "/status - Show current status\n"
+        "/history - View recent forwards"
+    )
+    builder = InlineKeyboardBuilder()
+    builder.button(text="◀️ Back", callback_data="nav:main")
+    await callback.message.edit_text(help_text, parse_mode="HTML", reply_markup=builder.as_markup())
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sources Menu
