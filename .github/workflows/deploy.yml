@@ -276,6 +276,9 @@ jobs:
             printf 'OPENAI_API_KEY=%s\n' '${{ secrets.OPENAI_API_KEY }}' >> .env
             printf 'CLAUDE_API_KEY=%s\n' '${{ secrets.CLAUDE_API_KEY }}' >> .env
             printf 'NVIDIA_API_KEY=%s\n' '${{ secrets.NVIDIA_API_KEY }}' >> .env
+            printf 'GLM_API_KEY=%s\n' '${{ secrets.GLM_API_KEY }}' >> .env
+            printf 'MINIMAX_API_KEY=%s\n' '${{ secrets.MINIMAX_API_KEY }}' >> .env
+            printf 'OPENROUTER_API_KEY=%s\n' '${{ secrets.OPENROUTER_API_KEY }}' >> .env
             printf 'SOURCE_CHANNELS=%s\n' '${{ secrets.SOURCE_CHANNELS }}' >> .env
             printf 'TARGET_CHANNEL=%s\n' '${{ secrets.TARGET_CHANNEL }}' >> .env
             printf 'KEYWORDS=%s\n' '${{ secrets.KEYWORDS }}' >> .env
