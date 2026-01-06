@@ -34,14 +34,14 @@ class Settings(BaseSettings):
     
     # App Settings
     LOG_LEVEL: str = "INFO"
-    RATE_LIMIT_MS: Optional[int] = 5000
+    RATE_LIMIT_MS: Optional[int] = 1000
     RSS_POLL_INTERVAL_MS: Optional[int] = 300000
 
     @field_validator('RATE_LIMIT_MS', 'RSS_POLL_INTERVAL_MS', 'BOT_PORT', 'API_PORT', mode='before')
     @classmethod
     def parse_optional_int(cls, v, info):
         if v is None or v == '':
-            defaults = {'RATE_LIMIT_MS': 5000, 'RSS_POLL_INTERVAL_MS': 300000, 'BOT_PORT': 3000, 'API_PORT': 3001}
+            defaults = {'RATE_LIMIT_MS': 1000, 'RSS_POLL_INTERVAL_MS': 300000, 'BOT_PORT': 3000, 'API_PORT': 3001}
             return defaults.get(info.field_name)
         return int(v)
     
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     ALLOWED_USERS: Optional[str] = None
     
     # Summarization settings
-    MONITOR_SUMMARIZE: bool = False  # Enable message summarization
+    MONITOR_SUMMARIZE: bool = True  # Enable message summarization
     MONITOR_BUFFER_SIZE: int = 200   # Summarize after N messages
     MONITOR_BUFFER_TIMEOUT: int = 300  # Summarize after N seconds (5 min)
 

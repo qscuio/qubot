@@ -298,6 +298,13 @@ class MonitorService:
         if text.startswith("-100"): return text[4:]
         if text.startswith("-"): return text[1:]
         return text
+    
+    def _build_message_link(self, chat_username: Optional[str], chat_id: str, message_id: int) -> Optional[str]:
+        if chat_username:
+            return f"https://t.me/{chat_username}/{message_id}"
+        if str(chat_id).startswith("-100"):
+            return f"https://t.me/c/{str(chat_id)[4:]}/{message_id}"
+        return None
 
     def matches_source(self, source, chat_username, raw_chat_id):
         if not source: return False
@@ -325,10 +332,11 @@ class MonitorService:
             if not chat:
                 return
 
-            chat_title = getattr(chat, 'title', 'Unknown')
+            chat_title = getattr(chat, 'title', None) or 'Unknown'
             chat_username = getattr(chat, 'username', None)
             chat_id = str(chat.id)
             message_id = event.message.id
+            message_time = event.message.date.strftime('%H:%M') if event.message.date else None
             
             # Deduplication: skip if we already processed this message
             dedup_key = (chat.id, message_id)
@@ -413,13 +421,18 @@ class MonitorService:
                 try:
                     # Get sender's participant info in the channel
                     participant = await telegram_service.main_client.get_permissions(chat, sender)
-                    is_admin = participant.is_admin or participant.is_creator
+                    is_admin = isinstance(participant, (ChannelParticipantAdmin, ChannelParticipantCreator))
                 except Exception as e:
                     logger.debug(f"Could not check admin status: {e}")
+            if getattr(event.message, "post", False):
+                is_admin = True
             
             # 5. Forward or Buffer
             if self.target_channel:
-                source_name = chat_username or chat_title or chat_id
+                source_name = chat_title if chat_title != 'Unknown' else (chat_username or chat_id)
+                source_handle = f"@{chat_username}" if chat_username else None
+                message_link = self._build_message_link(chat_username, chat_id, message_id)
+                has_media = bool(event.message.media)
                 
                 # Convert to HTML to preserve formatting (links, bold, etc)
                 from telethon.extensions import html
@@ -443,7 +456,17 @@ class MonitorService:
                         except Exception as e:
                             logger.warn(f"Failed to create Telegraph page: {e}")
 
-                    formatted_msg = self._format_message(msg_html, source_name, is_admin, telegraph_url)
+                    formatted_msg = self._format_message(
+                        msg_html,
+                        source_name,
+                        is_admin=is_admin,
+                        telegraph_url=telegraph_url,
+                        sender_name=sender_name,
+                        message_time=message_time,
+                        message_link=message_link,
+                        source_handle=source_handle,
+                        has_media=has_media
+                    )
                     logger.info(f"📤 {'Admin message - ' if is_admin else ''}Forwarding to {self.target_channel}")
                     try:
                         target = self.target_channel
@@ -466,8 +489,8 @@ class MonitorService:
                         'text': msg_html,
                         'sender': sender_name,
                         'source': source_name,
-                        'time': datetime.now().strftime('%H:%M'),
-                        'has_media': bool(event.message.media)
+                        'time': message_time or datetime.now().strftime('%H:%M'),
+                        'has_media': has_media
                     }
                     
                     should_flush = self.message_buffer.add(chat_id, message_data)
@@ -520,11 +543,24 @@ Summary:"""
             summary = result.get('content', 'Unable to summarize')
             
             # Format and send summary
+            times = [m.get('time') for m in messages if m.get('time')]
+            time_range = None
+            if times:
+                start_time = min(times)
+                end_time = max(times)
+                time_range = start_time if start_time == end_time else f"{start_time}-{end_time}"
+            
+            meta_bits = []
+            if time_range:
+                meta_bits.append(f"🕒 {time_range}")
+            meta_bits.append(f"💬 {len(messages)} messages")
+            meta_line = " • ".join(meta_bits)
+            
             formatted_summary = (
                 f"📊 <b>Summary from {source_name}</b>\n"
                 f"━━━━━━━━━━━━━━━━━━━━━\n"
-                f"{summary}\n\n"
-                f"<i>({len(messages)} messages)</i>"
+                f"{meta_line}\n\n"
+                f"{summary.strip()}"
             )
             
             target = self.target_channel
@@ -546,22 +582,49 @@ Summary:"""
             except:
                 pass
 
-    def _format_message(self, html_text, source_name, is_admin=False, telegraph_url=None):
-        if telegraph_url:
-            # Shorten the text for the preview
-            clean_text = re.sub('<[^<]+?>', '', html_text)  # Strip HTML for preview
-            preview = clean_text[:200] + "..." if len(clean_text) > 200 else clean_text
-            
-            return (
-                f"📑 <b>{source_name}</b>\n\n"
-                f"{preview}\n\n"
-                f"👉 <b>Instant View</b>: <a href='{telegraph_url}'>Read Article</a>"
-            )
-            
+    def _format_message(
+        self,
+        html_text,
+        source_name,
+        is_admin=False,
+        telegraph_url=None,
+        sender_name=None,
+        message_time=None,
+        message_link=None,
+        source_handle=None,
+        has_media=False
+    ):
+        header_name = source_name
+        if message_link:
+            header_name = f"<a href='{message_link}'>{source_name}</a>"
+        
+        meta_bits = []
+        if sender_name:
+            meta_bits.append(f"👤 <code>{sender_name}</code>")
+        if source_handle and source_handle != source_name and source_handle.lstrip("@") != source_name:
+            meta_bits.append(f"📍 {source_handle}")
+        if message_time:
+            meta_bits.append(f"🕒 {message_time}")
+        if has_media:
+            meta_bits.append("📎 media")
         if is_admin:
-            return f"📢 <b>{source_name}</b> (Admin)\n\n{html_text}"
-            
-        return f"<b>{source_name}</b>\n\n{html_text}"
+            meta_bits.append("🛡️ admin")
+        meta_line = " • ".join(meta_bits)
+        
+        lines = [f"📨 <b>{header_name}</b>", "━━━━━━━━━━━━━━━━━━━━━"]
+        if meta_line:
+            lines.append(meta_line)
+        if telegraph_url:
+            clean_text = re.sub('<[^<]+?>', '', html_text or '')  # Strip HTML for preview
+            preview = clean_text[:200] + "..." if len(clean_text) > 200 else clean_text
+            preview_text = preview or "📰 Article preview"
+            lines.extend(["", preview_text, "", f"👉 <b>Instant View</b>: <a href='{telegraph_url}'>Read article</a>"])
+            return "\n".join(lines)
+        
+        body = html_text or ("📎 <i>Media-only message</i>" if has_media else "")
+        if body:
+            lines.extend(["", body])
+        return "\n".join(lines)
 
     async def _save_to_history(self, source, source_id, message):
         if not db.pool:
