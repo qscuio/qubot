@@ -35,11 +35,16 @@ async def cmd_help(message: types.Message):
         "<b>📋 Navigation</b>\n"
         "/start - Main menu with controls\n"
         "/sources - Manage source channels\n"
+        "/vips - Manage VIP users\n"
         "/help - This message\n\n"
         "<b>📡 Channel Management</b>\n"
         "/add &lt;channel&gt; - Add source channel\n"
         "/remove &lt;channel&gt; - Remove source channel\n"
         "/clear - Remove all sources\n\n"
+        "<b>⭐ VIP Users</b>\n"
+        "/vip &lt;user&gt; - Add VIP user (direct forward)\n"
+        "/unvip &lt;user&gt; - Remove VIP user\n"
+        "/vips - List VIP users\n\n"
         "<b>📊 Status & History</b>\n"
         "/status - Show current status\n"
         "/history - View recent forwards\n\n"
@@ -91,11 +96,11 @@ def get_main_menu_ui():
     
     # Management row
     builder.button(text="📡 Sources", callback_data="nav:sources")
-    builder.button(text="⚙️ Settings", callback_data="src:noop") # Placeholder
+    builder.button(text="⭐ VIPs", callback_data="nav:vips")
     
     # Utility row
     builder.button(text="🔄 Sync", callback_data="nav:refresh")
-    builder.button(text="❓ Help", callback_data="nav:help") # Will need to add callback
+    builder.button(text="❓ Help", callback_data="nav:help")
     
     builder.adjust(1, 2, 2)
     return text, builder.as_markup()
@@ -394,6 +399,186 @@ async def cmd_clear(message: types.Message):
         reply_markup=builder.as_markup(),
         parse_mode="HTML"
     )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VIP User Management
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("vip"))
+async def cmd_vip(message: types.Message, command: CommandObject):
+    if not is_allowed(message.from_user.id): return
+    
+    user = command.args
+    if not user:
+        await message.answer(
+            "⭐ <b>Add VIP User</b>\n\n"
+            "Usage: <code>/vip &lt;user&gt;</code>\n\n"
+            "Examples:\n"
+            "• <code>/vip @username</code>\n"
+            "• <code>/vip 123456789</code>\n\n"
+            "💡 <i>VIP users' messages are forwarded immediately without buffering.</i>",
+            parse_mode="HTML"
+        )
+        return
+    
+    await monitor_service.add_vip_user(user.strip(), user.strip())
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⭐ View VIPs", callback_data="nav:vips")
+    builder.button(text="🏠 Main Menu", callback_data="nav:main")
+    builder.adjust(2)
+    
+    await message.answer(
+        f"⭐ Added VIP user: <code>{user}</code>",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+
+@router.message(Command("unvip"))
+async def cmd_unvip(message: types.Message, command: CommandObject):
+    if not is_allowed(message.from_user.id): return
+    
+    user = command.args
+    if not user:
+        await message.answer(
+            "⭐ <b>Remove VIP User</b>\n\n"
+            "Usage: <code>/unvip &lt;user&gt;</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    await monitor_service.remove_vip_user(user.strip())
+    await message.answer(f"🗑️ Removed VIP user: <code>{user}</code>", parse_mode="HTML")
+
+@router.message(Command("vips"))
+async def cmd_vips(message: types.Message):
+    if not is_allowed(message.from_user.id): return
+    text, markup = get_vips_menu_ui()
+    await message.answer(text, reply_markup=markup, parse_mode="HTML")
+
+async def edit_vips_menu(message: types.Message):
+    text, markup = get_vips_menu_ui()
+    try:
+        await message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+    except:
+        pass
+
+def get_vips_menu_ui(page: int = 0):
+    vips_list = list(monitor_service.vip_users.values())
+    page_size = 5
+    total_pages = max(1, (len(vips_list) + page_size - 1) // page_size)
+    page = max(0, min(page, total_pages - 1))
+    
+    if not vips_list:
+        text = (
+            "⭐ <b>VIP Users</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "📭 No VIP users configured.\n\n"
+            "💡 <i>Use /vip &lt;user&gt; to add a VIP user.</i>"
+        )
+        kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="◀️ Back", callback_data="nav:main")]
+        ])
+        return text, kb
+    
+    start_idx = page * page_size
+    end_idx = min(start_idx + page_size, len(vips_list))
+    page_vips = vips_list[start_idx:end_idx]
+    
+    text = f"⭐ <b>VIP Users</b> ({len(vips_list)} total)\n━━━━━━━━━━━━━━━━━━━━━\n"
+    
+    keyboard = []
+    
+    for i, vip_info in enumerate(page_vips, start=start_idx + 1):
+        is_disabled = not vip_info.get('enabled', True)
+        icon = "🔴" if is_disabled else "🟢"
+        user_id = vip_info['id']
+        name = vip_info.get('name', user_id)
+        username = vip_info.get('username', '')
+        
+        display_name = name[:20] + "..." if len(name) > 20 else name
+        if username and username != user_id:
+            text += f"{i}. {icon} <b>{display_name}</b>\n    @{username} (<code>{user_id}</code>)\n"
+        else:
+            text += f"{i}. {icon} <code>{user_id}</code>\n"
+        
+        btn_label = f"{i}. {name[:10]}"
+        uid_short = user_id[:30]
+        
+        row = [
+            types.InlineKeyboardButton(text=btn_label, callback_data="vip:noop"),
+            types.InlineKeyboardButton(
+                text="✅ On" if is_disabled else "⏸️ Off",
+                callback_data=f"vip:{'enable' if is_disabled else 'disable'}:{uid_short}"
+            ),
+            types.InlineKeyboardButton(text="🗑️", callback_data=f"vip:delete:{uid_short}")
+        ]
+        keyboard.append(row)
+    
+    if total_pages > 1:
+        pagination = []
+        if page > 0:
+            pagination.append(types.InlineKeyboardButton(text="◀️ Prev", callback_data=f"vip:page:{page-1}"))
+        pagination.append(types.InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="vip:noop"))
+        if page < total_pages - 1:
+            pagination.append(types.InlineKeyboardButton(text="Next ▶️", callback_data=f"vip:page:{page+1}"))
+        keyboard.append(pagination)
+    
+    keyboard.append([
+        types.InlineKeyboardButton(text="◀️ Back", callback_data="nav:main"),
+    ])
+    
+    kb = types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    return text, kb
+
+@router.callback_query(F.data == "nav:vips")
+async def cb_vips(callback: types.CallbackQuery):
+    await callback.answer()
+    await edit_vips_menu(callback.message)
+
+def find_vip_by_prefix(prefix: str) -> str:
+    for uid in monitor_service.vip_users.keys():
+        if uid.startswith(prefix):
+            return uid
+    return prefix
+
+@router.callback_query(F.data.startswith("vip:enable:"))
+async def cb_enable_vip(callback: types.CallbackQuery):
+    uid_key = callback.data.split(":", 2)[2]
+    uid = find_vip_by_prefix(uid_key)
+    await monitor_service.toggle_vip_user(uid, True)
+    await callback.answer("✅ Enabled")
+    await edit_vips_menu(callback.message)
+
+@router.callback_query(F.data.startswith("vip:disable:"))
+async def cb_disable_vip(callback: types.CallbackQuery):
+    uid_key = callback.data.split(":", 2)[2]
+    uid = find_vip_by_prefix(uid_key)
+    await monitor_service.toggle_vip_user(uid, False)
+    await callback.answer("⏸️ Disabled")
+    await edit_vips_menu(callback.message)
+
+@router.callback_query(F.data.startswith("vip:delete:"))
+async def cb_delete_vip(callback: types.CallbackQuery):
+    uid_key = callback.data.split(":", 2)[2]
+    uid = find_vip_by_prefix(uid_key)
+    await monitor_service.remove_vip_user(uid)
+    await callback.answer("🗑️ Deleted")
+    await edit_vips_menu(callback.message)
+
+@router.callback_query(F.data.startswith("vip:page:"))
+async def cb_vip_page(callback: types.CallbackQuery):
+    page = int(callback.data.split(":")[2])
+    text, markup = get_vips_menu_ui(page)
+    await callback.answer()
+    try:
+        await callback.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+    except:
+        pass
+
+@router.callback_query(F.data == "vip:noop")
+async def cb_vip_noop(callback: types.CallbackQuery):
+    await callback.answer()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # History Command

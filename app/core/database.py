@@ -74,6 +74,17 @@ class Database:
                 );
             """)
 
+            # Monitor VIP Users Table (users to forward immediately)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS monitor_vip_users (
+                    user_id TEXT PRIMARY KEY,
+                    username TEXT,
+                    name TEXT,
+                    enabled BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
             # RSS Sources Table
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS rss_sources (

@@ -66,6 +66,9 @@ class MonitorService:
         self._max_cache_size = 1000  # Keep last 1000 messages
         self._admin_cache: Dict[str, dict] = {}
         
+        # VIP users: user_id -> {id, username, name, enabled}
+        self.vip_users: Dict[str, dict] = {}
+        
         # Summarization buffer
         self.summarize_enabled = settings.MONITOR_SUMMARIZE
         self.message_buffer = MessageBuffer(
@@ -117,8 +120,22 @@ class MonitorService:
                 logger.info(f"Loaded {len(rows)} channels from database")
             except Exception as e:
                 logger.warn(f"Failed to load channels from database: {e}")
+            
+            # Load VIP users
+            try:
+                rows = await db.pool.fetch("SELECT user_id, username, name, enabled FROM monitor_vip_users")
+                for row in rows:
+                    self.vip_users[row['user_id']] = {
+                        'id': row['user_id'],
+                        'username': row['username'],
+                        'name': row['name'] or row['username'] or row['user_id'],
+                        'enabled': row['enabled']
+                    }
+                logger.info(f"Loaded {len(rows)} VIP users from database")
+            except Exception as e:
+                logger.warn(f"Failed to load VIP users from database: {e}")
         
-        logger.info(f"MonitorService initialized with {len(self.channels)} source channels.")
+        logger.info(f"MonitorService initialized with {len(self.channels)} source channels, {len(self.vip_users)} VIP users.")
 
     async def start(self):
         if self.is_running:
@@ -293,6 +310,78 @@ class MonitorService:
                 except Exception as e:
                     logger.warn(f"Failed to update source: {e}")
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # VIP User Management
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def is_vip_user(self, user_id: str, username: str = None) -> bool:
+        """Check if a user is a VIP (enabled)."""
+        # Check by user_id first
+        if user_id in self.vip_users:
+            return self.vip_users[user_id].get('enabled', True)
+        # Check by username
+        if username:
+            for vip in self.vip_users.values():
+                if vip.get('username') == username or vip.get('username') == f"@{username}":
+                    return vip.get('enabled', True)
+        return False
+
+    async def add_vip_user(self, user_id: str, username: str = None, name: str = None) -> dict:
+        """Add a VIP user for immediate forwarding."""
+        # Normalize
+        user_id = str(user_id).lstrip('@')
+        if username:
+            username = username.lstrip('@')
+        
+        display_name = name or username or user_id
+        
+        if user_id not in self.vip_users:
+            self.vip_users[user_id] = {
+                'id': user_id,
+                'username': username,
+                'name': display_name,
+                'enabled': True
+            }
+            # Persist to DB
+            if db.pool:
+                try:
+                    await db.pool.execute("""
+                        INSERT INTO monitor_vip_users (user_id, username, name, enabled)
+                        VALUES ($1, $2, $3, TRUE) ON CONFLICT (user_id)
+                        DO UPDATE SET username = $2, name = $3
+                    """, user_id, username, display_name)
+                except Exception as e:
+                    logger.warn(f"Failed to persist VIP user: {e}")
+            logger.info(f"⭐ Added VIP user: {display_name} ({user_id})")
+        
+        return self.vip_users[user_id]
+
+    async def remove_vip_user(self, user_id: str):
+        """Remove a VIP user."""
+        user_id = str(user_id).lstrip('@')
+        
+        if user_id in self.vip_users:
+            info = self.vip_users.pop(user_id)
+            if db.pool:
+                try:
+                    await db.pool.execute("DELETE FROM monitor_vip_users WHERE user_id = $1", user_id)
+                except Exception as e:
+                    logger.warn(f"Failed to remove VIP user from DB: {e}")
+            logger.info(f"⭐ Removed VIP user: {info.get('name', user_id)} ({user_id})")
+
+    async def toggle_vip_user(self, user_id: str, enabled: bool):
+        """Enable or disable a VIP user."""
+        if user_id in self.vip_users:
+            self.vip_users[user_id]['enabled'] = enabled
+            if db.pool:
+                try:
+                    await db.pool.execute(
+                        "UPDATE monitor_vip_users SET enabled = $2 WHERE user_id = $1",
+                        user_id, enabled
+                    )
+                except Exception as e:
+                    logger.warn(f"Failed to update VIP user: {e}")
+
     def _normalize_peer_id(self, value):
         if not value: return ""
         text = str(value).strip()
@@ -457,7 +546,10 @@ class MonitorService:
             if self.summarize_enabled:
                 is_admin = await self._is_admin_sender(chat, sender, event)
             
-            # 5. Forward or Buffer
+            # 5. Check if sender is VIP (for direct forwarding)
+            is_vip = self.is_vip_user(sender_id, sender_name)
+            
+            # 6. Forward or Buffer
             if self.target_channel:
                 source_name = chat_title if chat_title != 'Unknown' else (chat_username or chat_id)
                 source_handle = f"@{chat_username}" if chat_username else None
@@ -468,8 +560,8 @@ class MonitorService:
                 from telethon.extensions import html
                 msg_html = html.unparse(event.message.message, event.message.entities)
                 
-                # Admin messages or summarization disabled: forward immediately
-                if is_admin or not self.summarize_enabled:
+                # Admin, VIP, or summarization disabled: forward immediately
+                if is_admin or is_vip or not self.summarize_enabled:
                     # Check for URLs to convert to Telegraph (if enabled)
                     # For now, we auto-convert if it looks like a long article or user requests it
                     # (Simple heuristic: if text has link and length > 500)
@@ -490,6 +582,7 @@ class MonitorService:
                         msg_html,
                         source_name,
                         is_admin=is_admin,
+                        is_vip=is_vip,
                         telegraph_url=telegraph_url,
                         sender_name=sender_name,
                         message_time=message_time,
@@ -497,7 +590,7 @@ class MonitorService:
                         source_handle=source_handle,
                         has_media=has_media
                     )
-                    logger.info(f"📤 {'Admin message - ' if is_admin else ''}Forwarding to {self.target_channel}")
+                    logger.info(f"📤 {'⭐ VIP - ' if is_vip else ''}{'🛡️ Admin - ' if is_admin else ''}Forwarding to {self.target_channel}")
                     try:
                         target = self.target_channel
                         if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
@@ -508,7 +601,7 @@ class MonitorService:
                             formatted_msg, 
                             parse_mode='html', 
                             file=event.message.media,
-                            link_preview=True 
+                            link_preview=False 
                         )
                         logger.info("✅ Message forwarded successfully")
                     except Exception as e:
@@ -634,6 +727,7 @@ class MonitorService:
         html_text,
         source_name,
         is_admin=False,
+        is_vip=False,
         telegraph_url=None,
         sender_name=None,
         message_time=None,
@@ -654,6 +748,8 @@ class MonitorService:
             meta_bits.append(f"🕒 {message_time}")
         if has_media:
             meta_bits.append("📎 media")
+        if is_vip:
+            meta_bits.append("⭐ VIP")
         if is_admin:
             meta_bits.append("🛡️ admin")
         meta_line = " • ".join(meta_bits)
