@@ -1,34 +1,34 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import httpx
 from app.providers.base import BaseProvider
 from app.core.logger import Logger
 
-logger = Logger("NVIDIA")
+logger = Logger("MiniMax")
 
-class NvidiaProvider(BaseProvider):
+class MiniMaxProvider(BaseProvider):
+    """MiniMax AI Provider"""
     def __init__(self):
-        super().__init__("nvidia", "NVIDIA_API_KEY")
-        self.default_model = "deepseek-ai/deepseek-r1"
+        super().__init__("minimax", "MINIMAX_API_KEY")
+        self.default_model = "MiniMax-Text-01"
         self.fallback_models = {
-            "deepseek-v3.2": "deepseek-ai/deepseek-v3.2",
-            "deepseek-r1": "deepseek-ai/deepseek-r1",
-            "nemotron-ultra": "nvidia/llama-3.1-nemotron-ultra-253b-v1",
-            "nemotron-super": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-            "nemotron-nano": "nvidia/llama-3.1-nemotron-nano-4b-v1.1",
-            "llama-3.3-70b": "meta/llama-3.3-70b-instruct",
-            "llama-405b": "meta/llama-3.1-405b-instruct",
-            "qwen3-coder": "qwen/qwen3-coder-480b-a35b-instruct",
+            "minimax-m2.1": "MiniMax-M2.1",
+            "minimax-m2": "MiniMax-M2",
+            "minimax-m1": "MiniMax-M1",
+            "minimax-text-01": "MiniMax-Text-01",
+            "abab-7": "abab7-chat-preview",
+            "abab-6.5": "abab6.5-chat",
+            "abab-6.5s": "abab6.5s-chat",
         }
-        self.base_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+        self.base_url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
 
     async def fetch_models(self) -> List[Dict[str, str]]:
-        # NVIDIA has too many models, use curated fallback list
+        # MiniMax doesn't have a public models list API, use fallback
         return self.get_fallback_models()
 
     async def call(self, prompt: str, model: str, history: List[Dict[str, str]] = None, context_prefix: str = "") -> Dict[str, Any]:
         api_key = self.get_api_key()
         if not api_key:
-            raise ValueError("NVIDIA_API_KEY is not set")
+            raise ValueError("MINIMAX_API_KEY is not set")
 
         if history is None:
             history = []
@@ -43,13 +43,13 @@ class NvidiaProvider(BaseProvider):
             try:
                 response = await client.post(
                     self.base_url,
-                    json={"model": model or self.default_model, "messages": messages, "max_tokens": 4096},
+                    json={"model": model or self.default_model, "messages": messages},
                     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                    timeout=120.0  # 2 minutes for slow models like DeepSeek R1
+                    timeout=90.0
                 )
                 response.raise_for_status()
                 data = response.json()
                 return {"thinking": "", "content": data["choices"][0]["message"]["content"]}
             except Exception as e:
-                logger.error(f"NVIDIA API call failed: {e}")
+                logger.error(f"MiniMax API call failed: {e}")
                 raise

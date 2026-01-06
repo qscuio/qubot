@@ -10,9 +10,14 @@ class GroqProvider(BaseProvider):
         super().__init__("groq", "GROQ_API_KEY")
         self.default_model = "llama-3.3-70b-versatile"
         self.fallback_models = {
-            "llama-70b": "llama-3.3-70b-versatile",
-            "llama-8b": "llama-3.1-8b-instant",
-            "mixtral": "mixtral-8x7b-32768",
+            "llama-4-maverick": "llama-4-maverick-17b-128e-instruct",
+            "llama-4-scout": "llama-4-scout-17b-16e-instruct",
+            "llama-3.3-70b": "llama-3.3-70b-versatile",
+            "llama-3.1-8b": "llama-3.1-8b-instant",
+            "qwen3-32b": "qwen3-32b",
+            "qwen2.5-32b": "qwen-2.5-32b",
+            "deepseek-r1-32b": "deepseek-r1-distill-qwen-32b",
+            "mixtral-8x7b": "mixtral-8x7b-32768",
         }
         self.base_url = "https://api.groq.com/openai/v1/chat/completions"
         self.models_url = "https://api.groq.com/openai/v1/models"
@@ -33,12 +38,28 @@ class GroqProvider(BaseProvider):
                     return self.get_fallback_models()
 
                 data = response.json()
-                models = [
-                    {"id": m["id"], "name": m["id"]}
-                    for m in data.get("data", [])
-                    if m.get("id") and "whisper" not in m["id"]
-                ]
-                return sorted(models, key=lambda x: x["id"])
+                models = []
+                # Priority order for sorting
+                priority_prefixes = ["llama-3.3", "llama-3.2", "llama-3.1", "deepseek", "qwen", "mixtral", "gemma"]
+                
+                for m in data.get("data", []):
+                    model_id = m.get("id", "")
+                    # Skip non-chat models
+                    if any(x in model_id for x in ["whisper", "distil", "guard", "tool-use"]):
+                        continue
+                    if model_id:
+                        # Calculate priority score
+                        priority = 99
+                        for i, prefix in enumerate(priority_prefixes):
+                            if prefix in model_id.lower():
+                                priority = i
+                                break
+                        models.append({"id": model_id, "name": model_id, "_priority": priority})
+                
+                # Sort by priority then by name (descending for version numbers)
+                models.sort(key=lambda x: (x["_priority"], x["id"]))
+                # Remove priority field before returning
+                return [{"id": m["id"], "name": m["name"]} for m in models]
         except Exception as e:
             logger.warn(f"Failed to fetch models: {e}")
             return self.get_fallback_models()

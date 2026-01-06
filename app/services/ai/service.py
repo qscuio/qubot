@@ -7,6 +7,9 @@ from app.providers.groq import GroqProvider
 from app.providers.gemini import GeminiProvider
 from app.providers.claude import ClaudeProvider
 from app.providers.nvidia import NvidiaProvider
+from app.providers.glm import GLMProvider
+from app.providers.minimax import MiniMaxProvider
+from app.providers.openrouter import OpenRouterProvider
 from app.services.ai.prompts import build_job_prompt, list_jobs
 from app.services.ai.storage import ai_storage
 
@@ -29,6 +32,9 @@ class AiService:
         self.providers["gemini"] = GeminiProvider()
         self.providers["claude"] = ClaudeProvider()
         self.providers["nvidia"] = NvidiaProvider()
+        self.providers["glm"] = GLMProvider()
+        self.providers["minimax"] = MiniMaxProvider()
+        self.providers["openrouter"] = OpenRouterProvider()
 
     def _set_active_provider(self):
         """Set the active provider based on settings."""

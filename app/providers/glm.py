@@ -1,34 +1,35 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import httpx
 from app.providers.base import BaseProvider
 from app.core.logger import Logger
 
-logger = Logger("NVIDIA")
+logger = Logger("GLM")
 
-class NvidiaProvider(BaseProvider):
+class GLMProvider(BaseProvider):
+    """Zhipu AI GLM Provider (ChatGLM)"""
     def __init__(self):
-        super().__init__("nvidia", "NVIDIA_API_KEY")
-        self.default_model = "deepseek-ai/deepseek-r1"
+        super().__init__("glm", "GLM_API_KEY")
+        self.default_model = "glm-4-flash"
         self.fallback_models = {
-            "deepseek-v3.2": "deepseek-ai/deepseek-v3.2",
-            "deepseek-r1": "deepseek-ai/deepseek-r1",
-            "nemotron-ultra": "nvidia/llama-3.1-nemotron-ultra-253b-v1",
-            "nemotron-super": "nvidia/llama-3.3-nemotron-super-49b-v1.5",
-            "nemotron-nano": "nvidia/llama-3.1-nemotron-nano-4b-v1.1",
-            "llama-3.3-70b": "meta/llama-3.3-70b-instruct",
-            "llama-405b": "meta/llama-3.1-405b-instruct",
-            "qwen3-coder": "qwen/qwen3-coder-480b-a35b-instruct",
+            "glm-4.7": "glm-4.7",
+            "glm-4.6": "glm-4.6",
+            "glm-4.5": "glm-4.5",
+            "glm-4-plus": "glm-4-plus",
+            "glm-4-flash": "glm-4-flash",
+            "glm-4-air": "glm-4-air",
+            "glm-4-long": "glm-4-long",
+            "glm-4-alltools": "glm-4-alltools",
         }
-        self.base_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+        self.base_url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
     async def fetch_models(self) -> List[Dict[str, str]]:
-        # NVIDIA has too many models, use curated fallback list
+        # GLM doesn't have a public models list API, use fallback
         return self.get_fallback_models()
 
     async def call(self, prompt: str, model: str, history: List[Dict[str, str]] = None, context_prefix: str = "") -> Dict[str, Any]:
         api_key = self.get_api_key()
         if not api_key:
-            raise ValueError("NVIDIA_API_KEY is not set")
+            raise ValueError("GLM_API_KEY is not set")
 
         if history is None:
             history = []
@@ -43,13 +44,13 @@ class NvidiaProvider(BaseProvider):
             try:
                 response = await client.post(
                     self.base_url,
-                    json={"model": model or self.default_model, "messages": messages, "max_tokens": 4096},
+                    json={"model": model or self.default_model, "messages": messages},
                     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                    timeout=120.0  # 2 minutes for slow models like DeepSeek R1
+                    timeout=90.0
                 )
                 response.raise_for_status()
                 data = response.json()
                 return {"thinking": "", "content": data["choices"][0]["message"]["content"]}
             except Exception as e:
-                logger.error(f"NVIDIA API call failed: {e}")
+                logger.error(f"GLM API call failed: {e}")
                 raise

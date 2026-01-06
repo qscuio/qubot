@@ -8,11 +8,14 @@ logger = Logger("Gemini")
 class GeminiProvider(BaseProvider):
     def __init__(self):
         super().__init__("gemini", "GEMINI_API_KEY")
-        self.default_model = "gemini-2.0-flash"
+        self.default_model = "gemini-2.5-flash"
         self.fallback_models = {
-            "flash": "gemini-2.0-flash",
-            "flash-lite": "gemini-2.0-flash-lite",
-            "pro": "gemini-2.5-pro-preview-06-05",
+            "gemini-3-pro": "gemini-3-pro-preview",
+            "gemini-3-flash": "gemini-3-flash-preview",
+            "gemini-2.5-pro": "gemini-2.5-pro-preview-06-05",
+            "gemini-2.5-flash": "gemini-2.5-flash",
+            "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+            "gemini-2.0-flash": "gemini-2.0-flash",
         }
 
     async def fetch_models(self) -> List[Dict[str, str]]:
@@ -31,11 +34,32 @@ class GeminiProvider(BaseProvider):
 
                 data = response.json()
                 models = []
+                # Priority: gemini-2.5 > gemini-2.0 > gemini-1.5 > gemini-1.0
+                priority_map = {"2.5": 0, "2.0": 1, "1.5": 2, "1.0": 3}
+                
                 for m in data.get("models", []):
-                    if m.get("name") and "generateContent" in m.get("supportedGenerationMethods", []):
-                        model_id = m["name"].replace("models/", "")
-                        models.append({"id": model_id, "name": m.get("displayName", model_id)})
-                return models
+                    if not m.get("name") or "generateContent" not in m.get("supportedGenerationMethods", []):
+                        continue
+                    
+                    model_id = m["name"].replace("models/", "")
+                    display_name = m.get("displayName", model_id)
+                    
+                    # Skip embedding, aqa, and tunedModels
+                    if any(x in model_id for x in ["embedding", "aqa", "tuned", "image"]):
+                        continue
+                    
+                    # Calculate priority
+                    priority = 99
+                    for ver, p in priority_map.items():
+                        if ver in model_id:
+                            priority = p
+                            break
+                    
+                    models.append({"id": model_id, "name": display_name, "_priority": priority})
+                
+                # Sort by priority, then alphabetically
+                models.sort(key=lambda x: (x["_priority"], x["id"]))
+                return [{"id": m["id"], "name": m["name"]} for m in models]
         except Exception as e:
             logger.warn(f"Failed to fetch models: {e}")
             return self.get_fallback_models()

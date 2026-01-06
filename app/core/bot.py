@@ -39,10 +39,12 @@ class TelegramService:
 
         for i, config in enumerate(sessions_to_init):
             try:
+                # receive_updates=True ensures we get updates even when not using run_until_disconnected
                 client = TelegramClient(
                     StringSession(config["session"]),
                     config["api_id"],
-                    config["api_hash"]
+                    config["api_hash"],
+                    receive_updates=True  # Important for real-time updates
                 )
                 await client.connect()
 
@@ -59,8 +61,15 @@ class TelegramService:
                 if not self.main_client:
                     self.main_client = client
 
-                # Sync dialogs
+                # Sync dialogs for proper channel access
                 await self._sync_dialogs(client, i)
+                
+                # Force catch up any pending updates immediately
+                try:
+                    await client.catch_up()
+                    logger.info(f"[{i}] Caught up on pending updates")
+                except Exception as e:
+                    logger.debug(f"[{i}] catch_up error (usually fine): {e}")
                 
             except Exception as e:
                 logger.error(f"Failed to connect client {i}", e)

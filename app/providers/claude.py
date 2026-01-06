@@ -10,9 +10,11 @@ class ClaudeProvider(BaseProvider):
         super().__init__("claude", "CLAUDE_API_KEY")
         self.default_model = "claude-sonnet-4-20250514"
         self.fallback_models = {
-            "sonnet": "claude-sonnet-4-20250514",
-            "haiku": "claude-3-5-haiku-20241022",
-            "opus": "claude-3-opus-20240229",
+            "claude-opus-4.5": "claude-opus-4-5-20251124",
+            "claude-sonnet-4.5": "claude-sonnet-4-5-20250929",
+            "claude-haiku-4.5": "claude-haiku-4-5-20251015",
+            "claude-opus-4": "claude-opus-4-20250522",
+            "claude-sonnet-4": "claude-sonnet-4-20250514",
         }
         self.base_url = "https://api.anthropic.com/v1/messages"
 

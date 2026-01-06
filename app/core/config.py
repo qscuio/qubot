@@ -104,6 +104,9 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     CLAUDE_API_KEY: Optional[str] = None
     NVIDIA_API_KEY: Optional[str] = None
+    GLM_API_KEY: Optional[str] = None
+    MINIMAX_API_KEY: Optional[str] = None
+    OPENROUTER_API_KEY: Optional[str] = None
 
     def get_ai_key(self, provider: str = None) -> Optional[str]:
         """Get API key for the specified or default provider."""
@@ -114,6 +117,9 @@ class Settings(BaseSettings):
             'gemini': self.GEMINI_API_KEY,
             'claude': self.CLAUDE_API_KEY,
             'nvidia': self.NVIDIA_API_KEY,
+            'glm': self.GLM_API_KEY,
+            'minimax': self.MINIMAX_API_KEY,
+            'openrouter': self.OPENROUTER_API_KEY,
         }
         return mapping.get(provider.lower())
     

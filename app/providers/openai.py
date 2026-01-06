@@ -8,11 +8,49 @@ logger = Logger("OpenAI")
 class OpenAIProvider(BaseProvider):
     def __init__(self):
         super().__init__("openai", "OPENAI_API_KEY")
+        self.default_model = "gpt-4o"
         self.fallback_models = {
-            "gpt-4": "gpt-4-turbo-preview",
-            "gpt-3.5": "gpt-3.5-turbo",
+            "gpt-5.2": "gpt-5.2",
+            "gpt-5.2-codex": "gpt-5.2-codex",
+            "gpt-5.1": "gpt-5.1",
+            "gpt-5": "gpt-5",
+            "gpt-4.5": "gpt-4.5",
+            "gpt-4.1": "gpt-4.1",
+            "gpt-4o": "gpt-4o",
+            "gpt-4o-mini": "gpt-4o-mini",
+            "o4-mini": "o4-mini",
+            "o3-mini": "o3-mini",
         }
         self.base_url = "https://api.openai.com/v1/chat/completions"
+        self.models_url = "https://api.openai.com/v1/models"
+
+    async def fetch_models(self) -> List[Dict[str, str]]:
+        api_key = self.get_api_key()
+        if not api_key:
+            return self.get_fallback_models()
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    self.models_url,
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    timeout=30.0
+                )
+                if response.status_code != 200:
+                    return self.get_fallback_models()
+
+                data = response.json()
+                models = []
+                for m in data.get("data", []):
+                    model_id = m.get("id", "")
+                    # Filter to only chat-capable models (gpt-*)
+                    if model_id.startswith("gpt-") and not any(x in model_id for x in ["instruct", "vision", "audio", "realtime"]):
+                        models.append({"id": model_id, "name": model_id})
+                return sorted(models, key=lambda x: x["id"], reverse=True)[:20]  # Limit to top 20
+        except Exception as e:
+            logger.warn(f"Failed to fetch models: {e}")
+            return self.get_fallback_models()
+
 
     async def call(self, prompt: str, model: str, history: List[Dict[str, str]] = None, context_prefix: str = "") -> Dict[str, Any]:
         api_key = self.get_api_key()

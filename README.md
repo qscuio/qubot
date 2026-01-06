@@ -205,13 +205,20 @@ curl http://localhost:3888/health
 
 ### AI Providers
 
-| Variable | Description |
-|----------|-------------|
-| `GROQ_API_KEY` | Groq API key |
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `OPENAI_API_KEY` | OpenAI API key |
-| `CLAUDE_API_KEY` | Anthropic Claude key |
-| `NVIDIA_API_KEY` | NVIDIA NIM key |
+QuBot supports **8 AI providers** with dynamic model fetching:
+
+| Provider | Key Variable | Models |
+|----------|--------------|--------|
+| **Groq** | `GROQ_API_KEY` | Llama 4, Qwen3, DeepSeek, Mixtral |
+| **Gemini** | `GEMINI_API_KEY` | Gemini 3, 2.5 Pro/Flash |
+| **OpenAI** | `OPENAI_API_KEY` | GPT-5.x, GPT-4o, o3/o4-mini |
+| **Claude** | `CLAUDE_API_KEY` | Claude Opus 4.5, Sonnet 4.5 |
+| **NVIDIA** | `NVIDIA_API_KEY` | DeepSeek-V3.2, Nemotron, Llama |
+| **GLM** | `GLM_API_KEY` | GLM-4.7, 4.6, 4.5, 4-flash |
+| **MiniMax** | `MINIMAX_API_KEY` | M2.1, M2, M1, ABAB-7 |
+| **OpenRouter** | `OPENROUTER_API_KEY` | 500+ models (unified gateway) |
+
+> **Tip:** OpenRouter is recommended as it provides access to all providers through a single API key.
 
 ### Monitoring
 
