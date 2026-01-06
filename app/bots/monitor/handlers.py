@@ -2,6 +2,7 @@ from aiogram import Router, F, types
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.services.monitor import monitor_service
+from app.services.twitter import twitter_service
 from app.core.config import settings
 from app.core.logger import Logger
 
@@ -97,12 +98,13 @@ def get_main_menu_ui():
     # Management row
     builder.button(text="📡 Sources", callback_data="nav:sources")
     builder.button(text="⭐ VIPs", callback_data="nav:vips")
+    builder.button(text="🐦 Twitter", callback_data="nav:twitters")
     
     # Utility row
     builder.button(text="🔄 Sync", callback_data="nav:refresh")
     builder.button(text="❓ Help", callback_data="nav:help")
     
-    builder.adjust(1, 2, 2)
+    builder.adjust(1, 3, 2)
     return text, builder.as_markup()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -595,3 +597,156 @@ async def cmd_history(message: types.Message):
         "<i>History feature coming soon...</i>",
         parse_mode="HTML"
     )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Twitter Monitoring
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("twitter"))
+async def cmd_twitter(message: types.Message, command: CommandObject):
+    if not is_allowed(message.from_user.id): return
+    
+    username = command.args
+    if not username:
+        await message.answer(
+            "🐦 <b>Follow Twitter Account</b>\n\n"
+            "Usage: <code>/twitter &lt;username&gt;</code>\n\n"
+            "Example: <code>/twitter elonmusk</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    success = await twitter_service.add_follow(username.strip())
+    if success:
+        await message.answer(f"🐦 Following: <code>@{username.strip().lstrip('@')}</code>", parse_mode="HTML")
+    else:
+        await message.answer(f"Already following @{username.strip().lstrip('@')}")
+
+@router.message(Command("untwitter"))
+async def cmd_untwitter(message: types.Message, command: CommandObject):
+    if not is_allowed(message.from_user.id): return
+    
+    username = command.args
+    if not username:
+        await message.answer(
+            "🐦 <b>Unfollow Twitter Account</b>\n\n"
+            "Usage: <code>/untwitter &lt;username&gt;</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    success = await twitter_service.remove_follow(username.strip())
+    if success:
+        await message.answer(f"🗑️ Unfollowed: <code>@{username.strip().lstrip('@')}</code>", parse_mode="HTML")
+    else:
+        await message.answer(f"Not following @{username.strip().lstrip('@')}")
+
+@router.message(Command("twitters"))
+async def cmd_twitters(message: types.Message):
+    if not is_allowed(message.from_user.id): return
+    text, markup = get_twitters_menu_ui()
+    await message.answer(text, reply_markup=markup, parse_mode="HTML")
+
+def get_twitters_menu_ui(page: int = 0):
+    follows_list = list(twitter_service.follows.values())
+    page_size = 5
+    total_pages = max(1, (len(follows_list) + page_size - 1) // page_size)
+    page = max(0, min(page, total_pages - 1))
+    
+    if not follows_list:
+        text = (
+            "🐦 <b>Twitter Follows</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "📭 No Twitter accounts followed.\n\n"
+            "💡 <i>Use /twitter &lt;username&gt; to follow.</i>"
+        )
+        kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="◀️ Back", callback_data="nav:main")]
+        ])
+        return text, kb
+    
+    start_idx = page * page_size
+    end_idx = min(start_idx + page_size, len(follows_list))
+    page_follows = follows_list[start_idx:end_idx]
+    
+    text = f"🐦 <b>Twitter Follows</b> ({len(follows_list)} total)\n━━━━━━━━━━━━━━━━━━━━━\n"
+    
+    keyboard = []
+    
+    for i, info in enumerate(page_follows, start=start_idx + 1):
+        is_disabled = not info.get('enabled', True)
+        icon = "🔴" if is_disabled else "🟢"
+        username = info['username']
+        
+        text += f"{i}. {icon} <code>@{username}</code>\n"
+        
+        row = [
+            types.InlineKeyboardButton(text=f"{i}. @{username[:8]}", callback_data="tw:noop"),
+            types.InlineKeyboardButton(
+                text="✅ On" if is_disabled else "⏸️ Off",
+                callback_data=f"tw:{'enable' if is_disabled else 'disable'}:{username}"
+            ),
+            types.InlineKeyboardButton(text="🗑️", callback_data=f"tw:delete:{username}")
+        ]
+        keyboard.append(row)
+    
+    if total_pages > 1:
+        pagination = []
+        if page > 0:
+            pagination.append(types.InlineKeyboardButton(text="◀️ Prev", callback_data=f"tw:page:{page-1}"))
+        pagination.append(types.InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="tw:noop"))
+        if page < total_pages - 1:
+            pagination.append(types.InlineKeyboardButton(text="Next ▶️", callback_data=f"tw:page:{page+1}"))
+        keyboard.append(pagination)
+    
+    keyboard.append([types.InlineKeyboardButton(text="◀️ Back", callback_data="nav:main")])
+    
+    kb = types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    return text, kb
+
+async def edit_twitters_menu(message: types.Message):
+    text, markup = get_twitters_menu_ui()
+    try:
+        await message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+    except:
+        pass
+
+@router.callback_query(F.data == "nav:twitters")
+async def cb_twitters(callback: types.CallbackQuery):
+    await callback.answer()
+    await edit_twitters_menu(callback.message)
+
+@router.callback_query(F.data.startswith("tw:enable:"))
+async def cb_enable_twitter(callback: types.CallbackQuery):
+    username = callback.data.split(":", 2)[2]
+    await twitter_service.toggle_follow(username, True)
+    await callback.answer("✅ Enabled")
+    await edit_twitters_menu(callback.message)
+
+@router.callback_query(F.data.startswith("tw:disable:"))
+async def cb_disable_twitter(callback: types.CallbackQuery):
+    username = callback.data.split(":", 2)[2]
+    await twitter_service.toggle_follow(username, False)
+    await callback.answer("⏸️ Disabled")
+    await edit_twitters_menu(callback.message)
+
+@router.callback_query(F.data.startswith("tw:delete:"))
+async def cb_delete_twitter(callback: types.CallbackQuery):
+    username = callback.data.split(":", 2)[2]
+    await twitter_service.remove_follow(username)
+    await callback.answer("🗑️ Deleted")
+    await edit_twitters_menu(callback.message)
+
+@router.callback_query(F.data.startswith("tw:page:"))
+async def cb_twitter_page(callback: types.CallbackQuery):
+    page = int(callback.data.split(":")[2])
+    text, markup = get_twitters_menu_ui(page)
+    await callback.answer()
+    try:
+        await callback.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+    except:
+        pass
+
+@router.callback_query(F.data == "tw:noop")
+async def cb_twitter_noop(callback: types.CallbackQuery):
+    await callback.answer()

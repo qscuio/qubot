@@ -293,6 +293,7 @@ jobs:
             printf 'WEBFRONT_URL=%s\n' '${{ secrets.WEBFRONT_URL }}' >> .env
             printf 'RATE_LIMIT_MS=%s\n' '${{ secrets.RATE_LIMIT_MS }}' >> .env
             printf 'LOG_LEVEL=%s\n' '${{ secrets.LOG_LEVEL }}' >> .env
+            printf 'TWITTER_ACCOUNTS=%s\n' '${{ secrets.TWITTER_ACCOUNTS }}' >> .env
             
             # Deploy
             docker compose down || true

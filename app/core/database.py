@@ -107,6 +107,17 @@ class Database:
                 ON monitor_message_cache(created_at);
             """)
 
+            # Twitter Follows Table
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS twitter_follows (
+                    username TEXT PRIMARY KEY,
+                    user_id TEXT,
+                    last_tweet_id TEXT,
+                    enabled BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
             # RSS Sources Table
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS rss_sources (

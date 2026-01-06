@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     MONITOR_SUMMARIZE: bool = True  # Enable message summarization
     MONITOR_BUFFER_SIZE: int = 200   # Summarize after N messages
     MONITOR_BUFFER_TIMEOUT: int = 7200  # Summarize after N seconds (2 hours)
+    
+    # Twitter monitoring
+    TWITTER_ACCOUNTS: Optional[str] = None  # JSON array of Twitter accounts
 
     @property
     def source_channels_list(self) -> list:
