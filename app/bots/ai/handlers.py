@@ -458,7 +458,11 @@ async def handle_chat(message: types.Message):
         if len(response) > 4000:
             response = response[:4000] + "\n\n...(truncated)"
         
-        await status.edit_text(response)
+        try:
+            await status.edit_text(response, parse_mode="Markdown")
+        except Exception:
+            # Fallback to plain text if markdown parsing fails
+            await status.edit_text(response)
         
         # Quick actions (send as separate message to avoid clutter)
         builder = InlineKeyboardBuilder()

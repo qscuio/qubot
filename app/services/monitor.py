@@ -333,7 +333,12 @@ class MonitorService:
             # 4. Forward
             if self.target_channel:
                 source_name = chat_username or chat_title or chat_id
-                formatted_msg = self._format_message(event.message.message, source_name)
+                
+                # Convert to HTML to preserve formatting (links, bold, etc)
+                from telethon.extensions import html
+                msg_html = html.unparse(event.message.message, event.message.entities)
+                
+                formatted_msg = self._format_message(msg_html, source_name)
                 logger.info(f"📤 Forwarding to {self.target_channel}")
                 try:
                     # Convert target_channel to int if it's a numeric string
@@ -341,7 +346,13 @@ class MonitorService:
                     if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
                          target = int(target)
                     
-                    await telegram_service.send_message(target, formatted_msg)
+                    # Pass media if present
+                    await telegram_service.send_message(
+                        target, 
+                        formatted_msg, 
+                        parse_mode='html', 
+                        file=event.message.media
+                    )
                     logger.info("✅ Message forwarded successfully")
                 except Exception as e:
                     logger.error(f"❌ Failed to forward message: {e}")
@@ -352,11 +363,12 @@ class MonitorService:
             await self._save_to_history(chat_title, chat_id, event.message.message)
 
         except Exception as e:
-            logger.error("Error handling message", e)
+            logger.error(f"Error handling message: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
 
-    def _format_message(self, text, source_name):
-        clean_text = re.sub(r'\s+', ' ', text or "").strip()
-        return f"🔔【New Alert】\n\n{clean_text}\n\n— Source: {source_name}"
+    def _format_message(self, html_text, source_name):
+        return f"🔔【New Alert】\n\n{html_text}\n\n— Source: {source_name}"
 
     async def _save_to_history(self, source, source_id, message):
         if not db.pool:

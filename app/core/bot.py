@@ -124,12 +124,23 @@ class TelegramService:
             await callback(event)
         logger.info(f"Registered message handler on client {index}")
 
-    async def send_message(self, peer, message, parse_mode=None):
+    async def send_message(self, peer, message, parse_mode=None, file=None):
         """Send message using the MAIN client."""
         if not self.connected or not self.main_client:
             logger.warn("Cannot send message, no main client connected")
             return
         
+        # If sending file, don't chunk (Telethon handles caption limits or we assume short captions for now)
+        if file:
+            try:
+                async with rate_limiter:
+                    await self.main_client.send_message(peer, message, parse_mode=parse_mode, file=file)
+                logger.debug(f"Sent message with media to {peer}")
+                return
+            except Exception as e:
+                logger.error(f"Failed to send media to {peer}", e)
+                return
+
         # Chunk long messages
         chunks = chunk_message(message, max_length=4096)
         
