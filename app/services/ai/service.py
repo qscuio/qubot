@@ -97,6 +97,30 @@ class AiService:
             logger.error("Error generating response", e)
             return "Sorry, I encountered an error while processing your request."
 
+    async def quick_chat(self, prompt: str, provider_key: str = None) -> Dict[str, Any]:
+        """Quick one-shot chat without user context. Used for summarization, etc."""
+        provider_key = provider_key or (self.active_provider.name if self.active_provider else DEFAULT_PROVIDER)
+        provider = self.providers.get(provider_key.lower())
+        
+        if not provider or not provider.get_api_key():
+            # Try groq as fallback (fast and cheap)
+            provider = self.providers.get("groq")
+        
+        if not provider or not provider.get_api_key():
+            return {"content": "No AI provider configured"}
+        
+        try:
+            result = await provider.call(
+                prompt=prompt,
+                model=provider.default_model,
+                history=[],
+                context_prefix=""
+            )
+            return result
+        except Exception as e:
+            logger.error(f"quick_chat error: {e}")
+            return {"content": f"Error: {e}"}
+
     async def analyze(self, prompt: str, options: Dict = None) -> Dict[str, str]:
         """
         Analyze content with AI (general-purpose, no user context needed).

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     KEYWORDS: Optional[str] = None
     FROM_USERS: Optional[str] = None
     ALLOWED_USERS: Optional[str] = None
+    
+    # Summarization settings
+    MONITOR_SUMMARIZE: bool = False  # Enable message summarization
+    MONITOR_BUFFER_SIZE: int = 200   # Summarize after N messages
+    MONITOR_BUFFER_TIMEOUT: int = 300  # Summarize after N seconds (5 min)
 
     @property
     def source_channels_list(self) -> list:

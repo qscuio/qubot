@@ -1,14 +1,58 @@
 import re
+import time
+import asyncio
 from datetime import datetime
 from collections import OrderedDict
 from typing import Dict, List, Optional
 from telethon import events
+from telethon.tl.types import ChannelParticipantAdmin, ChannelParticipantCreator
 from app.core.config import settings
 from app.core.logger import Logger
 from app.core.bot import telegram_service
 from app.core.database import db
 
 logger = Logger("MonitorService")
+
+
+class MessageBuffer:
+    """Buffer messages for summarization."""
+    
+    def __init__(self, max_messages: int = 10, max_age_seconds: int = 300):
+        self.buffers: Dict[str, List[dict]] = {}  # channel_id -> list of messages
+        self.last_flush: Dict[str, float] = {}    # channel_id -> timestamp
+        self.max_messages = max_messages
+        self.max_age_seconds = max_age_seconds
+    
+    def add(self, channel_id: str, message_data: dict) -> bool:
+        """Add message to buffer. Returns True if buffer should be flushed."""
+        if channel_id not in self.buffers:
+            self.buffers[channel_id] = []
+            self.last_flush[channel_id] = time.time()
+        
+        self.buffers[channel_id].append(message_data)
+        
+        # Check if we should flush
+        count_trigger = len(self.buffers[channel_id]) >= self.max_messages
+        time_trigger = (time.time() - self.last_flush.get(channel_id, 0)) >= self.max_age_seconds
+        
+        return count_trigger or time_trigger
+    
+    def flush(self, channel_id: str) -> List[dict]:
+        """Return and clear buffer for channel."""
+        messages = self.buffers.pop(channel_id, [])
+        self.last_flush[channel_id] = time.time()
+        return messages
+    
+    def get_stale_channels(self) -> List[str]:
+        """Return channels that have pending messages past timeout."""
+        now = time.time()
+        stale = []
+        for channel_id, last_time in self.last_flush.items():
+            if channel_id in self.buffers and self.buffers[channel_id]:
+                if (now - last_time) >= self.max_age_seconds:
+                    stale.append(channel_id)
+        return stale
+
 
 class MonitorService:
     def __init__(self):
@@ -20,6 +64,14 @@ class MonitorService:
         # Using OrderedDict to maintain insertion order for LRU eviction
         self._processed_messages = OrderedDict()
         self._max_cache_size = 1000  # Keep last 1000 messages
+        
+        # Summarization buffer
+        self.summarize_enabled = settings.MONITOR_SUMMARIZE
+        self.message_buffer = MessageBuffer(
+            max_messages=settings.MONITOR_BUFFER_SIZE,
+            max_age_seconds=settings.MONITOR_BUFFER_TIMEOUT
+        )
+        self._flush_task = None
     
     @property
     def source_channels(self) -> List[str]:
@@ -78,11 +130,36 @@ class MonitorService:
         # Register handler
         await telegram_service.add_message_handler(self.handle_message)
         self.is_running = True
+        
+        # Start background flush task for timeout-based summarization
+        if self.summarize_enabled:
+            self._flush_task = asyncio.create_task(self._periodic_flush())
+            logger.info("📝 Summarization enabled")
+        
         logger.info("✅ MonitorService started.")
 
     async def stop(self):
         self.is_running = False
+        if self._flush_task:
+            self._flush_task.cancel()
+            try:
+                await self._flush_task
+            except asyncio.CancelledError:
+                pass
         logger.info("MonitorService stopped.")
+    
+    async def _periodic_flush(self):
+        """Background task to flush stale buffers."""
+        while self.is_running:
+            try:
+                await asyncio.sleep(60)  # Check every minute
+                stale_channels = self.message_buffer.get_stale_channels()
+                for channel_id in stale_channels:
+                    await self._flush_and_summarize(channel_id)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in periodic flush: {e}")
     
     async def resolve_channel_info(self, channel: str) -> dict:
         """Resolve channel ID and name from Telegram."""
@@ -330,7 +407,17 @@ class MonitorService:
             # Log match
             logger.info(f"✅ Matched message from {chat_title}")
 
-            # 4. Forward
+            # 4. Check if sender is admin (for direct forwarding)
+            is_admin = False
+            if self.summarize_enabled:
+                try:
+                    # Get sender's participant info in the channel
+                    participant = await telegram_service.main_client.get_permissions(chat, sender)
+                    is_admin = participant.is_admin or participant.is_creator
+                except Exception as e:
+                    logger.debug(f"Could not check admin status: {e}")
+            
+            # 5. Forward or Buffer
             if self.target_channel:
                 source_name = chat_username or chat_title or chat_id
                 
@@ -338,28 +425,43 @@ class MonitorService:
                 from telethon.extensions import html
                 msg_html = html.unparse(event.message.message, event.message.entities)
                 
-                formatted_msg = self._format_message(msg_html, source_name)
-                logger.info(f"📤 Forwarding to {self.target_channel}")
-                try:
-                    # Convert target_channel to int if it's a numeric string
-                    target = self.target_channel
-                    if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
-                         target = int(target)
+                # Admin messages or summarization disabled: forward immediately
+                if is_admin or not self.summarize_enabled:
+                    formatted_msg = self._format_message(msg_html, source_name, is_admin)
+                    logger.info(f"📤 {'Admin message - ' if is_admin else ''}Forwarding to {self.target_channel}")
+                    try:
+                        target = self.target_channel
+                        if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
+                             target = int(target)
+                        
+                        await telegram_service.send_message(
+                            target, 
+                            formatted_msg, 
+                            parse_mode='html', 
+                            file=event.message.media
+                        )
+                        logger.info("✅ Message forwarded successfully")
+                    except Exception as e:
+                        logger.error(f"❌ Failed to forward message: {e}")
+                else:
+                    # Regular message with summarization enabled: buffer it
+                    message_data = {
+                        'text': msg_html,
+                        'sender': sender_name,
+                        'source': source_name,
+                        'time': datetime.now().strftime('%H:%M'),
+                        'has_media': bool(event.message.media)
+                    }
                     
-                    # Pass media if present
-                    await telegram_service.send_message(
-                        target, 
-                        formatted_msg, 
-                        parse_mode='html', 
-                        file=event.message.media
-                    )
-                    logger.info("✅ Message forwarded successfully")
-                except Exception as e:
-                    logger.error(f"❌ Failed to forward message: {e}")
+                    should_flush = self.message_buffer.add(chat_id, message_data)
+                    logger.info(f"📥 Buffered message from {sender_name} (buffer size: {len(self.message_buffer.buffers.get(chat_id, []))})")
+                    
+                    if should_flush:
+                        await self._flush_and_summarize(chat_id)
             else:
                 logger.warn("No TARGET_CHANNEL configured, skipping forward")
 
-            # 5. Save History
+            # 6. Save History
             await self._save_to_history(chat_title, chat_id, event.message.message)
 
         except Exception as e:
@@ -367,7 +469,69 @@ class MonitorService:
             import traceback
             logger.debug(traceback.format_exc())
 
-    def _format_message(self, html_text, source_name):
+    async def _flush_and_summarize(self, channel_id: str):
+        """Flush buffer for a channel and send summarized message."""
+        messages = self.message_buffer.flush(channel_id)
+        if not messages:
+            return
+        
+        channel_info = self.get_channel_info(channel_id)
+        source_name = channel_info.get('name', channel_id) if channel_info else channel_id
+        
+        logger.info(f"📝 Summarizing {len(messages)} messages from {source_name}")
+        
+        try:
+            # Build summary using AI
+            from app.services.ai import ai_service
+            
+            # Format messages for summarization
+            msg_list = "\n".join([
+                f"[{m['time']}] {m['sender']}: {m['text'][:200]}" 
+                for m in messages
+            ])
+            
+            prompt = f"""Summarize the following group chat messages concisely. 
+Focus on the main topics discussed and any important information shared.
+Keep the summary brief (2-3 sentences max).
+
+Messages:
+{msg_list}
+
+Summary:"""
+            
+            result = await ai_service.quick_chat(prompt)
+            summary = result.get('content', 'Unable to summarize')
+            
+            # Format and send summary
+            formatted_summary = (
+                f"📊 <b>Summary from {source_name}</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━━\n"
+                f"{summary}\n\n"
+                f"<i>({len(messages)} messages)</i>"
+            )
+            
+            target = self.target_channel
+            if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
+                target = int(target)
+            
+            await telegram_service.send_message(target, formatted_summary, parse_mode='html')
+            logger.info(f"✅ Summary sent to target channel")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to summarize: {e}")
+            # Fallback: send a simple count message
+            fallback_msg = f"📊 {len(messages)} messages from {source_name} (summarization failed)"
+            try:
+                target = self.target_channel
+                if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
+                    target = int(target)
+                await telegram_service.send_message(target, fallback_msg)
+            except:
+                pass
+
+    def _format_message(self, html_text, source_name, is_admin=False):
+        if is_admin:
+            return f"📢 <b>【Admin Announcement】</b>\n\n{html_text}\n\n— Source: {source_name}"
         return f"🔔【New Alert】\n\n{html_text}\n\n— Source: {source_name}"
 
     async def _save_to_history(self, source, source_id, message):

@@ -130,16 +130,32 @@ class TelegramService:
             logger.warn("Cannot send message, no main client connected")
             return
         
-        # If sending file, don't chunk (Telethon handles caption limits or we assume short captions for now)
+        # Filter out non-sendable media types (like WebPage previews)
+        sendable_file = None
         if file:
+            from telethon.tl.types import (
+                MessageMediaPhoto, MessageMediaDocument,
+                MessageMediaWebPage
+            )
+            # Only send actual media, not web page previews
+            if isinstance(file, (MessageMediaPhoto, MessageMediaDocument)):
+                sendable_file = file
+            elif isinstance(file, MessageMediaWebPage):
+                # WebPage previews can't be sent as files, skip
+                sendable_file = None
+            elif hasattr(file, 'photo') or hasattr(file, 'document'):
+                sendable_file = file
+        
+        # If sending file, don't chunk
+        if sendable_file:
             try:
                 async with rate_limiter:
-                    await self.main_client.send_message(peer, message, parse_mode=parse_mode, file=file)
+                    await self.main_client.send_message(peer, message, parse_mode=parse_mode, file=sendable_file)
                 logger.debug(f"Sent message with media to {peer}")
                 return
             except Exception as e:
-                logger.error(f"Failed to send media to {peer}", e)
-                return
+                logger.error(f"Failed to send media to {peer}: {e}")
+                # Fall through to send without media
 
         # Chunk long messages
         chunks = chunk_message(message, max_length=4096)
@@ -150,7 +166,7 @@ class TelegramService:
                     await self.main_client.send_message(peer, chunk, parse_mode=parse_mode)
                 logger.debug(f"Sent message to {peer}")
             except Exception as e:
-                logger.error(f"Failed to send message to {peer}", e)
+                logger.error(f"Failed to send message to {peer}: {e}")
 
     async def resolve_entity(self, peer):
         if not self.connected or not self.main_client:

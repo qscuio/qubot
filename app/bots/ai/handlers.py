@@ -452,14 +452,29 @@ async def handle_chat(message: types.Message):
     status = await message.answer("🤔 Thinking...")
     
     try:
+        # Get user settings for header
+        user_settings = await ai_service.get_settings(message.from_user.id)
+        provider_name = user_settings.get("provider", "groq")
+        model_name = user_settings.get("model", "default")
+        
+        # Get active chat info
+        chats = await ai_service.get_chats(message.from_user.id, 1)
+        active_chat = next((c for c in chats if c.get("is_active")), None)
+        chat_title = active_chat.get("title", "Chat")[:20] if active_chat else "Chat"
+        chat_id = active_chat.get("id", "?") if active_chat else "?"
+        
         result = await ai_service.chat(message.from_user.id, prompt)
         response = result.get("content", "No response")
         
-        if len(response) > 4000:
-            response = response[:4000] + "\n\n...(truncated)"
+        if len(response) > 3800:
+            response = response[:3800] + "\n\n...(truncated)"
+        
+        # Add header with context info
+        header = f"💬 `{chat_title}` | 🔌 `{provider_name}` | 📝 `{model_name[:25]}`\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        full_response = header + response
         
         try:
-            await status.edit_text(response, parse_mode="Markdown")
+            await status.edit_text(full_response, parse_mode="Markdown")
         except Exception:
             # Fallback to plain text if markdown parsing fails
             await status.edit_text(response)
