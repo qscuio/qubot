@@ -5,7 +5,7 @@ from datetime import datetime
 from collections import OrderedDict
 from typing import Dict, List, Optional
 from telethon import events
-from telethon.tl.types import ChannelParticipantAdmin, ChannelParticipantCreator
+from telethon.tl import functions, types
 from app.core.config import settings
 from app.core.logger import Logger
 from app.core.bot import telegram_service
@@ -64,6 +64,7 @@ class MonitorService:
         # Using OrderedDict to maintain insertion order for LRU eviction
         self._processed_messages = OrderedDict()
         self._max_cache_size = 1000  # Keep last 1000 messages
+        self._admin_cache: Dict[str, dict] = {}
         
         # Summarization buffer
         self.summarize_enabled = settings.MONITOR_SUMMARIZE
@@ -322,6 +323,42 @@ class MonitorService:
             return True
             
         return source == str(raw_chat_id)
+    
+    async def _is_admin_sender(self, chat, sender, event) -> bool:
+        if getattr(event.message, "post", False):
+            return True
+        if not sender:
+            return False
+        
+        chat_id = getattr(chat, "id", None)
+        cache_key = str(chat_id) if chat_id is not None else None
+        now = time.time()
+        cached = self._admin_cache.get(cache_key) if cache_key else None
+        if cached and cached.get("expires", 0) > now:
+            return sender.id in cached.get("admins", set())
+        
+        try:
+            if isinstance(chat, types.Chat):
+                full = await telegram_service.main_client(functions.messages.GetFullChat(chat_id=chat.id))
+                participants = full.full_chat.participants
+                if isinstance(participants, types.ChatParticipants):
+                    admins = {
+                        p.user_id for p in participants.participants
+                        if isinstance(p, (types.ChatParticipantAdmin, types.ChatParticipantCreator))
+                    }
+                    if cache_key:
+                        self._admin_cache[cache_key] = {"admins": admins, "expires": now + 300}
+                    return sender.id in admins
+                return False
+            
+            input_channel = await telegram_service.main_client.get_input_entity(chat)
+            result = await telegram_service.main_client(
+                functions.channels.GetParticipant(channel=input_channel, participant=sender)
+            )
+            return isinstance(result.participant, (types.ChannelParticipantAdmin, types.ChannelParticipantCreator))
+        except Exception as e:
+            logger.debug(f"Could not check admin status: {e}")
+            return False
 
     async def handle_message(self, event):
         if not self.is_running:
@@ -418,14 +455,7 @@ class MonitorService:
             # 4. Check if sender is admin (for direct forwarding)
             is_admin = False
             if self.summarize_enabled:
-                try:
-                    # Get sender's participant info in the channel
-                    participant = await telegram_service.main_client.get_permissions(chat, sender)
-                    is_admin = isinstance(participant, (ChannelParticipantAdmin, ChannelParticipantCreator))
-                except Exception as e:
-                    logger.debug(f"Could not check admin status: {e}")
-            if getattr(event.message, "post", False):
-                is_admin = True
+                is_admin = await self._is_admin_sender(chat, sender, event)
             
             # 5. Forward or Buffer
             if self.target_channel:
