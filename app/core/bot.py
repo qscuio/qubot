@@ -16,6 +16,8 @@ class TelegramService:
         self._event_handlers = []
         # Store handlers to register on new clients
         self._pending_handlers = []
+        # Track our own user IDs (to avoid forwarding our own messages)
+        self.own_user_ids: set[int] = set()
 
     def _normalize_peer_id(self, value):
         if value is None:
@@ -92,6 +94,9 @@ class TelegramService:
 
                 me = await client.get_me()
                 logger.info(f"✅ Connected client {i} as {me.username or me.first_name} (ID: {me.id})")
+                
+                # Track our own user ID to avoid forwarding our own messages
+                self.own_user_ids.add(me.id)
                 
                 self.clients.append(client)
                 

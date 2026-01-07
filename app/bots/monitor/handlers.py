@@ -1,6 +1,7 @@
 from aiogram import Router, F, types
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramNetworkError
 from app.services.monitor import monitor_service
 from app.services.twitter import twitter_service
 from app.core.config import settings
@@ -12,6 +13,23 @@ router = Router()
 def is_allowed(user_id: int) -> bool:
     if not settings.allowed_users_list: return True
     return user_id in settings.allowed_users_list
+
+
+async def safe_answer(callback: types.CallbackQuery, text: str = None):
+    """Safely answer a callback query, reporting network errors to the user."""
+    try:
+        await safe_answer(callback, text)
+    except TelegramNetworkError as e:
+        logger.error(f"Network error answering callback: {e}")
+        try:
+            await callback.message.answer(
+                "⚠️ <b>Network Error</b>\n\n"
+                f"Failed to complete action: {e}\n"
+                "Please try again.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass  # Can't report if message also fails
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main Menu
@@ -120,18 +138,18 @@ def get_main_menu_ui():
 @router.callback_query(F.data == "mon:start")
 async def cb_start_monitor(callback: types.CallbackQuery):
     await monitor_service.start()
-    await callback.answer("✅ Monitoring started")
+    await safe_answer(callback, "✅ Monitoring started")
     await edit_main_menu(callback.message)
 
 @router.callback_query(F.data == "mon:stop")
 async def cb_stop_monitor(callback: types.CallbackQuery):
     await monitor_service.stop()
-    await callback.answer("⏹️ Monitoring stopped")
+    await safe_answer(callback, "⏹️ Monitoring stopped")
     await edit_main_menu(callback.message)
 
 @router.callback_query(F.data == "nav:refresh")
 async def cb_refresh(callback: types.CallbackQuery):
-    await callback.answer("🔄 Syncing...")
+    await safe_answer(callback, "🔄 Syncing...")
     
     # Force sync pending updates from Telegram servers
     from app.core.bot import telegram_service
@@ -153,17 +171,17 @@ async def cb_refresh(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "nav:sources")
 async def cb_sources(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     await edit_sources_menu(callback.message)
 
 @router.callback_query(F.data == "nav:main")
 async def cb_main(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     await edit_main_menu(callback.message)
 
 @router.callback_query(F.data == "nav:help")
 async def cb_help_callback(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     # Reuse existing help command logic but as edit if possible or new message
     help_text = (
         "🔔 <b>Monitor Bot Commands</b>\n"
@@ -291,7 +309,7 @@ async def cb_enable_source(callback: types.CallbackQuery):
     ch_key = callback.data.split(":", 2)[2]
     ch_id = find_channel_by_prefix(ch_key)
     await monitor_service.toggle_source(ch_id, True)
-    await callback.answer(f"✅ Enabled")
+    await safe_answer(callback, f"✅ Enabled")
     await edit_sources_menu(callback.message)
 
 @router.callback_query(F.data.startswith("src:disable:"))
@@ -299,7 +317,7 @@ async def cb_disable_source(callback: types.CallbackQuery):
     ch_key = callback.data.split(":", 2)[2]
     ch_id = find_channel_by_prefix(ch_key)
     await monitor_service.toggle_source(ch_id, False)
-    await callback.answer(f"⏸️ Disabled")
+    await safe_answer(callback, f"⏸️ Disabled")
     await edit_sources_menu(callback.message)
 
 @router.callback_query(F.data.startswith("src:delete:"))
@@ -308,14 +326,14 @@ async def cb_delete_source(callback: types.CallbackQuery):
     ch_id = find_channel_by_prefix(ch_key)
     logger.info(f"Delete source: key={ch_key}, resolved={ch_id}")
     await monitor_service.remove_source(str(callback.from_user.id), ch_id)
-    await callback.answer(f"🗑️ Deleted")
+    await safe_answer(callback, f"🗑️ Deleted")
     await edit_sources_menu(callback.message)
 
 @router.callback_query(F.data.startswith("src:page:"))
 async def cb_page(callback: types.CallbackQuery):
     page = int(callback.data.split(":")[2])
     text, markup = get_sources_menu_ui(page)
-    await callback.answer()
+    await safe_answer(callback)
     try:
         await callback.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
     except:
@@ -323,7 +341,7 @@ async def cb_page(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "src:noop")
 async def cb_noop(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
 
 @router.callback_query(F.data == "src:clear_confirm")
 async def cb_clear_confirm(callback: types.CallbackQuery):
@@ -332,7 +350,7 @@ async def cb_clear_confirm(callback: types.CallbackQuery):
     builder.button(text="❌ Cancel", callback_data="nav:sources")
     builder.adjust(1)
     
-    await callback.answer()
+    await safe_answer(callback)
     try:
         await callback.message.edit_text(
             "⚠️ <b>Clear All Sources?</b>\n\n"
@@ -351,7 +369,7 @@ async def cb_clear_yes(callback: types.CallbackQuery):
     for src in list(monitor_service.source_channels):
         await monitor_service.remove_source(user_id, src)
     
-    await callback.answer("🗑️ All sources cleared")
+    await safe_answer(callback, "🗑️ All sources cleared")
     await edit_sources_menu(callback.message)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -541,7 +559,7 @@ def get_vips_menu_ui(page: int = 0):
 
 @router.callback_query(F.data == "nav:vips")
 async def cb_vips(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     await edit_vips_menu(callback.message)
 
 def find_vip_by_prefix(prefix: str) -> str:
@@ -555,7 +573,7 @@ async def cb_enable_vip(callback: types.CallbackQuery):
     uid_key = callback.data.split(":", 2)[2]
     uid = find_vip_by_prefix(uid_key)
     await monitor_service.toggle_vip_user(uid, True)
-    await callback.answer("✅ Enabled")
+    await safe_answer(callback, "✅ Enabled")
     await edit_vips_menu(callback.message)
 
 @router.callback_query(F.data.startswith("vip:disable:"))
@@ -563,7 +581,7 @@ async def cb_disable_vip(callback: types.CallbackQuery):
     uid_key = callback.data.split(":", 2)[2]
     uid = find_vip_by_prefix(uid_key)
     await monitor_service.toggle_vip_user(uid, False)
-    await callback.answer("⏸️ Disabled")
+    await safe_answer(callback, "⏸️ Disabled")
     await edit_vips_menu(callback.message)
 
 @router.callback_query(F.data.startswith("vip:delete:"))
@@ -571,14 +589,14 @@ async def cb_delete_vip(callback: types.CallbackQuery):
     uid_key = callback.data.split(":", 2)[2]
     uid = find_vip_by_prefix(uid_key)
     await monitor_service.remove_vip_user(uid)
-    await callback.answer("🗑️ Deleted")
+    await safe_answer(callback, "🗑️ Deleted")
     await edit_vips_menu(callback.message)
 
 @router.callback_query(F.data.startswith("vip:page:"))
 async def cb_vip_page(callback: types.CallbackQuery):
     page = int(callback.data.split(":")[2])
     text, markup = get_vips_menu_ui(page)
-    await callback.answer()
+    await safe_answer(callback)
     try:
         await callback.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
     except:
@@ -586,7 +604,7 @@ async def cb_vip_page(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "vip:noop")
 async def cb_vip_noop(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # History Command
@@ -730,7 +748,7 @@ def get_blacklist_menu_ui(page: int = 0):
 
 @router.callback_query(F.data == "nav:blacklist")
 async def cb_blacklist(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     await edit_blacklist_menu(callback.message)
 
 def find_blacklist_by_prefix(prefix: str) -> str:
@@ -744,14 +762,14 @@ async def cb_unblock(callback: types.CallbackQuery):
     ch_key = callback.data.split(":", 2)[2]
     ch_id = find_blacklist_by_prefix(ch_key)
     await monitor_service.remove_from_blacklist(ch_id)
-    await callback.answer("✅ Unblocked")
+    await safe_answer(callback, "✅ Unblocked")
     await edit_blacklist_menu(callback.message)
 
 @router.callback_query(F.data.startswith("bl:page:"))
 async def cb_blacklist_page(callback: types.CallbackQuery):
     page = int(callback.data.split(":")[2])
     text, markup = get_blacklist_menu_ui(page)
-    await callback.answer()
+    await safe_answer(callback)
     try:
         await callback.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
     except:
@@ -759,7 +777,7 @@ async def cb_blacklist_page(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "bl:noop")
 async def cb_blacklist_noop(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Twitter Monitoring
@@ -876,35 +894,35 @@ async def edit_twitters_menu(message: types.Message):
 
 @router.callback_query(F.data == "nav:twitters")
 async def cb_twitters(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     await edit_twitters_menu(callback.message)
 
 @router.callback_query(F.data.startswith("tw:enable:"))
 async def cb_enable_twitter(callback: types.CallbackQuery):
     username = callback.data.split(":", 2)[2]
     await twitter_service.toggle_follow(username, True)
-    await callback.answer("✅ Enabled")
+    await safe_answer(callback, "✅ Enabled")
     await edit_twitters_menu(callback.message)
 
 @router.callback_query(F.data.startswith("tw:disable:"))
 async def cb_disable_twitter(callback: types.CallbackQuery):
     username = callback.data.split(":", 2)[2]
     await twitter_service.toggle_follow(username, False)
-    await callback.answer("⏸️ Disabled")
+    await safe_answer(callback, "⏸️ Disabled")
     await edit_twitters_menu(callback.message)
 
 @router.callback_query(F.data.startswith("tw:delete:"))
 async def cb_delete_twitter(callback: types.CallbackQuery):
     username = callback.data.split(":", 2)[2]
     await twitter_service.remove_follow(username)
-    await callback.answer("🗑️ Deleted")
+    await safe_answer(callback, "🗑️ Deleted")
     await edit_twitters_menu(callback.message)
 
 @router.callback_query(F.data.startswith("tw:page:"))
 async def cb_twitter_page(callback: types.CallbackQuery):
     page = int(callback.data.split(":")[2])
     text, markup = get_twitters_menu_ui(page)
-    await callback.answer()
+    await safe_answer(callback)
     try:
         await callback.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
     except:
@@ -912,4 +930,4 @@ async def cb_twitter_page(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "tw:noop")
 async def cb_twitter_noop(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)

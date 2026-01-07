@@ -757,6 +757,11 @@ class MonitorService:
             sender_name = sender_username or getattr(sender, 'first_name', 'Unknown')
             sender_id = str(sender.id) if sender else 'Unknown'
             
+            # Skip messages sent by our own accounts (don't forward our own messages)
+            if sender and sender.id in telegram_service.own_user_ids:
+                logger.debug(f"⏭️ Skipping message from our own account: {sender_name} ({sender.id})")
+                return
+            
             # Message content (truncated)
             msg_text = (event.message.message or '')[:100]
             
