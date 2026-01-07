@@ -85,6 +85,15 @@ class Database:
                 );
             """)
 
+            # Monitor Blacklist Table (channels to ignore)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS monitor_blacklist (
+                    channel_id TEXT PRIMARY KEY,
+                    name TEXT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
             # Monitor Message Cache (for daily reports)
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS monitor_message_cache (
@@ -199,4 +208,3 @@ class CacheService:
 
 def get_cache() -> CacheService:
     return CacheService(db.redis)
-

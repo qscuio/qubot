@@ -753,7 +753,8 @@ class MonitorService:
             
             # Get sender info
             sender = await event.get_sender()
-            sender_name = getattr(sender, 'username', None) or getattr(sender, 'first_name', 'Unknown')
+            sender_username = getattr(sender, 'username', None)
+            sender_name = sender_username or getattr(sender, 'first_name', 'Unknown')
             sender_id = str(sender.id) if sender else 'Unknown'
             
             # Message content (truncated)
@@ -779,7 +780,7 @@ class MonitorService:
             
             # Check blacklist - skip channels/groups we don't want to process
             # BUT: VIP users have higher priority than blacklist
-            is_vip_sender = self.is_vip_user(sender_id, sender_name)
+            is_vip_sender = self.is_vip_user(sender_id, sender_username)
             is_blacklisted = self.is_blacklisted(chat_username, chat_id)
             if is_blacklisted and not is_vip_sender:
                 logger.info(f"⛔ Blacklisted channel, skipping: {chat_title}")
