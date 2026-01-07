@@ -114,21 +114,22 @@ class MonitorService:
     async def initialize(self):
         logger.info("Initializing MonitorService...")
         
-        # Load config channels (just IDs)
+        # Load config channels (just IDs, default to 'market' category)
         config_channels = settings.source_channels_list
         for cid in config_channels:
             if cid not in self.channels:
-                self.channels[cid] = {'id': cid, 'name': cid, 'enabled': True}
+                self.channels[cid] = {'id': cid, 'name': cid, 'enabled': True, 'category': 'market'}
         
-        # Load db channels with names
+        # Load db channels with names and categories
         if db.pool:
             try:
-                rows = await db.pool.fetch("SELECT channel_id, name, enabled FROM monitor_channels")
+                rows = await db.pool.fetch("SELECT channel_id, name, enabled, category FROM monitor_channels")
                 for row in rows:
                     self.channels[row['channel_id']] = {
                         'id': row['channel_id'],
                         'name': row['name'] or row['channel_id'],
-                        'enabled': row['enabled']
+                        'enabled': row['enabled'],
+                        'category': row['category'] or 'market'
                     }
                 logger.info(f"Loaded {len(rows)} channels from database")
             except Exception as e:
@@ -300,9 +301,50 @@ class MonitorService:
             logger.error(f"Error generating reports: {e}")
     
     async def _generate_channel_report(self, channel_id: str, channel_name: str):
-        """Generate report for a single channel."""
+        """Generate report for a single channel using compression pipeline."""
         if not db.pool:
             return
+        
+        # ═══════════════════════════════════════════════════════════════
+        # Check channel category - different handling for non-market channels
+        # ═══════════════════════════════════════════════════════════════
+        channel_info = self.channels.get(channel_id, {})
+        channel_category = channel_info.get('category', 'market')
+        
+        # Auto-detect category if still default 'market'
+        if channel_category == 'market':
+            # Fetch sample messages for detection
+            sample_msgs = await db.pool.fetch("""
+                SELECT message_text FROM monitor_message_cache 
+                WHERE channel_id = $1 LIMIT 50
+            """, channel_id)
+            
+            if sample_msgs:
+                from app.services.market_keywords import MarketKeywords
+                texts = [m['message_text'] or '' for m in sample_msgs]
+                detected = MarketKeywords.detect_channel_category(texts)
+                
+                if detected != 'market':
+                    # Update category in memory and DB
+                    channel_category = detected
+                    await self.set_channel_category(channel_id, detected)
+                    logger.info(f"🔍 Auto-detected {channel_name} as '{detected}'")
+        
+        # tech/resource channels: just clear cache, no report
+        if channel_category in ('tech', 'resource', 'skip'):
+            messages_count = await db.pool.fetchval("""
+                SELECT COUNT(*) FROM monitor_message_cache WHERE channel_id = $1
+            """, channel_id)
+            if messages_count:
+                await db.pool.execute("""
+                    DELETE FROM monitor_message_cache WHERE channel_id = $1
+                """, channel_id)
+                logger.info(f"⏭️ Skipped {channel_name} ({channel_category}): {messages_count} messages cleared")
+            return
+        
+        # Import compression services
+        from app.services.message_compressor import message_compressor
+        from app.services.hot_words import hot_words_service
         
         # Fetch cached messages
         messages = await db.pool.fetch("""
@@ -315,43 +357,85 @@ class MonitorService:
         if not messages:
             return
         
-        logger.info(f"📝 Generating report for {channel_name} ({len(messages)} messages)")
+        original_count = len(messages)
+        logger.info(f"📝 Generating report for {channel_name} ({original_count} messages)")
         
-        # Format messages for AI
-        msg_list = "\n".join([
-            f"[{m['created_at'].strftime('%H:%M')}] {m['sender_name']}: {(m['message_text'] or '')[:200]}"
-            for m in messages
-        ])
+        # ═══════════════════════════════════════════════════════════════
+        # Step 1: Compress and structure messages
+        # ═══════════════════════════════════════════════════════════════
+        compression_result = await message_compressor.compress(
+            [dict(m) for m in messages],  # Convert Record to dict
+            channel_id,
+            channel_name
+        )
         
-        # Professional report prompt
+        if compression_result.compressed_count == 0:
+            logger.info(f"📊 No valuable messages for {channel_name}, skipping report")
+            # Still clear cache
+            await db.pool.execute("""
+                DELETE FROM monitor_message_cache WHERE channel_id = $1
+            """, channel_id)
+            return
+        
+        # ═══════════════════════════════════════════════════════════════
+        # Step 2: Persist hot words to database
+        # ═══════════════════════════════════════════════════════════════
+        try:
+            await hot_words_service.persist_to_db()
+        except Exception as e:
+            logger.warn(f"Failed to persist hot words: {e}")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # Step 3: Format for AI prompt
+        # ═══════════════════════════════════════════════════════════════
         now = get_shanghai_time()
         report_type = "早报" if now.hour < 12 else "晚报"
         date_str = now.strftime("%Y年%m月%d日")
         
-        prompt = f"""你是一个专业的新闻分析师。请为「{channel_name}」生成{report_type}。
+        # Get hot words report
+        hot_words_section = hot_words_service.format_report()
+        
+        # Format compressed messages
+        compressed_info = message_compressor.format_for_prompt(compression_result)
+        
+        # Category and sentiment stats
+        cat_stats = ", ".join([f"{k}: {v}" for k, v in compression_result.category_stats.items()])
+        sent_stats = ", ".join([f"{k}: {v}" for k, v in compression_result.sentiment_stats.items()])
+        
+        prompt = f"""你是一个专业的市场新闻分析师。请为「{channel_name}」生成{report_type}。
+
+📊 数据概览：
+- 原始消息: {compression_result.original_count} 条 → 筛选后: {compression_result.compressed_count} 条
+- 市场分类: {cat_stats}
+- 市场情绪: {sent_stats}
+
+{hot_words_section}
 
 要求：
-1. 使用专业、简洁的语言
-2. 提取最重要的信息
+1. 使用专业、简洁的语言，突出市场价值信息
+2. 重点关注价格变动、重大事件、市场情绪
 3. 使用 Markdown 格式
 
 格式模板：
 # {channel_name} {report_type}
-> {date_str} | 共 {len(messages)} 条消息
+> {date_str} | 原始 {compression_result.original_count} 条 → 精选 {compression_result.compressed_count} 条
 
-## 📰 今日要闻
-（列出 3-5 条最重要的消息）
+## 📰 核心要闻
+（列出 3-5 条最重要的市场信息，附带情绪标签 📈/📉）
 
 ## 📊 数据亮点
-（如有数字或数据，列出关键数据点）
+（关键数字、价格变动、涨跌幅等）
 
-## 💡 值得关注
-（1-2 条需要持续关注的内容）
+## 🔥 热门话题
+（根据热词分析今日讨论焦点）
+
+## 💡 研判建议
+（基于以上信息的市场研判，1-2 句话）
 
 ---
 
-消息记录：
-{msg_list[:8000]}
+筛选后的消息记录：
+{compressed_info[:8000]}
 """
         
         try:
@@ -364,36 +448,62 @@ class MonitorService:
                 logger.error(f"Failed to generate report content for {channel_name}")
                 return
             
-            # Add footer
-            report_markdown = f"{report_content}\n\n---\n*由 QuBot 自动生成 | {now.isoformat()}*"
+            # Add footer with compression stats
+            report_markdown = f"""{report_content}
+
+---
+*由 QuBot 自动生成 | {now.isoformat()}*
+*压缩率: {compression_result.compression_ratio:.1%} ({compression_result.original_count} → {compression_result.compressed_count})*
+"""
             
-            # Save to GitHub and get download link (only if report succeeded)
+            # ═══════════════════════════════════════════════════════════════
+            # Step 4: Save to GitHub (Markdown + JSON)
+            # ═══════════════════════════════════════════════════════════════
             download_url = None
+            json_url = None
             try:
                 from app.services.github import github_service
                 if github_service.is_ready:
-                    filename = f"reports/{channel_name.replace(' ', '_')}_{now.strftime('%Y%m%d_%H%M')}.md"
+                    # Save markdown report
+                    safe_name = channel_name.replace(' ', '_').replace('/', '_')
+                    md_filename = f"reports/channels/{safe_name}_{now.strftime('%Y%m%d_%H%M')}.md"
                     download_url = github_service.save_note(
-                        filename, 
+                        md_filename, 
                         report_markdown, 
                         f"Report: {channel_name} {report_type}"
                     )
                     logger.info(f"📎 Report saved: {download_url}")
+                    
+                    # Save structured JSON data
+                    json_filename = f"reports/data/{now.strftime('%Y-%m-%d')}_{safe_name}.json"
+                    json_content = compression_result.to_json()
+                    json_url = github_service.save_note(
+                        json_filename,
+                        json_content,
+                        f"Data: {channel_name} {now.strftime('%Y-%m-%d')}"
+                    )
+                    logger.info(f"📦 JSON data saved: {json_url}")
             except Exception as e:
                 logger.warn(f"Failed to save report to GitHub: {e}")
             
-            # Send report to target channel
+            # ═══════════════════════════════════════════════════════════════
+            # Step 5: Send report to Telegram
+            # ═══════════════════════════════════════════════════════════════
             if self.target_channel:
                 # Truncate for Telegram if too long
                 tg_report = report_content
                 if len(tg_report) > 4000:
                     tg_report = tg_report[:4000] + "\n\n... (内容已截断)"
                 
-                formatted = f"📊 <b>{channel_name} {report_type}</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+                formatted = f"📊 <b>{channel_name} {report_type}</b>\n"
+                formatted += f"━━━━━━━━━━━━━━━━━━━━━\n"
+                formatted += f"📈 原始 {compression_result.original_count} → 精选 {compression_result.compressed_count}\n\n"
                 formatted += tg_report.replace("**", "").replace("##", "📌").replace("# ", "📋 ")
                 
                 if download_url:
-                    formatted += f"\n\n📎 <a href='{download_url}'>下载完整报告</a>"
+                    formatted += f"\n\n📎 <a href='{download_url}'>完整报告</a>"
+                if json_url:
+                    formatted += f" | <a href='{json_url}'>原始数据</a>"
                 
                 target = self.target_channel
                 if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
@@ -402,7 +512,9 @@ class MonitorService:
                 await telegram_service.send_message(target, formatted, parse_mode='html')
                 logger.info(f"✅ Report sent for {channel_name}")
             
-            # Clear cache for this channel
+            # ═══════════════════════════════════════════════════════════════
+            # Step 6: Clear cache
+            # ═══════════════════════════════════════════════════════════════
             await db.pool.execute("""
                 DELETE FROM monitor_message_cache WHERE channel_id = $1
             """, channel_id)
@@ -554,6 +666,40 @@ class MonitorService:
                     )
                 except Exception as e:
                     logger.warn(f"Failed to update source: {e}")
+
+    async def set_channel_category(self, channel_id: str, category: str) -> bool:
+        """
+        Set channel category for different report handling.
+        
+        Categories:
+        - 'market': Full AI analysis, compression, hot words (default)
+        - 'tech': Skip AI analysis, just clear cache
+        - 'resource': Skip AI analysis, just clear cache
+        - 'skip': Completely skip, don't cache messages
+        """
+        valid_categories = ('market', 'tech', 'resource', 'skip')
+        if category not in valid_categories:
+            logger.warn(f"Invalid category: {category}. Valid: {valid_categories}")
+            return False
+        
+        if channel_id in self.channels:
+            self.channels[channel_id]['category'] = category
+            if db.pool:
+                try:
+                    await db.pool.execute(
+                        "UPDATE monitor_channels SET category = $2 WHERE channel_id = $1",
+                        channel_id, category
+                    )
+                    logger.info(f"📁 Set {self.channels[channel_id].get('name', channel_id)} category to: {category}")
+                    return True
+                except Exception as e:
+                    logger.warn(f"Failed to update channel category: {e}")
+        return False
+    
+    def get_channel_category(self, channel_id: str) -> str:
+        """Get channel category."""
+        return self.channels.get(channel_id, {}).get('category', 'market')
+
 
     # ─────────────────────────────────────────────────────────────────────────
     # VIP User Management

@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     MONITOR_BUFFER_SIZE: int = 200   # Summarize after N messages
     MONITOR_BUFFER_TIMEOUT: int = 7200  # Summarize after N seconds (2 hours)
     
+    # Message Compression Pipeline
+    COMPRESSOR_MIN_LENGTH: int = 15  # Minimum message length
+    COMPRESSOR_MAX_MESSAGES: int = 50  # Max messages after compression
+    COMPRESSOR_SCORE_THRESHOLD: float = 0.2  # Minimum quality score
+    
     # Twitter monitoring
     TWITTER_ACCOUNTS: Optional[str] = None  # JSON array of Twitter accounts
 

@@ -427,6 +427,91 @@ async def cmd_clear(message: types.Message):
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Channel Category Management
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("setcat"))
+async def cmd_setcat(message: types.Message, command: CommandObject):
+    """Set channel category for different analysis behavior."""
+    if not is_allowed(message.from_user.id): return
+    
+    args = command.args
+    if not args:
+        await message.answer(
+            "📁 <b>Set Channel Category</b>\n\n"
+            "Usage: <code>/setcat &lt;channel&gt; &lt;category&gt;</code>\n\n"
+            "<b>Categories:</b>\n"
+            "• <code>market</code> - Full AI analysis (default)\n"
+            "• <code>tech</code> - Skip AI, just clear cache\n"
+            "• <code>resource</code> - Skip AI, just clear cache\n"
+            "• <code>skip</code> - Don't cache at all\n\n"
+            "Example: <code>/setcat -1001234567890 tech</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    parts = args.strip().split()
+    if len(parts) < 2:
+        await message.answer("❌ Please provide both channel and category.", parse_mode="HTML")
+        return
+    
+    channel = parts[0]
+    category = parts[1].lower()
+    
+    # Find channel ID
+    ch_id = find_channel_by_prefix(channel)
+    
+    if ch_id not in monitor_service.channels:
+        await message.answer(f"❌ Channel not found: <code>{channel}</code>", parse_mode="HTML")
+        return
+    
+    success = await monitor_service.set_channel_category(ch_id, category)
+    if success:
+        channel_name = monitor_service.channels[ch_id].get('name', ch_id)
+        await message.answer(
+            f"📁 Set <b>{channel_name}</b> category to: <code>{category}</code>",
+            parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            f"❌ Invalid category. Valid: market, tech, resource, skip",
+            parse_mode="HTML"
+        )
+
+@router.message(Command("cats"))
+async def cmd_cats(message: types.Message):
+    """List all channels with their categories."""
+    if not is_allowed(message.from_user.id): return
+    
+    channels = monitor_service.channels
+    if not channels:
+        await message.answer("📭 No channels configured.")
+        return
+    
+    # Group by category
+    by_cat = {}
+    for ch_id, info in channels.items():
+        cat = info.get('category', 'market')
+        if cat not in by_cat:
+            by_cat[cat] = []
+        by_cat[cat].append(info)
+    
+    text = "📁 <b>Channel Categories</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    for cat in ['market', 'tech', 'resource', 'skip']:
+        if cat in by_cat:
+            icon = "📈" if cat == "market" else "💻" if cat == "tech" else "📦" if cat == "resource" else "⏭️"
+            text += f"{icon} <b>{cat.upper()}</b> ({len(by_cat[cat])})\n"
+            for ch in by_cat[cat][:5]:  # Show max 5 per category
+                name = ch.get('name', ch['id'])[:20]
+                text += f"  • {name}\n"
+            if len(by_cat[cat]) > 5:
+                text += f"  <i>... and {len(by_cat[cat]) - 5} more</i>\n"
+            text += "\n"
+    
+    await message.answer(text, parse_mode="HTML")
+
+# ─────────────────────────────────────────────────────────────────────────────
 # VIP User Management
 # ─────────────────────────────────────────────────────────────────────────────
 

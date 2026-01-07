@@ -49,8 +49,15 @@ class Database:
                     channel_id TEXT PRIMARY KEY,
                     name TEXT,
                     enabled BOOLEAN DEFAULT TRUE,
+                    category TEXT DEFAULT 'market',
                     created_at TIMESTAMP DEFAULT NOW()
                 );
+            """)
+            
+            # Add category column if not exists (migration for existing DBs)
+            await conn.execute("""
+                ALTER TABLE monitor_channels 
+                ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'market';
             """)
             
             # Monitor History Table
@@ -155,6 +162,24 @@ class Database:
                     item_id TEXT,
                     created_at TIMESTAMP DEFAULT NOW()
                 );
+            """)
+
+            # Hot Words Table (daily word frequency)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS hot_words (
+                    id SERIAL PRIMARY KEY,
+                    date DATE NOT NULL,
+                    word TEXT NOT NULL,
+                    count INTEGER DEFAULT 1,
+                    category TEXT,
+                    UNIQUE(date, word)
+                );
+            """)
+            
+            # Index for efficient hot words queries
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_hot_words_date 
+                ON hot_words(date);
             """)
             
             logger.info("Database tables initialized")
