@@ -64,12 +64,46 @@ class GitHubService:
             
             self.repo.index.add([filename])
             self.repo.index.commit(commit_message)
-            self.repo.remotes.origin.push()
+            
+            # Reset commit history to keep the repo clean (squash to single commit)
+            self._reset_history()
             
             return self._get_http_url(filename)
         except Exception as e:
             logger.error(f"Failed to push {filename}", e)
             raise e
+    
+    def _reset_history(self):
+        """Reset commit history to a single commit and force push.
+        This keeps the remote repo clean without accumulating history."""
+        if not self.repo:
+            return
+        
+        try:
+            # Get the default branch name
+            default_branch = self.repo.active_branch.name
+            
+            # Create a new orphan commit with all current files
+            # This effectively squashes all history into one commit
+            self.repo.git.checkout('--orphan', 'temp_branch')
+            self.repo.git.add('-A')
+            self.repo.git.commit('-m', 'Reset: Clean repository state')
+            
+            # Delete old branch and rename temp to default
+            self.repo.git.branch('-D', default_branch)
+            self.repo.git.branch('-m', default_branch)
+            
+            # Force push to overwrite remote history
+            self.repo.git.push('-f', 'origin', default_branch)
+            
+            logger.info("🗑️ Commit history reset successfully")
+        except Exception as e:
+            logger.warn(f"Failed to reset commit history: {e}")
+            # Fallback to normal push if reset fails
+            try:
+                self.repo.remotes.origin.push()
+            except:
+                pass
 
     def _get_http_url(self, filename: str) -> str:
         # Convert git@github.com:user/repo.git -> https://github.com/user/repo/blob/main/filename

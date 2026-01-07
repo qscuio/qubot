@@ -2,6 +2,7 @@ import re
 import time
 import asyncio
 from datetime import datetime
+import pytz
 from collections import OrderedDict
 from typing import Dict, List, Optional
 from telethon import events
@@ -12,6 +13,13 @@ from app.core.bot import telegram_service
 from app.core.database import db
 
 logger = Logger("MonitorService")
+
+# Shanghai timezone for report scheduling
+SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
+
+def get_shanghai_time():
+    """Get current time in Shanghai timezone."""
+    return datetime.now(SHANGHAI_TZ)
 
 
 class MessageBuffer:
@@ -185,10 +193,10 @@ class MonitorService:
                 await asyncio.sleep(7200)  # Check every 2 hours
                 stale_channels = self.message_buffer.get_stale_channels()
                 for channel_id in stale_channels:
-                    # Add random delay (10-60 seconds) between each channel to avoid
+                    # Add random delay (1-3 minutes) between each channel to avoid
                     # sending all summaries at the same time
                     if stale_channels.index(channel_id) > 0:
-                        delay = random.randint(10, 60)
+                        delay = random.randint(60, 180)
                         logger.info(f"⏳ Waiting {delay}s before summarizing next channel...")
                         await asyncio.sleep(delay)
                     await self._flush_and_summarize(channel_id)
@@ -203,7 +211,7 @@ class MonitorService:
         
         while self.is_running:
             try:
-                now = datetime.now()
+                now = get_shanghai_time()
                 
                 # Calculate next report time (8:00 or 20:00)
                 today_8am = now.replace(hour=8, minute=0, second=0, microsecond=0)
@@ -253,10 +261,10 @@ class MonitorService:
             import random
             for idx, channel in enumerate(channels):
                 try:
-                    # Add random delay (10-60 seconds) between each channel to avoid
+                    # Add random delay (1-3 minutes) between each channel to avoid
                     # sending all reports at the same time
                     if idx > 0:
-                        delay = random.randint(10, 60)
+                        delay = random.randint(60, 180)
                         logger.info(f"⏳ Waiting {delay}s before generating next report...")
                         await asyncio.sleep(delay)
                     await self._generate_channel_report(
@@ -294,7 +302,7 @@ class MonitorService:
         ])
         
         # Professional report prompt
-        now = datetime.now()
+        now = get_shanghai_time()
         report_type = "早报" if now.hour < 12 else "晚报"
         date_str = now.strftime("%Y年%m月%d日")
         
@@ -329,10 +337,15 @@ class MonitorService:
             result = await ai_service.quick_chat(prompt)
             report_content = result.get('content', '报告生成失败')
             
+            # Check if report generation failed
+            if report_content == '报告生成失败' or not report_content.strip():
+                logger.error(f"Failed to generate report content for {channel_name}")
+                return
+            
             # Add footer
             report_markdown = f"{report_content}\n\n---\n*由 QuBot 自动生成 | {now.isoformat()}*"
             
-            # Save to GitHub and get download link
+            # Save to GitHub and get download link (only if report succeeded)
             download_url = None
             try:
                 from app.services.github import github_service
@@ -779,7 +792,7 @@ class MonitorService:
                     if len(msg_html) > 500 and "http" in msg_html:
                         try:
                             from app.services.telegraph import telegraph_service
-                            page_title = f"{chat_title} - {datetime.now().strftime('%Y-%m-%d')}"
+                            page_title = f"{chat_title} - {get_shanghai_time().strftime('%Y-%m-%d')}"
                             telegraph_url = await telegraph_service.create_page(
                                 title=page_title,
                                 content_html=msg_html,
@@ -849,7 +862,7 @@ class MonitorService:
                         'text': msg_html,
                         'sender': sender_name,
                         'source': source_name,
-                        'time': message_time or datetime.now().strftime('%H:%M'),
+                        'time': message_time or get_shanghai_time().strftime('%H:%M'),
                         'has_media': has_media
                     }
                     
