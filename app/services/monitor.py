@@ -180,11 +180,18 @@ class MonitorService:
     
     async def _periodic_flush(self):
         """Background task to flush stale buffers."""
+        import random
         while self.is_running:
             try:
-                await asyncio.sleep(60)  # Check every minute
+                await asyncio.sleep(7200)  # Check every 2 hours
                 stale_channels = self.message_buffer.get_stale_channels()
                 for channel_id in stale_channels:
+                    # Add random delay (10-60 seconds) between each channel to avoid
+                    # sending all summaries at the same time
+                    if stale_channels.index(channel_id) > 0:
+                        delay = random.randint(10, 60)
+                        logger.info(f"⏳ Waiting {delay}s before summarizing next channel...")
+                        await asyncio.sleep(delay)
                     await self._flush_and_summarize(channel_id)
             except asyncio.CancelledError:
                 break
@@ -244,8 +251,15 @@ class MonitorService:
             
             logger.info(f"📊 Generating reports for {len(channels)} channels...")
             
-            for channel in channels:
+            import random
+            for idx, channel in enumerate(channels):
                 try:
+                    # Add random delay (10-60 seconds) between each channel to avoid
+                    # sending all reports at the same time
+                    if idx > 0:
+                        delay = random.randint(10, 60)
+                        logger.info(f"⏳ Waiting {delay}s before generating next report...")
+                        await asyncio.sleep(delay)
                     await self._generate_channel_report(
                         channel['channel_id'], 
                         channel['channel_name'] or channel['channel_id']
@@ -586,6 +600,25 @@ class MonitorService:
         if text.startswith("-"): return text[1:]
         return text
     
+    def _is_own_target_channel(self, chat_id: str) -> bool:
+        """Check if this chat is our own target channel (created by us).
+        Messages from these channels should not be summarized."""
+        norm_chat_id = self._normalize_peer_id(chat_id)
+        
+        # Check against TARGET_CHANNEL
+        if self.target_channel:
+            norm_target = self._normalize_peer_id(self.target_channel)
+            if norm_chat_id == norm_target:
+                return True
+        
+        # Check against VIP_TARGET_CHANNEL
+        if self.vip_target_channel:
+            norm_vip_target = self._normalize_peer_id(self.vip_target_channel)
+            if norm_chat_id == norm_vip_target:
+                return True
+        
+        return False
+    
     def _build_message_link(self, chat_username: Optional[str], chat_id: str, message_id: int) -> Optional[str]:
         if chat_username:
             return f"https://t.me/{chat_username}/{message_id}"
@@ -684,6 +717,19 @@ class MonitorService:
             client_id = getattr(event.client, 'me', None) 
             client_info = f" [via {client_id.id}]" if client_id else ""
             logger.info(f"📨 MSG{client_info} | Chat: {chat_title} (@{chat_username or chat_id}) | From: {sender_name} ({sender_id}) | Text: {msg_text[:50]}...")
+            
+            # Skip messages from our own target channels (no need to summarize our own output)
+            if self._is_own_target_channel(chat_id):
+                logger.debug(f"⏭️ Skipping message from own target channel: {chat_title}")
+                return
+            
+            # Filter out ads, 18+ content, bot admission messages
+            from app.services.content_filter import content_filter
+            full_text = event.message.message or ''
+            should_filter, filter_reason = content_filter.check(full_text)
+            if should_filter:
+                logger.info(f"🚫 Filtered message ({filter_reason}): {msg_text[:50]}...")
+                return
 
             # 1. Check Source (if configured, otherwise forward all)
             if self.source_channels:
