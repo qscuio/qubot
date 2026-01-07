@@ -18,6 +18,9 @@ class BotDispatcher:
         # 2. AI Bot
         if settings.AI_BOT_TOKEN:
             await self._setup_bot("ai-bot", settings.AI_BOT_TOKEN, "app.bots.ai.handlers")
+            # Add advanced AI handlers if enabled
+            if getattr(settings, "ENABLE_ADVANCED_AI", False):
+                await self._add_router_to_bot("ai-bot", "app.bots.ai.handlers_advanced")
 
         # 3. RSS Bot
         if settings.RSS_BOT_TOKEN:
@@ -47,6 +50,24 @@ class BotDispatcher:
         except Exception as e:
             import traceback
             logger.error(f"❌ Failed to setup {name}: {e}\n{traceback.format_exc()}")
+    
+    async def _add_router_to_bot(self, bot_name: str, router_module: str):
+        """Add an additional router to an existing bot."""
+        app = next((a for a in self.apps if a['name'] == bot_name), None)
+        if not app:
+            logger.warn(f"⚠️ Cannot add router: bot {bot_name} not found")
+            return
+        
+        try:
+            import importlib
+            module = importlib.import_module(router_module)
+            if hasattr(module, "router"):
+                app['dp'].include_router(module.router)
+                logger.info(f"✅ Added {router_module} to {bot_name}")
+            else:
+                logger.warn(f"⚠️ No router found in {router_module}")
+        except Exception as e:
+            logger.error(f"❌ Failed to add router {router_module}: {e}")
 
     async def _register_webhooks(self):
         """Register webhooks with retry logic."""

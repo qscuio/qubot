@@ -16,6 +16,16 @@ class BaseProvider(ABC):
 
     def is_configured(self) -> bool:
         return bool(self.get_api_key())
+    
+    @property
+    def supports_tools(self) -> bool:
+        """Whether this provider supports tool/function calling."""
+        return False
+    
+    @property
+    def supports_thinking(self) -> bool:
+        """Whether this provider supports extended thinking."""
+        return False
 
     async def fetch_models(self) -> List[Dict[str, str]]:
         """
@@ -37,3 +47,39 @@ class BaseProvider(ABC):
         Returns: {"thinking": str, "content": str}
         """
         pass
+    
+    async def call_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        model: str,
+        system_prompt: str = "",
+        tools: List[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Call the AI provider with tool/function calling support.
+        
+        Args:
+            messages: List of conversation messages
+            model: Model to use
+            system_prompt: System prompt
+            tools: List of tool schemas in OpenAI function format
+            
+        Returns:
+            {
+                "thinking": str,
+                "content": str,
+                "tool_calls": [{"id": str, "name": str, "arguments": dict}]
+            }
+        """
+        # Default implementation: fall back to regular call without tools
+        prompt = messages[-1]["content"] if messages else ""
+        history = messages[:-1] if len(messages) > 1 else []
+        result = await self.call(
+            prompt=prompt,
+            model=model,
+            history=history,
+            context_prefix=system_prompt
+        )
+        result["tool_calls"] = []
+        return result
+

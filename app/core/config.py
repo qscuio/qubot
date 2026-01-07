@@ -143,6 +143,16 @@ class Settings(BaseSettings):
     ENABLE_AI: bool = True
     ENABLE_MONITOR: bool = True
     API_ENABLED: bool = True
+    ENABLE_ADVANCED_AI: bool = True  # Enable advanced AI with agents and tools
+    
+    # Advanced AI Settings
+    AI_ADVANCED_PROVIDER: Optional[str] = None  # Provider for advanced AI (default: claude)
+    AI_EXTENDED_THINKING: bool = False  # Enable Claude extended thinking
+    SEARX_URL: Optional[str] = None  # SearXNG URL for web search tool
+    GITHUB_TOKEN: Optional[str] = None  # GitHub token for GitHub tools
+    CLOUDFLARE_API_TOKEN: Optional[str] = None  # Cloudflare API token
+    CLOUDFLARE_ACCOUNT_ID: Optional[str] = None  # Cloudflare account ID
+    AI_ALLOWED_PATHS: Optional[str] = None  # Comma-separated allowed paths for file tools
     
     # API Keys (format: key1:userId1,key2:userId2)
     API_KEYS: Optional[str] = None
