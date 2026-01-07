@@ -657,6 +657,9 @@ class MonitorService:
             return sender.id in cached.get("admins", set())
         
         try:
+            if isinstance(chat, types.User):
+                # Private chats don't have admin roles.
+                return False
             if isinstance(chat, types.Chat):
                 full = await telegram_service.main_client(functions.messages.GetFullChat(chat_id=chat.id))
                 participants = full.full_chat.participants

@@ -549,7 +549,7 @@ async def cmd_clear(message: types.Message):
 # Chat Handler (catch-all for AI messages)
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.message()
+@router.message(F.text & ~F.text.startswith("/"))
 async def handle_chat(message: types.Message):
     """Handle all text messages as chat input."""
     if not is_allowed(message.from_user.id):
