@@ -18,7 +18,7 @@ def is_allowed(user_id: int) -> bool:
 async def safe_answer(callback: types.CallbackQuery, text: str = None):
     """Safely answer a callback query, reporting network errors to the user."""
     try:
-        await safe_answer(callback, text)
+        await callback.answer(text)
     except TelegramNetworkError as e:
         logger.error(f"Network error answering callback: {e}")
         try:
