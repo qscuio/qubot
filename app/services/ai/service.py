@@ -314,7 +314,8 @@ Text: {text}"""
         await ai_storage.rename_chat(chat_id, title)
 
     async def clear_chat(self, chat_id: int):
-        await ai_storage.clear_chat_messages(chat_id)
+        """Delete a chat and all its messages."""
+        await ai_storage.delete_chat(chat_id)
 
     async def export_chat(self, user_id: int, chat_id: int) -> Dict[str, Any]:
         """Export chat to markdown and optionally push to GitHub."""

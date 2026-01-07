@@ -44,8 +44,8 @@ class GeminiProvider(BaseProvider):
 
                 data = response.json()
                 models = []
-                # Priority: gemini-2.5 > gemini-2.0 > gemini-1.5 > gemini-1.0
-                priority_map = {"2.5": 0, "2.0": 1, "1.5": 2, "1.0": 3}
+                # Priority: gemini-3 > gemini-2.5 > gemini-2.0 > gemini-1.5
+                priority_map = {"3": 0, "2.5": 1, "2.0": 2, "1.5": 3}
                 
                 for m in data.get("models", []):
                     if not m.get("name") or "generateContent" not in m.get("supportedGenerationMethods", []):
@@ -54,22 +54,34 @@ class GeminiProvider(BaseProvider):
                     model_id = m["name"].replace("models/", "")
                     display_name = m.get("displayName", model_id)
                     
-                    # Skip embedding, aqa, and tunedModels
-                    if any(x in model_id for x in ["embedding", "aqa", "tuned", "image"]):
+                    # Skip embedding, aqa, tunedModels, image, vision-only, and old 1.0 models
+                    if any(x in model_id.lower() for x in ["embedding", "aqa", "tuned", "image", "vision", "gemini-1.0"]):
                         continue
                     
-                    # Calculate priority
+                    # Only include gemini models (skip palm, etc)
+                    if not model_id.startswith("gemini"):
+                        continue
+                    
+                    # Calculate priority - prefer newer versions
                     priority = 99
                     for ver, p in priority_map.items():
-                        if ver in model_id:
+                        if f"gemini-{ver}" in model_id or f"-{ver}-" in model_id:
                             priority = p
                             break
+                    
+                    # Boost flash and pro models
+                    if "pro" in model_id:
+                        priority -= 0.1
+                    elif "flash" in model_id:
+                        priority -= 0.05
                     
                     models.append({"id": model_id, "name": display_name, "_priority": priority})
                 
                 # Sort by priority, then alphabetically
                 models.sort(key=lambda x: (x["_priority"], x["id"]))
-                return [{"id": m["id"], "name": m["name"]} for m in models]
+                
+                # Return top 15 models to avoid overwhelming the user
+                return [{"id": m["id"], "name": m["name"]} for m in models[:15]]
         except Exception as e:
             logger.warn(f"Failed to fetch models: {e}")
             return self.get_fallback_models()
