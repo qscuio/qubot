@@ -15,7 +15,12 @@ class AllowedUsersMiddleware(BaseMiddleware):
 
         if isinstance(event, CallbackQuery):
             try:
-                await event.answer("Not authorized.", show_alert=True)
+                await event.answer()
+            except Exception:
+                pass
+            try:
+                if event.message:
+                    await event.message.answer("Invite-only bot. Ask the owner for access.")
             except Exception:
                 pass
         elif isinstance(event, Message):
