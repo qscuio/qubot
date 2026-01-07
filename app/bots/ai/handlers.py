@@ -3,6 +3,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.services.ai import ai_service
 from app.core.config import settings
+from app.core.telegram_utils import chunk_message, markdown_to_telegram_html, strip_html
 
 router = Router()
 
@@ -463,16 +464,21 @@ async def handle_chat(message: types.Message):
         chat_title = active_chat.get("title", "Chat")[:15] if active_chat else "Chat"
         
         result = await ai_service.chat(message.from_user.id, prompt)
-        response = result.get("content", "No response")
-        
-        if len(response) > 4000:
-            response = response[:4000] + "\n\n...(truncated)"
-        
+        response = result.get("content", "")
+        response_chunks = chunk_message(response, max_length=3000)
+        response_html_chunks = [markdown_to_telegram_html(chunk) for chunk in response_chunks] if response_chunks else []
+        first_response = response_html_chunks[0] if response_html_chunks else "No response"
+
         try:
-            await status.edit_text(response, parse_mode="Markdown")
+            await status.edit_text(first_response, parse_mode="HTML")
         except Exception:
-            # Fallback to plain text if markdown parsing fails
-            await status.edit_text(response)
+            await status.edit_text(strip_html(first_response))
+
+        for chunk_html in response_html_chunks[1:]:
+            try:
+                await message.answer(chunk_html, parse_mode="HTML")
+            except Exception:
+                await message.answer(strip_html(chunk_html))
         
         # Quick actions with context info
         builder = InlineKeyboardBuilder()

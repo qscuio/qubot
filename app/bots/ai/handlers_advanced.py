@@ -9,6 +9,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.services.ai.advanced_service import advanced_ai_service
 from app.services.ai.advanced_storage import advanced_ai_storage
+from app.core.telegram_utils import chunk_message, escape_html, markdown_to_telegram_html, strip_html
 from app.core.config import settings
 from app.core.logger import Logger
 
@@ -903,28 +904,39 @@ async def handle_advanced_chat(message: types.Message, prompt: str):
         
         # Add thinking if enabled and present
         if show_thinking and result.get("thinking"):
-            thinking = result["thinking"][:500] + "..." if len(result.get("thinking", "")) > 500 else result.get("thinking", "")
-            response_parts.append(f"<blockquote>🧠 {thinking}</blockquote>")
+            thinking = result.get("thinking", "")
+            if len(thinking) > 500:
+                thinking = thinking[:500] + "..."
+            response_parts.append(f"<blockquote>🧠 {escape_html(thinking)}</blockquote>")
         
         # Add tool calls if enabled
         if show_tool_calls and result.get("tool_calls"):
             tools_text = "🔧 Tools used: " + ", ".join(
-                f"<code>{tc['name']}</code>" for tc in result["tool_calls"]
+                f"<code>{escape_html(tc['name'])}</code>" for tc in result["tool_calls"]
             )
             response_parts.append(tools_text)
         
         # Add main content
-        content = result.get("content", "No response")
-        if len(content) > 3500:
-            content = content[:3500] + "\n\n...(truncated)"
-        response_parts.append(content)
-        
-        full_response = "\n\n".join(response_parts)
-        
+        content = result.get("content", "")
+        content_chunks = chunk_message(content, max_length=3000)
+        content_html_chunks = [markdown_to_telegram_html(chunk) for chunk in content_chunks] if content_chunks else []
+
+        prefix_html = "\n\n".join(response_parts)
+        if content_html_chunks:
+            first_response = prefix_html + ("\n\n" if prefix_html else "") + content_html_chunks[0]
+        else:
+            first_response = prefix_html or "No response"
+
         try:
-            await status.edit_text(full_response, parse_mode="HTML")
-        except:
-            await status.edit_text(full_response)
+            await status.edit_text(first_response, parse_mode="HTML")
+        except Exception:
+            await status.edit_text(strip_html(first_response))
+
+        for chunk_html in content_html_chunks[1:]:
+            try:
+                await message.answer(chunk_html, parse_mode="HTML")
+            except Exception:
+                await message.answer(strip_html(chunk_html))
         
         # Add footer with context
         metadata = result.get("metadata", {}) or {}
