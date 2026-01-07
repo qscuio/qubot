@@ -21,6 +21,30 @@ class NvidiaProvider(BaseProvider):
             "qwen3-coder": "qwen/qwen3-coder-480b-a35b-instruct",
         }
         self.base_url = "https://integrate.api.nvidia.com/v1/chat/completions"
+
+    def _log_api_error(self, error: Exception, model: str) -> None:
+        if isinstance(error, httpx.HTTPStatusError):
+            response = error.response
+            try:
+                body = response.text
+            except Exception:
+                body = "<unable to read response body>"
+            if body and len(body) > 1000:
+                body = body[:1000] + "...(truncated)"
+            logger.error(
+                f"NVIDIA API call failed: HTTP {response.status_code} "
+                f"(model={model}, url={self.base_url}) - {body}"
+            )
+        elif isinstance(error, httpx.RequestError):
+            logger.error(
+                f"NVIDIA API request failed: {type(error).__name__} "
+                f"(model={model}, url={self.base_url}) - {error}"
+            )
+        else:
+            logger.error(
+                f"NVIDIA API call failed: {type(error).__name__} "
+                f"(model={model}, url={self.base_url}) - {error}"
+            )
     
     @property
     def supports_tools(self) -> bool:
@@ -56,7 +80,7 @@ class NvidiaProvider(BaseProvider):
                 data = response.json()
                 return {"thinking": "", "content": data["choices"][0]["message"]["content"]}
             except Exception as e:
-                logger.error(f"NVIDIA API call failed: {e}")
+                self._log_api_error(e, model or self.default_model)
                 raise
     
     async def call_with_tools(
@@ -149,6 +173,5 @@ class NvidiaProvider(BaseProvider):
                     "tool_calls": tool_calls
                 }
             except Exception as e:
-                logger.error(f"NVIDIA API call with tools failed: {e}")
+                self._log_api_error(e, model or self.default_model)
                 raise
-

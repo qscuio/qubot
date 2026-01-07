@@ -9,19 +9,21 @@ logger = Logger("Gemini")
 class GeminiProvider(BaseProvider):
     def __init__(self):
         super().__init__("gemini", "GEMINI_API_KEY")
-        self.default_model = "gemini-3-flash-preview"
+        self.default_model = "gemini-2.5-flash"  # Stable default
         self.fallback_models = {
-            # Gemini 3 (Latest)
-            "gemini-3-pro": "gemini-3-pro-preview",
-            "gemini-3-flash": "gemini-3-flash-preview",
-            "gemini-3-nano": "gemini-3-nano-preview",
-            # Gemini 2.5
-            "gemini-2.5-pro": "gemini-2.5-pro-preview-06-05",
+            # Gemini 3 (Latest - Preview)
+            "gemini-3-pro": "gemini-3.0-pro-preview",
+            "gemini-3-flash": "gemini-3.0-flash-preview",
+            # Gemini 2.5 (Stable)
+            "gemini-2.5-pro": "gemini-2.5-pro",
             "gemini-2.5-flash": "gemini-2.5-flash",
-            "gemini-2.5-flash-lite": "gemini-2.5-flash-lite",
+            "gemini-2.5-flash-lite": "gemini-2.5-flash-lite-preview-06-17",
             # Gemini 2.0
             "gemini-2.0-flash": "gemini-2.0-flash",
             "gemini-2.0-flash-lite": "gemini-2.0-flash-lite",
+            # Gemini 1.5 (Legacy)
+            "gemini-1.5-pro": "gemini-1.5-pro",
+            "gemini-1.5-flash": "gemini-1.5-flash",
         }
     
     @property
@@ -94,6 +96,13 @@ class GeminiProvider(BaseProvider):
         if history is None:
             history = []
 
+        # Validate model - fallback to default for invalid/specialized models
+        use_model = model or self.default_model
+        invalid_patterns = ["computer-use", "image", "vision", "embedding", "aqa", "tuned"]
+        if any(p in use_model.lower() for p in invalid_patterns):
+            logger.warn(f"Invalid model {use_model}, falling back to {self.default_model}")
+            use_model = self.default_model
+
         contents = []
         for msg in history:
             role = "model" if msg["role"] == "assistant" else "user"
@@ -102,7 +111,7 @@ class GeminiProvider(BaseProvider):
         full_prompt = f"{context_prefix}{prompt}" if context_prefix else prompt
         contents.append({"role": "user", "parts": [{"text": full_prompt}]})
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model or self.default_model}:generateContent?key={api_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{use_model}:generateContent?key={api_key}"
 
         async with httpx.AsyncClient() as client:
             try:

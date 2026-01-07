@@ -17,6 +17,44 @@ class TelegramService:
         # Store handlers to register on new clients
         self._pending_handlers = []
 
+    def _normalize_peer_id(self, value):
+        if value is None:
+            return None
+        text = str(value).strip()
+        if text.startswith("-100"):
+            return text[4:]
+        if text.startswith("-"):
+            return text[1:]
+        return text
+
+    def _extract_peer_identity(self, peer):
+        if peer is None:
+            return (None, None)
+
+        peer_id = None
+        username = None
+
+        for attr in ("id", "channel_id", "user_id", "chat_id"):
+            if hasattr(peer, attr):
+                peer_id = getattr(peer, attr, None)
+                if peer_id is not None:
+                    break
+
+        if hasattr(peer, "username"):
+            username = getattr(peer, "username", None)
+
+        if peer_id is None:
+            if isinstance(peer, int):
+                peer_id = peer
+            elif isinstance(peer, str):
+                cleaned = peer.strip()
+                if cleaned.lstrip("-").isdigit():
+                    peer_id = cleaned
+                else:
+                    username = cleaned[1:] if cleaned.startswith("@") else cleaned
+
+        return (self._normalize_peer_id(peer_id), username)
+
     async def start(self):
         # Collect all session configs from SESSIONS_JSON
         sessions_to_init = []
@@ -148,8 +186,8 @@ class TelegramService:
                 # WebPage previews - Telegram will regenerate from URLs in text
                 # Just enable link preview, the URLs in HTML will create the preview
                 sendable_file = None
-            elif hasattr(file, 'photo') or hasattr(file, 'document'):
-                sendable_file = file
+            else:
+                logger.debug(f"Skipping unsupported media type: {type(file).__name__}")
         
         # If sending file, don't chunk
         if sendable_file:
@@ -172,6 +210,31 @@ class TelegramService:
                 logger.debug(f"Sent message to {peer}")
             except Exception as e:
                 logger.error(f"Failed to send message to {peer}: {e}")
+
+    async def forward_messages(self, peer, messages, from_peer=None):
+        """Forward messages using the MAIN client."""
+        if not self.connected or not self.main_client:
+            logger.warn("Cannot forward messages, no main client connected")
+            return
+
+        if from_peer is not None:
+            peer_id, peer_username = self._extract_peer_identity(peer)
+            from_id, from_username = self._extract_peer_identity(from_peer)
+            if (peer_id and from_id and peer_id == from_id) or (
+                peer_username and from_username and peer_username.lower() == from_username.lower()
+            ):
+                logger.debug(
+                    f"Skipping forward to source peer "
+                    f"(peer_id={peer_id}, from_id={from_id}, peer_username={peer_username}, from_username={from_username})"
+                )
+                return
+
+        try:
+            async with rate_limiter:
+                await self.main_client.forward_messages(peer, messages, from_peer=from_peer)
+            logger.debug(f"Forwarded message(s) to {peer}")
+        except Exception as e:
+            logger.error(f"Failed to forward message(s) to {peer}: {e}")
 
     async def resolve_entity(self, peer):
         if not self.connected or not self.main_client:

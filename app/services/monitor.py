@@ -672,7 +672,7 @@ class MonitorService:
             
             input_channel = await telegram_service.main_client.get_input_entity(chat)
             result = await telegram_service.main_client(
-                functions.channels.GetParticipant(channel=input_channel, participant=sender)
+                functions.channels.GetParticipantRequest(channel=input_channel, participant=sender)
             )
             return isinstance(result.participant, (types.ChannelParticipantAdmin, types.ChannelParticipantCreator))
         except Exception as e:
@@ -797,7 +797,16 @@ class MonitorService:
                 source_name = chat_title if chat_title != 'Unknown' else (chat_username or chat_id)
                 source_handle = f"@{chat_username}" if chat_username else None
                 message_link = self._build_message_link(chat_username, chat_id, message_id)
-                has_media = bool(event.message.media)
+                media = event.message.media
+                has_media = bool(media)
+                media_supported = isinstance(
+                    media,
+                    (
+                        types.MessageMediaPhoto,
+                        types.MessageMediaDocument,
+                        types.MessageMediaWebPage,
+                    ),
+                )
                 
                 # Convert to HTML to preserve formatting (links, bold, etc)
                 from telethon.extensions import html
@@ -848,9 +857,32 @@ class MonitorService:
                             target, 
                             formatted_msg, 
                             parse_mode='html', 
-                            file=event.message.media,
+                            file=media if media_supported else None,
                             link_preview=False 
                         )
+                        if has_media and not media_supported:
+                            target_str = str(target)
+                            norm_target = self._normalize_peer_id(target_str)
+                            norm_chat = self._normalize_peer_id(chat_id)
+                            target_is_source = (
+                                (chat_username and target_str in (chat_username, f"@{chat_username}"))
+                                or (norm_target and norm_target == norm_chat)
+                            )
+                            if target_is_source:
+                                logger.debug(
+                                    f"Skipping media forward to source chat "
+                                    f"(chat_id={chat_id}, message_id={message_id}, target={target})"
+                                )
+                            else:
+                                await telegram_service.forward_messages(
+                                    target,
+                                    event.message,
+                                    from_peer=chat
+                                )
+                                logger.info(
+                                    f"📎 Unsupported media forwarded to {target} "
+                                    f"(chat_id={chat_id}, message_id={message_id})"
+                                )
                         logger.info(f"✅ Message forwarded to {target}")
                     except Exception as e:
                         logger.error(f"❌ Failed to forward message: {e}")

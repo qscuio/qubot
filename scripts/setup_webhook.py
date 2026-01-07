@@ -2,6 +2,7 @@ import asyncio
 import os
 import sys
 from aiogram import Bot
+from aiogram.types import BotCommand
 
 # Add project root to path
 sys.path.append(os.getcwd())
@@ -10,6 +11,33 @@ from app.core.config import settings
 from app.core.logger import Logger
 
 logger = Logger("SetupWebhook")
+
+# Command definitions for each bot
+AI_BOT_COMMANDS = [
+    BotCommand(command="start", description="🏠 Main menu"),
+    BotCommand(command="chats", description="💬 My chats"),
+    BotCommand(command="providers", description="🔌 AI providers"),
+    BotCommand(command="models", description="📝 Model selection"),
+    # Advanced AI commands
+    BotCommand(command="ask", description="🚀 Ask with agents & tools"),
+    BotCommand(command="agent", description="🤖 List/switch agents"),
+    BotCommand(command="tools", description="🔧 List available tools"),
+    BotCommand(command="skills", description="📚 List AI skills"),
+    BotCommand(command="think", description="🧠 Toggle thinking display"),
+    BotCommand(command="advstatus", description="📊 Advanced AI status"),
+]
+
+RSS_BOT_COMMANDS = [
+    BotCommand(command="start", description="🏠 Main menu"),
+    BotCommand(command="list", description="📋 List subscriptions"),
+    BotCommand(command="add", description="➕ Add RSS feed"),
+    BotCommand(command="remove", description="➖ Remove subscription"),
+]
+
+MONITOR_BOT_COMMANDS = [
+    BotCommand(command="start", description="🏠 Main menu"),
+    BotCommand(command="status", description="📊 Monitor status"),
+]
 
 async def setup():
     if not settings.WEBHOOK_URL:
@@ -26,14 +54,14 @@ async def setup():
         logger.warn("No BOT_SECRET configured - webhooks will be unsecured!")
 
     bots = [
-        ("monitor-bot", settings.MONITOR_BOT_TOKEN),
-        ("ai-bot", settings.AI_BOT_TOKEN),
-        ("rss-bot", settings.RSS_BOT_TOKEN)
+        ("monitor-bot", settings.MONITOR_BOT_TOKEN, MONITOR_BOT_COMMANDS),
+        ("ai-bot", settings.AI_BOT_TOKEN, AI_BOT_COMMANDS),
+        ("rss-bot", settings.RSS_BOT_TOKEN, RSS_BOT_COMMANDS)
     ]
     
     base_url = settings.WEBHOOK_URL.rstrip('/')
 
-    for name, token in bots:
+    for name, token, commands in bots:
         if not token: 
             continue
             
@@ -43,7 +71,9 @@ async def setup():
             # Delete old webhook first then set new one with secret
             await bot.delete_webhook(drop_pending_updates=True)
             await bot.set_webhook(webhook_url, drop_pending_updates=True, secret_token=bot_secret)
-            logger.info(f"✅ Webhook set for {name}: {webhook_url}")
+            # Register bot commands for autocomplete
+            await bot.set_my_commands(commands)
+            logger.info(f"✅ Webhook set for {name}: {webhook_url} ({len(commands)} commands)")
             await bot.session.close()
         except Exception as e:
             logger.error(f"Failed to set webhook for {name}", e)
