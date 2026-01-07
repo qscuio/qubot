@@ -285,6 +285,7 @@ jobs:
             printf 'VIP_TARGET_CHANNEL=%s\n' '${{ secrets.VIP_TARGET_CHANNEL }}' >> .env
             printf 'KEYWORDS=%s\n' '${{ secrets.KEYWORDS }}' >> .env
             printf 'FROM_USERS=%s\n' '${{ secrets.FROM_USERS }}' >> .env
+            printf 'ALLOWED_USERS=%s\n' '${{ secrets.ALLOWED_USERS }}' >> .env
             printf 'NOTES_REPO=%s\n' '${{ secrets.NOTES_REPO }}' >> .env
             printf 'GIT_SSH_KEY_PATH=%s\n' '${{ secrets.GIT_SSH_KEY_PATH }}' >> .env
             printf 'GIT_SSH_COMMAND=%s\n' '${{ secrets.GIT_SSH_COMMAND }}' >> .env
