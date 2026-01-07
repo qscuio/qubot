@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     AI_BOT_TOKEN: Optional[str] = None
     RSS_BOT_TOKEN: Optional[str] = None
     BOT_TOKEN: Optional[str] = None  # Legacy single token
+    AGENT_BOT_TOKEN: Optional[str] = None
     
     # Webhook
     WEBHOOK_URL: Optional[str] = None
@@ -143,7 +144,6 @@ class Settings(BaseSettings):
     ENABLE_AI: bool = True
     ENABLE_MONITOR: bool = True
     API_ENABLED: bool = True
-    ENABLE_ADVANCED_AI: bool = True  # Enable advanced AI with agents and tools
     
     # Advanced AI Settings
     AI_ADVANCED_PROVIDER: Optional[str] = None  # Provider for advanced AI (default: claude)

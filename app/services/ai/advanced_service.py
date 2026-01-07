@@ -16,6 +16,7 @@ from app.providers.glm import GLMProvider
 from app.providers.minimax import MiniMaxProvider
 from app.providers.openrouter import OpenRouterProvider
 from app.services.ai.agents.orchestrator import AgentOrchestrator
+from app.services.ai.prompts import build_job_prompt
 from app.services.ai.agents.registry import agent_registry
 from app.services.ai.tools.registry import tool_registry
 
@@ -146,6 +147,13 @@ class AdvancedAiService:
     def list_agents(self) -> List[Dict[str, str]]:
         """List available agents."""
         return agent_registry.get_agent_info()
+
+    async def get_models(self, provider_key: str = None) -> List[Dict[str, str]]:
+        """Get available models for a provider."""
+        provider = self.get_provider(provider_key)
+        if not provider:
+            return []
+        return await provider.fetch_models()
     
     def list_tools(self) -> List[Dict[str, str]]:
         """List available tools."""
@@ -157,6 +165,7 @@ class AdvancedAiService:
         agent_name: str = None,
         history: List[Dict[str, str]] = None,
         model: str = None,
+        provider_key: str = None,
         auto_route: bool = False
     ) -> Dict[str, Any]:
         """
@@ -181,18 +190,20 @@ class AdvancedAiService:
         if not self._initialized:
             await self.initialize()
         
-        if not self.is_available():
-            return {"content": "Advanced AI Service is not configured.", "agent": "none"}
+        provider = self.get_provider(provider_key)
+        if not provider or not provider.is_configured():
+            return {"content": "Advanced AI provider is not configured.", "agent": "none"}
         
         try:
+            orchestrator = AgentOrchestrator(provider)
             if auto_route:
-                response = await self.orchestrator.run_with_routing(
+                response = await orchestrator.run_with_routing(
                     message=message,
                     history=history,
                     model=model
                 )
             else:
-                response = await self.orchestrator.run(
+                response = await orchestrator.run(
                     message=message,
                     agent_name=agent_name,
                     history=history,
@@ -202,14 +213,119 @@ class AdvancedAiService:
             return {
                 "content": response.content,
                 "thinking": response.thinking,
-                "agent": self.orchestrator.current_agent.name if self.orchestrator.current_agent else "unknown",
+                "agent": orchestrator.current_agent.name if orchestrator.current_agent else "unknown",
                 "tool_calls": response.tool_calls,
                 "tool_results": [r.to_dict() for r in response.tool_results],
-                "metadata": response.metadata
+                "metadata": {
+                    **response.metadata,
+                    "provider": provider.name,
+                    "model": model or getattr(provider, "default_model", None)
+                }
             }
         except Exception as e:
             logger.error(f"Chat error: {e}")
             return {"content": f"Error: {e}", "agent": "error"}
+
+    async def run_job(
+        self,
+        job_id: str,
+        payload: Dict = None,
+        provider_key: str = None,
+        model: str = None,
+        history: List[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
+        """Run a prompt-catalog job using the selected advanced provider."""
+        if not self._initialized:
+            await self.initialize()
+        
+        provider = self.get_provider(provider_key)
+        if not provider or not provider.is_configured():
+            raise ValueError("Advanced AI provider is not configured.")
+        
+        job_data = build_job_prompt(job_id, payload or {})
+        model_name = model or getattr(provider, "default_model", None)
+        
+        return await provider.call(
+            prompt=job_data["prompt"],
+            model=model_name,
+            history=history or [],
+            context_prefix=job_data["system"]
+        )
+
+    async def export_chat(
+        self,
+        user_id: int,
+        chat_id: int,
+        provider_key: str = None,
+        model: str = None
+    ) -> Dict[str, Any]:
+        """Export advanced chat to markdown and optionally push to GitHub."""
+        from datetime import datetime
+        from app.services.ai.advanced_storage import advanced_ai_storage
+        
+        chat = await advanced_ai_storage.get_chat_by_id(chat_id)
+        messages = await advanced_ai_storage.get_chat_messages(chat_id, 100)
+        
+        if not chat or not messages:
+            raise ValueError("No messages to export")
+        
+        now = datetime.now()
+        mmdd = now.strftime("%m%d")
+        words = (chat.get("title") or "chat").split()[:3]
+        safe_words = "-".join(words)[:30]
+        filename = f"{mmdd}-{safe_words or 'chat'}.md"
+        
+        raw_content = "\n\n---\n\n".join(
+            f"**{'User' if m['role'] == 'user' else 'Assistant'}:**\n{m['content']}"
+            for m in reversed(messages)
+        )
+        
+        raw_markdown = (
+            f"# {chat.get('title', 'Chat')}\n\n"
+            f"> Exported: {now.isoformat()} | {len(messages)} messages\n\n"
+            f"{raw_content}\n\n---\n*Exported from QuBot*"
+        )
+        
+        summary_markdown = ""
+        try:
+            result = await self.run_job(
+                "chat_notes",
+                {"conversation": raw_content},
+                provider_key=provider_key,
+                model=model
+            )
+            summary = result.get("content", "Summary generation failed.")
+            summary_markdown = (
+                f"# {chat.get('title', 'Chat')} - Notes\n\n"
+                f"> Summary of {len(messages)} messages | {now.isoformat()}\n\n"
+                f"{summary}\n\n---\n*AI-generated summary from QuBot*"
+            )
+        except Exception as e:
+            logger.warn(f"Summary generation failed: {e}")
+            summary_markdown = (
+                f"# {chat.get('title', 'Chat')} - Notes\n\n"
+                "> Summary generation failed\n\n"
+                "See raw file for full conversation."
+            )
+        
+        urls = None
+        if settings.NOTES_REPO:
+            try:
+                from app.services.github import github_service
+                if github_service.is_ready:
+                    raw_url = github_service.save_note(f"raw/{filename}", raw_markdown, f"Export raw: {chat.get('title')}")
+                    notes_url = github_service.save_note(f"notes/{filename}", summary_markdown, f"Export notes: {chat.get('title')}")
+                    urls = {"raw": raw_url, "notes": notes_url}
+            except Exception as e:
+                logger.error(f"GitHub push failed: {e}")
+        
+        return {
+            "filename": filename,
+            "raw_markdown": raw_markdown,
+            "summary_markdown": summary_markdown,
+            "urls": urls,
+            "message_count": len(messages)
+        }
     
     async def execute_tool(self, tool_name: str, **kwargs) -> Dict[str, Any]:
         """Execute a single tool directly."""
@@ -238,6 +354,12 @@ class AdvancedAiService:
         
         logger.info(f"Switched to provider: {provider_key}")
         return True
+
+    def get_provider(self, provider_key: str = None) -> Optional[BaseProvider]:
+        """Resolve a provider by key or fall back to active provider."""
+        if provider_key:
+            return self.providers.get(provider_key.lower())
+        return self.active_provider
     
     def get_status(self) -> Dict[str, Any]:
         """Get service status."""

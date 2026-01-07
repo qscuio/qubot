@@ -38,6 +38,18 @@ A modular Telegram application with REST API support, built with Python (FastAPI
 
 **Token:** `AI_BOT_TOKEN`
 
+### 🤖 Agent Bot (Advanced)
+| Command | Description |
+|---------|-------------|
+| `/start` | Advanced menu with agents/tools |
+| `/ask <message>` | Advanced chat with tools |
+| `/agent [name]` | Switch agents |
+| `/tools` | List tools |
+| `/skills` | List skills |
+| `/export` | Export chat to GitHub |
+
+**Token:** `AGENT_BOT_TOKEN`
+
 ### 🔔 Monitor Bot
 | Command | Description |
 |---------|-------------|
@@ -130,7 +142,7 @@ cp .env.example .env
 
 **Required:**
 - `TG_SESSIONS_JSON` - Telegram sessions (JSON array, see below)
-- Bot tokens: `RSS_BOT_TOKEN`, `AI_BOT_TOKEN`, `MONITOR_BOT_TOKEN`
+- Bot tokens: `RSS_BOT_TOKEN`, `AI_BOT_TOKEN`, `AGENT_BOT_TOKEN`, `MONITOR_BOT_TOKEN`
 
 **Sessions JSON Format:**
 ```json
@@ -196,6 +208,7 @@ curl http://localhost:3888/health
 |----------|-------------|
 | `MONITOR_BOT_TOKEN` | Monitor bot (@BotFather) |
 | `AI_BOT_TOKEN` | AI bot (@BotFather) |
+| `AGENT_BOT_TOKEN` | Agent bot (@BotFather) |
 | `RSS_BOT_TOKEN` | RSS bot (@BotFather) |
 
 ### Webhook
@@ -272,6 +285,7 @@ Add these secrets to your GitHub repository:
 | `TG_SESSIONS_JSON` | Sessions JSON (single line) |
 | `MONITOR_BOT_TOKEN` | Monitor bot token |
 | `AI_BOT_TOKEN` | AI bot token |
+| `AGENT_BOT_TOKEN` | Agent bot token |
 | `RSS_BOT_TOKEN` | RSS bot token |
 | `WEBHOOK_URL` | Webhook URL |
 | `BOT_SECRET` | Webhook secret |

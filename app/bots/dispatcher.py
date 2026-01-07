@@ -18,11 +18,12 @@ class BotDispatcher:
         # 2. AI Bot
         if settings.AI_BOT_TOKEN:
             await self._setup_bot("ai-bot", settings.AI_BOT_TOKEN, "app.bots.ai.handlers")
-            # Add advanced AI handlers if enabled
-            if getattr(settings, "ENABLE_ADVANCED_AI", False):
-                await self._add_router_to_bot("ai-bot", "app.bots.ai.handlers_advanced")
 
-        # 3. RSS Bot
+        # 3. Agent Bot (Advanced AI)
+        if settings.AGENT_BOT_TOKEN:
+            await self._setup_bot("agent-bot", settings.AGENT_BOT_TOKEN, "app.bots.ai.handlers_advanced")
+
+        # 4. RSS Bot
         if settings.RSS_BOT_TOKEN:
             await self._setup_bot("rss-bot", settings.RSS_BOT_TOKEN, "app.bots.rss.handlers")
 

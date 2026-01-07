@@ -71,10 +71,9 @@ async def get_main_menu_ui(user_id: int):
     builder.button(text="💬 My Chats", callback_data="ai:chats")
     builder.button(text="🔌 Providers", callback_data="ai:providers")
     builder.button(text="📝 Models", callback_data="ai:models")
-    builder.button(text="🚀 Advanced", callback_data="ai:advanced")
     builder.button(text="📤 Export", callback_data="ai:export")
     builder.button(text="🔄 Refresh", callback_data="ai:refresh")
-    builder.adjust(2, 2, 2, 1)
+    builder.adjust(2, 2, 1, 1)
     
     return text, builder.as_markup()
 
@@ -87,115 +86,6 @@ async def cb_refresh(callback: types.CallbackQuery):
 async def cb_main(callback: types.CallbackQuery):
     await callback.answer()
     await edit_main_menu(callback.message, callback.from_user.id)
-
-@router.callback_query(F.data == "ai:advanced")
-async def cb_advanced(callback: types.CallbackQuery):
-    """Show advanced AI menu with agents, tools, skills."""
-    await callback.answer()
-    
-    from app.services.ai.advanced_service import advanced_ai_service
-    from app.services.ai.advanced_storage import advanced_ai_storage
-    await advanced_ai_service.initialize()
-    
-    status = advanced_ai_service.get_status()
-    user_settings = await advanced_ai_storage.get_agent_settings(callback.from_user.id)
-    current_agent = user_settings.get("default_agent", "chat")
-    
-    from app.services.ai.skills import skill_registry
-    skill_registry.load_skills()
-    skills_count = len(skill_registry.list_all())
-    
-    text = (
-        "🚀 <b>Advanced AI</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔌 Provider: <b>{status.get('provider', 'N/A')}</b>\n"
-        f"🤖 Agent: <b>{current_agent}</b>\n"
-        f"🔧 Tools: <b>{status.get('tools_count', 0)}</b> | "
-        f"📚 Skills: <b>{skills_count}</b>\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n"
-        "<i>Tap an agent to switch, then use /ask</i>"
-    )
-    
-    builder = InlineKeyboardBuilder()
-    # Quick agent switch buttons
-    agents = ["chat", "research", "code", "devops", "writer"]
-    for agent in agents:
-        icon = "✅" if agent == current_agent else "⚪"
-        builder.button(text=f"{icon} {agent}", callback_data=f"adv:switch:{agent}")
-    builder.button(text="🔧 Tools", callback_data="adv:tools")
-    builder.button(text="📚 Skills", callback_data="adv:skills")
-    builder.button(text="⬅️ Back", callback_data="ai:main")
-    builder.adjust(3, 2, 2, 1)
-    
-    try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
-
-@router.callback_query(F.data.startswith("adv:switch:"))
-async def cb_adv_switch_agent(callback: types.CallbackQuery):
-    """Quick switch agent from Advanced menu."""
-    agent_name = callback.data.split(":")[2]
-    
-    from app.services.ai.advanced_storage import advanced_ai_storage
-    await advanced_ai_storage.update_agent_settings(callback.from_user.id, default_agent=agent_name)
-    
-    await callback.answer(f"✅ Switched to {agent_name}")
-    # Refresh the advanced menu
-    await cb_advanced(callback)
-
-@router.callback_query(F.data == "adv:agents")
-async def cb_adv_agents(callback: types.CallbackQuery):
-    """Redirect to advanced menu (agents are shown there now)."""
-    await cb_advanced(callback)
-
-@router.callback_query(F.data == "adv:tools")
-async def cb_adv_tools(callback: types.CallbackQuery):
-    from app.services.ai.advanced_service import advanced_ai_service
-    await advanced_ai_service.initialize()
-    tools = advanced_ai_service.list_tools()
-    
-    text = f"🔧 <b>Available Tools</b> ({len(tools)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-    # Group by prefix
-    by_cat = {}
-    for t in tools:
-        cat = t['name'].split('_')[0] if '_' in t['name'] else 'general'
-        by_cat.setdefault(cat, []).append(t['name'])
-    for cat, names in list(by_cat.items())[:5]:
-        text += f"<b>{cat}</b>: {', '.join(names[:3])}\n"
-    text += f"\n<i>+{len(tools) - 10} more. Use /tools for full list</i>"
-    
-    builder = InlineKeyboardBuilder()
-    builder.button(text="⬅️ Back", callback_data="ai:advanced")
-    
-    await callback.answer()
-    try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
-        pass
-
-@router.callback_query(F.data == "adv:skills")
-async def cb_adv_skills(callback: types.CallbackQuery):
-    from app.services.ai.skills import skill_registry
-    skill_registry.load_skills()
-    skills = skill_registry.get_skill_info()
-    
-    text = f"📚 <b>Available Skills</b> ({len(skills)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-    for s in skills[:8]:
-        text += f"• <b>{s['name']}</b>\n"
-    if len(skills) > 8:
-        text += f"\n<i>+{len(skills) - 8} more. Use /skills for full list</i>"
-    text += "\n\n<i>Skills auto-match based on your message</i>"
-    
-    builder = InlineKeyboardBuilder()
-    builder.button(text="⬅️ Back", callback_data="ai:advanced")
-    
-    await callback.answer()
-    try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
-        pass
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Chats
@@ -519,7 +409,7 @@ async def cmd_rename(message: types.Message, command: CommandObject):
     if not title:
         await message.answer("Usage: /rename &lt;new title&gt;", parse_mode="HTML")
         return
-    
+
     chats = await ai_service.get_chats(message.from_user.id, 1)
     active_chat = next((c for c in chats if c.get("is_active")), None)
     
@@ -534,7 +424,7 @@ async def cmd_rename(message: types.Message, command: CommandObject):
 async def cmd_clear(message: types.Message):
     if not is_allowed(message.from_user.id):
         return
-    
+
     chats = await ai_service.get_chats(message.from_user.id, 1)
     active_chat = next((c for c in chats if c.get("is_active")), None)
     
@@ -558,7 +448,7 @@ async def handle_chat(message: types.Message):
     prompt = message.text
     if not prompt:
         return
-
+    
     status = await message.answer("🤔 Thinking...")
     
     try:

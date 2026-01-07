@@ -5,6 +5,7 @@ Advanced AI Storage for agent sessions and tool execution logging.
 from typing import Dict, List, Optional, Any
 from app.core.database import db
 from app.core.logger import Logger
+from app.core.config import settings
 
 logger = Logger("AdvancedAiStorage")
 
@@ -46,6 +47,29 @@ class AdvancedAiStorage:
                     duration_ms INTEGER
                 );
             """)
+
+            # Advanced AI chats
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_adv_chats (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    title TEXT DEFAULT 'New Chat',
+                    summary TEXT,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_adv_messages (
+                    id SERIAL PRIMARY KEY,
+                    chat_id INTEGER REFERENCES ai_adv_chats(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
             
             # User agent preferences
             await conn.execute("""
@@ -55,9 +79,17 @@ class AdvancedAiStorage:
                     auto_route BOOLEAN DEFAULT FALSE,
                     show_thinking BOOLEAN DEFAULT TRUE,
                     show_tool_calls BOOLEAN DEFAULT TRUE,
+                    provider TEXT DEFAULT 'claude',
+                    model TEXT,
+                    chat_mode TEXT DEFAULT 'basic',
                     updated_at TIMESTAMP DEFAULT NOW()
                 );
             """)
+
+            # Ensure new columns exist for existing installs
+            await conn.execute("ALTER TABLE ai_agent_settings ADD COLUMN IF NOT EXISTS provider TEXT DEFAULT 'claude';")
+            await conn.execute("ALTER TABLE ai_agent_settings ADD COLUMN IF NOT EXISTS model TEXT;")
+            await conn.execute("ALTER TABLE ai_agent_settings ADD COLUMN IF NOT EXISTS chat_mode TEXT DEFAULT 'basic';")
             
             logger.info("Advanced AI tables initialized")
     
@@ -153,13 +185,18 @@ class AdvancedAiStorage:
     
     async def get_agent_settings(self, user_id: int) -> Dict:
         """Get user's agent settings."""
+        default_provider = (settings.AI_ADVANCED_PROVIDER or "claude").lower()
+        default_mode = "basic"
         if not db.pool:
             return {
                 "user_id": user_id,
                 "default_agent": "chat",
                 "auto_route": False,
                 "show_thinking": True,
-                "show_tool_calls": True
+                "show_tool_calls": True,
+                "provider": default_provider,
+                "model": None,
+                "chat_mode": default_mode
             }
         
         row = await db.pool.fetchrow(
@@ -169,18 +206,29 @@ class AdvancedAiStorage:
         
         if not row:
             await db.pool.execute(
-                "INSERT INTO ai_agent_settings (user_id) VALUES ($1)",
-                user_id
+                "INSERT INTO ai_agent_settings (user_id, provider, chat_mode) VALUES ($1, $2, $3) ON CONFLICT (user_id) DO NOTHING",
+                user_id, default_provider, default_mode
             )
             return {
                 "user_id": user_id,
                 "default_agent": "chat",
                 "auto_route": False,
                 "show_thinking": True,
-                "show_tool_calls": True
+                "show_tool_calls": True,
+                "provider": default_provider,
+                "model": None,
+                "chat_mode": default_mode
             }
-        
-        return dict(row)
+
+        data = dict(row)
+        if not data.get("provider"):
+            data["provider"] = default_provider
+        if not data.get("chat_mode"):
+            data["chat_mode"] = default_mode
+        if "model" not in data:
+            data["model"] = None
+
+        return data
     
     async def update_agent_settings(
         self,
@@ -188,11 +236,17 @@ class AdvancedAiStorage:
         default_agent: str = None,
         auto_route: bool = None,
         show_thinking: bool = None,
-        show_tool_calls: bool = None
+        show_tool_calls: bool = None,
+        provider: str = None,
+        model: str = None,
+        chat_mode: str = None
     ):
         """Update user's agent settings."""
         if not db.pool:
             return
+        
+        # Ensure row exists with defaults
+        await self.get_agent_settings(user_id)
         
         updates = []
         values = [user_id]
@@ -217,6 +271,21 @@ class AdvancedAiStorage:
             updates.append(f"show_tool_calls = ${param_idx}")
             values.append(show_tool_calls)
             param_idx += 1
+
+        if provider is not None:
+            updates.append(f"provider = ${param_idx}")
+            values.append(provider)
+            param_idx += 1
+
+        if model is not None:
+            updates.append(f"model = ${param_idx}")
+            values.append(model)
+            param_idx += 1
+
+        if chat_mode is not None:
+            updates.append(f"chat_mode = ${param_idx}")
+            values.append(chat_mode)
+            param_idx += 1
         
         if updates:
             updates.append("updated_at = NOW()")
@@ -225,6 +294,120 @@ class AdvancedAiStorage:
                     ON CONFLICT (user_id) DO UPDATE SET {', '.join(updates)}""",
                 *values
             )
+
+    # ============= Advanced Chat Methods =============
+
+    async def get_or_create_active_chat(self, user_id: int) -> Dict:
+        """Get active advanced chat or create a new one."""
+        if not db.pool:
+            return {"id": None, "title": "New Chat", "user_id": user_id}
+        
+        row = await db.pool.fetchrow(
+            "SELECT * FROM ai_adv_chats WHERE user_id = $1 AND is_active = TRUE ORDER BY updated_at DESC LIMIT 1",
+            user_id
+        )
+        
+        if row:
+            return dict(row)
+        
+        row = await db.pool.fetchrow(
+            "INSERT INTO ai_adv_chats (user_id) VALUES ($1) RETURNING *",
+            user_id
+        )
+        return dict(row)
+
+    async def create_new_chat(self, user_id: int) -> Dict:
+        """Create a new advanced chat and deactivate others."""
+        if not db.pool:
+            return {"id": None, "title": "New Chat"}
+        
+        await db.pool.execute(
+            "UPDATE ai_adv_chats SET is_active = FALSE WHERE user_id = $1",
+            user_id
+        )
+        
+        row = await db.pool.fetchrow(
+            "INSERT INTO ai_adv_chats (user_id) VALUES ($1) RETURNING *",
+            user_id
+        )
+        return dict(row)
+
+    async def get_chat_by_id(self, chat_id: int) -> Optional[Dict]:
+        if not db.pool:
+            return None
+        row = await db.pool.fetchrow("SELECT * FROM ai_adv_chats WHERE id = $1", chat_id)
+        return dict(row) if row else None
+
+    async def get_user_chats(self, user_id: int, limit: int = 10) -> List[Dict]:
+        if not db.pool:
+            return []
+        rows = await db.pool.fetch(
+            "SELECT * FROM ai_adv_chats WHERE user_id = $1 ORDER BY updated_at DESC LIMIT $2",
+            user_id, limit
+        )
+        return [dict(r) for r in rows]
+
+    async def set_active_chat(self, user_id: int, chat_id: int):
+        if not db.pool:
+            return
+        await db.pool.execute("UPDATE ai_adv_chats SET is_active = FALSE WHERE user_id = $1", user_id)
+        await db.pool.execute(
+            "UPDATE ai_adv_chats SET is_active = TRUE, updated_at = NOW() WHERE id = $1",
+            chat_id
+        )
+
+    async def rename_chat(self, chat_id: int, title: str):
+        if not db.pool:
+            return
+        await db.pool.execute(
+            "UPDATE ai_adv_chats SET title = $1, updated_at = NOW() WHERE id = $2",
+            title, chat_id
+        )
+
+    async def update_chat_summary(self, chat_id: int, summary: str):
+        if not db.pool:
+            return
+        await db.pool.execute(
+            "UPDATE ai_adv_chats SET summary = $1, updated_at = NOW() WHERE id = $2",
+            summary, chat_id
+        )
+
+    async def delete_chat(self, chat_id: int):
+        if not db.pool:
+            return
+        await db.pool.execute("DELETE FROM ai_adv_chats WHERE id = $1", chat_id)
+
+    async def save_message(self, chat_id: int, role: str, content: str) -> Dict:
+        if not db.pool:
+            return {"id": None, "chat_id": chat_id, "role": role, "content": content}
+        
+        row = await db.pool.fetchrow(
+            "INSERT INTO ai_adv_messages (chat_id, role, content) VALUES ($1, $2, $3) RETURNING *",
+            chat_id, role, content
+        )
+        
+        await db.pool.execute("UPDATE ai_adv_chats SET updated_at = NOW() WHERE id = $1", chat_id)
+        return dict(row)
+
+    async def get_chat_messages(self, chat_id: int, limit: int = 10) -> List[Dict]:
+        if not db.pool:
+            return []
+        rows = await db.pool.fetch(
+            "SELECT * FROM ai_adv_messages WHERE chat_id = $1 ORDER BY created_at DESC LIMIT $2",
+            chat_id, limit
+        )
+        return [dict(r) for r in rows]
+
+    async def get_message_count(self, chat_id: int) -> int:
+        if not db.pool:
+            return 0
+        row = await db.pool.fetchrow("SELECT COUNT(*) FROM ai_adv_messages WHERE chat_id = $1", chat_id)
+        return int(row[0]) if row else 0
+
+    async def clear_chat_messages(self, chat_id: int):
+        if not db.pool:
+            return
+        await db.pool.execute("DELETE FROM ai_adv_messages WHERE chat_id = $1", chat_id)
 
 
 # Global storage instance
