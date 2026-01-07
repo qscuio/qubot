@@ -158,10 +158,11 @@ class MonitorService:
         await telegram_service.add_message_handler(self.handle_message)
         self.is_running = True
         
-        # Start background flush task for timeout-based summarization
-        if self.summarize_enabled:
-            self._flush_task = asyncio.create_task(self._periodic_flush())
-            logger.info("📝 Summarization enabled")
+        # Disabled: 2-hour periodic summarization (too many tokens, low quality)
+        # Only keep daily reports at 8:00 and 20:00
+        # if self.summarize_enabled:
+        #     self._flush_task = asyncio.create_task(self._periodic_flush())
+        #     logger.info("📝 Summarization enabled")
         
         # Start daily report scheduler
         self._report_task = asyncio.create_task(self._schedule_reports())
