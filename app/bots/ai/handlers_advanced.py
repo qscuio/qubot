@@ -2,6 +2,8 @@
 Advanced AI Bot handlers for agent and tool features.
 """
 
+import html
+
 from aiogram import Router, F, types
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -22,6 +24,17 @@ def is_allowed(user_id: int) -> bool:
     if not settings.allowed_users_list:
         return True
     return user_id in settings.allowed_users_list
+
+
+def _truncate(text: str, max_len: int) -> str:
+    text = (text or "").strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3].rstrip() + "..."
+
+
+def _escape(text: str) -> str:
+    return html.escape(text or "")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -58,7 +71,7 @@ async def edit_main_menu(message: types.Message, user_id: int):
 async def get_main_menu_ui(user_id: int):
     await advanced_ai_service.initialize()
     user_settings = await advanced_ai_storage.get_agent_settings(user_id)
-    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "claude").lower()
+    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "groq").lower()
     model_name = user_settings.get("model") or "default"
     agent_name = user_settings.get("default_agent", "chat")
     auto_route = user_settings.get("auto_route", False)
@@ -365,7 +378,7 @@ async def get_providers_ui(user_id: int):
     await advanced_ai_service.initialize()
     providers = advanced_ai_service.list_providers()
     user_settings = await advanced_ai_storage.get_agent_settings(user_id)
-    current_provider = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "claude").lower()
+    current_provider = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "groq").lower()
     
     text = (
         "🔌 <b>Advanced Providers</b>\n"
@@ -441,7 +454,7 @@ async def cb_models(callback: types.CallbackQuery):
 async def get_models_ui(user_id: int):
     await advanced_ai_service.initialize()
     user_settings = await advanced_ai_storage.get_agent_settings(user_id)
-    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "claude").lower()
+    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "groq").lower()
     current_model = user_settings.get("model")
     
     models = await advanced_ai_service.get_models(provider_key)
@@ -475,7 +488,7 @@ async def get_models_ui(user_id: int):
 async def cb_model_select(callback: types.CallbackQuery):
     model_id = callback.data.split(":", 2)[2]
     user_settings = await advanced_ai_storage.get_agent_settings(callback.from_user.id)
-    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "claude").lower()
+    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "groq").lower()
     
     await advanced_ai_storage.update_agent_settings(
         callback.from_user.id,
@@ -510,28 +523,38 @@ async def cb_tools(callback: types.CallbackQuery):
 async def get_tools_ui():
     await advanced_ai_service.initialize()
     tools = advanced_ai_service.list_tools()
-    
-    text = f"🔧 <b>Available Tools</b> ({len(tools)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-    
+
+    text = (
+        f"🔧 <b>Tools</b> • <b>{len(tools)}</b> total\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+    )
+
+    if not tools:
+        text += "\n<i>No tools are registered right now.</i>"
+        builder = InlineKeyboardBuilder()
+        builder.button(text="⬅️ Back", callback_data="adv:main")
+        return text, builder.as_markup()
+
     # Group by category (based on prefix)
     categories = {}
     for tool in tools:
-        name = tool["name"]
-        if "_" in name:
-            category = name.split("_")[0]
-        else:
-            category = "general"
-        
-        if category not in categories:
-            categories[category] = []
-        categories[category].append(tool)
-    
-    for category, cat_tools in categories.items():
-        text += f"<b>{category.upper()}</b>\n"
+        name = tool.get("name", "")
+        category = name.split("_", 1)[0] if "_" in name else "general"
+        categories.setdefault(category, []).append(tool)
+
+    for category in sorted(categories.keys()):
+        cat_tools = sorted(categories[category], key=lambda t: t.get("name", ""))
+        text += f"\n<b>{category.upper()}</b> <code>{len(cat_tools)}</code>\n"
         for t in cat_tools:
-            text += f"  • <code>{t['name']}</code>\n"
-        text += "\n"
-    
+            name = _escape(t.get("name", ""))
+            desc = _escape(_truncate(t.get("description", ""), 72))
+            if desc:
+                text += f"• <code>{name}</code> — {desc}\n"
+            else:
+                text += f"• <code>{name}</code>\n"
+
+    text += "\n<i>Tools run automatically when they help.</i>"
+
     builder = InlineKeyboardBuilder()
     builder.button(text="⬅️ Back", callback_data="adv:main")
     return text, builder.as_markup()
@@ -565,8 +588,10 @@ async def get_skills_ui():
     
     if not skills:
         text = (
-            "📚 <b>No Skills Found</b>\n\n"
-            "Create skills in:\n"
+            "📚 <b>Skills</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "<i>No skills found yet.</i>\n\n"
+            "Create skills here:\n"
             "• <code>~/.ai/skills/skill-name/SKILL.md</code> (personal)\n"
             "• <code>.ai/skills/skill-name/SKILL.md</code> (project)\n\n"
             "Format:\n<pre>"
@@ -580,24 +605,31 @@ async def get_skills_ui():
         builder = InlineKeyboardBuilder()
         builder.button(text="⬅️ Back", callback_data="adv:main")
         return text, builder.as_markup()
-    
-    text = f"📚 <b>Available Skills</b> ({len(skills)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-    
+
+    text = (
+        f"📚 <b>Skills</b> • <b>{len(skills)}</b> total\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "<i>Auto-matched to your message.</i>\n"
+    )
+
     # Group by category
     by_category = {}
     for s in skills:
         cat = s.get("category", "custom")
-        if cat not in by_category:
-            by_category[cat] = []
-        by_category[cat].append(s)
-    
-    for category, cat_skills in by_category.items():
-        text += f"<b>{category.upper()}</b>\n"
+        by_category.setdefault(cat, []).append(s)
+
+    for category in sorted(by_category.keys()):
+        cat_skills = sorted(by_category[category], key=lambda s: s.get("name", ""))
+        text += f"\n<b>{category.upper()}</b> <code>{len(cat_skills)}</code>\n"
         for s in cat_skills:
-            text += f"  • <b>{s['name']}</b>: {s['description'][:40]}...\n"
-        text += "\n"
-    
-    text += "\n<i>Skills are auto-matched based on your message content.</i>"
+            name = _escape(s.get("name", ""))
+            desc = _escape(_truncate(s.get("description", ""), 72))
+            if desc:
+                text += f"• <b>{name}</b> — {desc}\n"
+            else:
+                text += f"• <b>{name}</b>\n"
+
+    text += "\n<i>Add or update skills in your SKILL.md files.</i>"
     builder = InlineKeyboardBuilder()
     builder.button(text="⬅️ Back", callback_data="adv:main")
     return text, builder.as_markup()
@@ -621,7 +653,7 @@ async def cb_export(callback: types.CallbackQuery):
 async def do_export(user_id: int, message: types.Message, is_callback: bool = False):
     await advanced_ai_service.initialize()
     user_settings = await advanced_ai_storage.get_agent_settings(user_id)
-    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "claude").lower()
+    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "groq").lower()
     model_name = user_settings.get("model")
     
     chats = await advanced_ai_storage.get_user_chats(user_id, 1)
@@ -757,7 +789,7 @@ async def cmd_advstatus(message: types.Message):
     await advanced_ai_service.initialize()
     status = advanced_ai_service.get_status()
     user_settings = await advanced_ai_storage.get_agent_settings(message.from_user.id)
-    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "claude").lower()
+    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "groq").lower()
     model_name = user_settings.get("model") or "default"
     providers = advanced_ai_service.list_providers()
     provider_info = next((p for p in providers if p["key"] == provider_key), None)
@@ -834,7 +866,7 @@ async def handle_advanced_chat(message: types.Message, prompt: str):
     auto_route = user_settings.get("auto_route", False)
     show_thinking = user_settings.get("show_thinking", True)
     show_tool_calls = user_settings.get("show_tool_calls", True)
-    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "claude").lower()
+    provider_key = (user_settings.get("provider") or settings.AI_ADVANCED_PROVIDER or "groq").lower()
     model_name = user_settings.get("model")
     
     provider = advanced_ai_service.get_provider(provider_key)
@@ -902,6 +934,8 @@ async def handle_advanced_chat(message: types.Message, prompt: str):
         builder = InlineKeyboardBuilder()
         builder.button(text=f"🤖 {agent_used}", callback_data="adv:noop")
         builder.button(text="🔧 Tools", callback_data="adv:show_tools")
+        builder.button(text="📤 Export", callback_data="adv:export")
+        builder.adjust(2, 1)
         
         await message.answer(
             f"<code>{agent_used}</code> • <code>{provider_used}</code> • <code>{str(model_used)[:20]}</code>",

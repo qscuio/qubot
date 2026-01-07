@@ -22,7 +22,7 @@ from app.services.ai.tools.registry import tool_registry
 
 logger = Logger("AdvancedAiService")
 
-DEFAULT_PROVIDER = "claude"
+DEFAULT_PROVIDER = "groq"
 
 
 class AdvancedAiService:
@@ -264,7 +264,7 @@ class AdvancedAiService:
         from app.services.ai.advanced_storage import advanced_ai_storage
         
         chat = await advanced_ai_storage.get_chat_by_id(chat_id)
-        messages = await advanced_ai_storage.get_chat_messages(chat_id, 100)
+        messages = await advanced_ai_storage.get_all_chat_messages(chat_id)
         
         if not chat or not messages:
             raise ValueError("No messages to export")
@@ -277,7 +277,7 @@ class AdvancedAiService:
         
         raw_content = "\n\n---\n\n".join(
             f"**{'User' if m['role'] == 'user' else 'Assistant'}:**\n{m['content']}"
-            for m in reversed(messages)
+            for m in messages
         )
         
         raw_markdown = (

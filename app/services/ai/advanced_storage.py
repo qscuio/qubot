@@ -185,7 +185,7 @@ class AdvancedAiStorage:
     
     async def get_agent_settings(self, user_id: int) -> Dict:
         """Get user's agent settings."""
-        default_provider = (settings.AI_ADVANCED_PROVIDER or "claude").lower()
+        default_provider = (settings.AI_ADVANCED_PROVIDER or "groq").lower()
         default_mode = "basic"
         if not db.pool:
             return {
@@ -395,6 +395,16 @@ class AdvancedAiStorage:
         rows = await db.pool.fetch(
             "SELECT * FROM ai_adv_messages WHERE chat_id = $1 ORDER BY created_at DESC LIMIT $2",
             chat_id, limit
+        )
+        return [dict(r) for r in rows]
+
+    async def get_all_chat_messages(self, chat_id: int) -> List[Dict]:
+        """Get full chat history in chronological order."""
+        if not db.pool:
+            return []
+        rows = await db.pool.fetch(
+            "SELECT * FROM ai_adv_messages WHERE chat_id = $1 ORDER BY created_at ASC",
+            chat_id
         )
         return [dict(r) for r in rows]
 

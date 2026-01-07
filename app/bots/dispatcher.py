@@ -3,6 +3,7 @@ from typing import Dict, List
 from aiogram import Bot, Dispatcher
 from app.bots.bot_spec import BotSpec
 from app.bots.registry import BOT_SPECS
+from app.bots.middleware import AllowedUsersMiddleware
 from app.core.config import settings
 from app.core.logger import Logger
 
@@ -30,6 +31,10 @@ class BotDispatcher:
         try:
             bot = Bot(token=spec.token)
             dp = Dispatcher()
+
+            allowed_middleware = AllowedUsersMiddleware()
+            dp.message.middleware(allowed_middleware)
+            dp.callback_query.middleware(allowed_middleware)
             
             import importlib
             module = importlib.import_module(spec.router_module)

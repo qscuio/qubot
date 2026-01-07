@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     API_ENABLED: bool = True
     
     # Advanced AI Settings
-    AI_ADVANCED_PROVIDER: Optional[str] = None  # Provider for advanced AI (default: claude)
+    AI_ADVANCED_PROVIDER: Optional[str] = "groq"  # Provider for advanced AI (default: groq)
     AI_EXTENDED_THINKING: bool = False  # Enable Claude extended thinking
     SEARX_URL: Optional[str] = None  # SearXNG URL for web search tool
     GITHUB_TOKEN: Optional[str] = None  # GitHub token for GitHub tools
