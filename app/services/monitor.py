@@ -77,6 +77,9 @@ class MonitorService:
         # VIP users: user_id -> {id, username, name, enabled}
         self.vip_users: Dict[str, dict] = {}
         
+        # Blacklist: channel_id -> {id, name} - channels to completely ignore
+        self.blacklist: Dict[str, dict] = {}
+        
         # Summarization buffer - DISABLED (messages forward immediately now)
         # We still cache messages for daily reports, but don't buffer for 2-hour summaries
         self.summarize_enabled = False  # Was: settings.MONITOR_SUMMARIZE
@@ -144,8 +147,25 @@ class MonitorService:
                 logger.info(f"Loaded {len(rows)} VIP users from database")
             except Exception as e:
                 logger.warn(f"Failed to load VIP users from database: {e}")
+            
+            # Load blacklist
+            try:
+                rows = await db.pool.fetch("SELECT channel_id, name FROM monitor_blacklist")
+                for row in rows:
+                    self.blacklist[row['channel_id']] = {
+                        'id': row['channel_id'],
+                        'name': row['name'] or row['channel_id']
+                    }
+                logger.info(f"Loaded {len(rows)} blacklisted channels from database")
+            except Exception as e:
+                logger.debug(f"Blacklist table may not exist yet: {e}")
         
-        logger.info(f"MonitorService initialized with {len(self.channels)} source channels, {len(self.vip_users)} VIP users.")
+        # Load config blacklist (from env)
+        for bl in settings.blacklist_channels_list:
+            if bl not in self.blacklist:
+                self.blacklist[bl] = {'id': bl, 'name': bl}
+        
+        logger.info(f"MonitorService initialized with {len(self.channels)} sources, {len(self.vip_users)} VIPs, {len(self.blacklist)} blocked.")
 
     async def start(self):
         if self.is_running:
@@ -607,6 +627,54 @@ class MonitorService:
                 except Exception as e:
                     logger.warn(f"Failed to update VIP user: {e}")
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # Blacklist Management
+    # ─────────────────────────────────────────────────────────────────────────────
+    
+    def is_blacklisted(self, chat_username: str = None, chat_id: str = None) -> bool:
+        """Check if a channel is blacklisted."""
+        for bl_id, bl_info in self.blacklist.items():
+            if self.matches_source(bl_id, chat_username, chat_id):
+                return True
+        return False
+    
+    async def add_to_blacklist(self, channel_id: str, name: str = None) -> dict:
+        """Add a channel to blacklist."""
+        channel_id = str(channel_id).strip()
+        display_name = name or channel_id
+        
+        if channel_id not in self.blacklist:
+            self.blacklist[channel_id] = {
+                'id': channel_id,
+                'name': display_name
+            }
+            # Persist to DB
+            if db.pool:
+                try:
+                    await db.pool.execute("""
+                        INSERT INTO monitor_blacklist (channel_id, name)
+                        VALUES ($1, $2) ON CONFLICT (channel_id)
+                        DO UPDATE SET name = $2
+                    """, channel_id, display_name)
+                except Exception as e:
+                    logger.warn(f"Failed to persist blacklist entry: {e}")
+            logger.info(f"⛔ Added to blacklist: {display_name} ({channel_id})")
+        
+        return self.blacklist[channel_id]
+    
+    async def remove_from_blacklist(self, channel_id: str):
+        """Remove a channel from blacklist."""
+        channel_id = str(channel_id).strip()
+        
+        if channel_id in self.blacklist:
+            info = self.blacklist.pop(channel_id)
+            if db.pool:
+                try:
+                    await db.pool.execute("DELETE FROM monitor_blacklist WHERE channel_id = $1", channel_id)
+                except Exception as e:
+                    logger.warn(f"Failed to remove blacklist entry from DB: {e}")
+            logger.info(f"✅ Removed from blacklist: {info.get('name', channel_id)} ({channel_id})")
+
     def _normalize_peer_id(self, value):
         if not value: return ""
         text = str(value).strip()
@@ -708,6 +776,13 @@ class MonitorService:
             if should_filter:
                 logger.info(f"🚫 Filtered message ({filter_reason}): {msg_text[:50]}...")
                 return
+            
+            # Check blacklist - skip channels/groups we don't want to process
+            # BUT: VIP users have higher priority than blacklist
+            is_vip_sender = self.is_vip_user(sender_id, sender_name)
+            if self.is_blacklisted(chat_username, chat_id) and not is_vip_sender:
+                logger.info(f"⛔ Blacklisted channel, skipping: {chat_title}")
+                return
 
             # 1. Check Source (if configured, otherwise forward all)
             if self.source_channels:
@@ -765,8 +840,8 @@ class MonitorService:
             # 4. Check if sender is VIP (for direct forwarding)
             is_vip = self.is_vip_user(sender_id, sender_name)
             
-            # 5. Forward or Buffer
-            if self.target_channel:
+            # 5. Forward ONLY VIP messages, log others
+            if is_vip and self.target_channel:
                 source_name = chat_title if chat_title != 'Unknown' else (chat_username or chat_id)
                 source_handle = f"@{chat_username}" if chat_username else None
                 message_link = self._build_message_link(chat_username, chat_id, message_id)
@@ -785,96 +860,67 @@ class MonitorService:
                 from telethon.extensions import html
                 msg_html = html.unparse(event.message.message, event.message.entities)
                 
-                # Admin, VIP, or summarization disabled: forward immediately
-                if is_vip or not self.summarize_enabled:
-                    # Check for URLs to convert to Telegraph (if enabled)
-                    # For now, we auto-convert if it looks like a long article or user requests it
-                    # (Simple heuristic: if text has link and length > 500)
-                    telegraph_url = None
-                    if len(msg_html) > 500 and "http" in msg_html:
-                        try:
-                            from app.services.telegraph import telegraph_service
-                            page_title = f"{chat_title} - {get_shanghai_time().strftime('%Y-%m-%d')}"
-                            telegraph_url = await telegraph_service.create_page(
-                                title=page_title,
-                                content_html=msg_html,
-                                author_name=source_name
-                            )
-                        except Exception as e:
-                            logger.warn(f"Failed to create Telegraph page: {e}")
-
-                    formatted_msg = self._format_message(
-                        msg_html,
-                        source_name,
-                        is_vip=is_vip,
-                        telegraph_url=telegraph_url,
-                        sender_name=sender_name,
-                        message_time=message_time,
-                        message_link=message_link,
-                        source_handle=source_handle,
-                        has_media=has_media
-                    )
-                    logger.info(f"📤 {'⭐ VIP - ' if is_vip else ''}Forwarding...")
+                # Check for URLs to convert to Telegraph (if enabled)
+                telegraph_url = None
+                if len(msg_html) > 500 and "http" in msg_html:
                     try:
-                        # VIP messages go to VIP channel if configured
-                        if is_vip and self.vip_target_channel:
-                            target = self.vip_target_channel
-                        else:
-                            target = self.target_channel
-                        
-                        if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
-                             target = int(target)
-                        
-                        await telegram_service.send_message(
-                            target, 
-                            formatted_msg, 
-                            parse_mode='html', 
-                            file=media if media_supported else None,
-                            link_preview=False 
+                        from app.services.telegraph import telegraph_service
+                        page_title = f"{chat_title} - {get_shanghai_time().strftime('%Y-%m-%d')}"
+                        telegraph_url = await telegraph_service.create_page(
+                            title=page_title,
+                            content_html=msg_html,
+                            author_name=source_name
                         )
-                        if has_media and not media_supported:
-                            target_str = str(target)
-                            norm_target = self._normalize_peer_id(target_str)
-                            norm_chat = self._normalize_peer_id(chat_id)
-                            target_is_source = (
-                                (chat_username and target_str in (chat_username, f"@{chat_username}"))
-                                or (norm_target and norm_target == norm_chat)
-                            )
-                            if target_is_source:
-                                logger.debug(
-                                    f"Skipping media forward to source chat "
-                                    f"(chat_id={chat_id}, message_id={message_id}, target={target})"
-                                )
-                            else:
-                                await telegram_service.forward_messages(
-                                    target,
-                                    event.message,
-                                    from_peer=chat
-                                )
-                                logger.info(
-                                    f"📎 Unsupported media forwarded to {target} "
-                                    f"(chat_id={chat_id}, message_id={message_id})"
-                                )
-                        logger.info(f"✅ Message forwarded to {target}")
                     except Exception as e:
-                        logger.error(f"❌ Failed to forward message: {e}")
-                else:
-                    # Regular message with summarization enabled: buffer it
-                    message_data = {
-                        'text': msg_html,
-                        'sender': sender_name,
-                        'source': source_name,
-                        'time': message_time or get_shanghai_time().strftime('%H:%M'),
-                        'has_media': has_media
-                    }
+                        logger.warn(f"Failed to create Telegraph page: {e}")
+
+                formatted_msg = self._format_message(
+                    msg_html,
+                    source_name,
+                    is_vip=True,
+                    telegraph_url=telegraph_url,
+                    sender_name=sender_name,
+                    message_time=message_time,
+                    message_link=message_link,
+                    source_handle=source_handle,
+                    has_media=has_media
+                )
+                logger.info(f"📤 ⭐ VIP Forwarding from {sender_name}...")
+                try:
+                    # VIP messages go to VIP channel if configured, else target channel
+                    target = self.vip_target_channel or self.target_channel
                     
-                    should_flush = self.message_buffer.add(chat_id, message_data)
-                    logger.info(f"📥 Buffered message from {sender_name} (buffer size: {len(self.message_buffer.buffers.get(chat_id, []))})")
+                    if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
+                         target = int(target)
                     
-                    if should_flush:
-                        await self._flush_and_summarize(chat_id)
+                    await telegram_service.send_message(
+                        target, 
+                        formatted_msg, 
+                        parse_mode='html', 
+                        file=media if media_supported else None,
+                        link_preview=False 
+                    )
+                    if has_media and not media_supported:
+                        target_str = str(target)
+                        norm_target = self._normalize_peer_id(target_str)
+                        norm_chat = self._normalize_peer_id(chat_id)
+                        target_is_source = (
+                            (chat_username and target_str in (chat_username, f"@{chat_username}"))
+                            or (norm_target and norm_target == norm_chat)
+                        )
+                        if not target_is_source:
+                            await telegram_service.forward_messages(
+                                target,
+                                event.message,
+                                from_peer=chat
+                            )
+                            logger.info(f"📎 Unsupported media forwarded")
+                    logger.info(f"✅ VIP message forwarded to {target}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to forward VIP message: {e}")
             else:
-                logger.warn("No TARGET_CHANNEL configured, skipping forward")
+                # Non-VIP: just log, don't forward
+                logger.info(f"📝 Logged message from {sender_name} (non-VIP, not forwarded)")
 
             # 7. Cache message for daily reports
             await self._cache_message(chat_id, chat_title, sender_name, event.message.message)

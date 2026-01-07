@@ -54,16 +54,27 @@ A modular Telegram application with REST API support, built with Python (FastAPI
 | Command | Description |
 |---------|-------------|
 | `/start` | Main menu with start/stop controls |
+| `/status` | Show current status |
+| `/help` | Show all commands |
+| **Sources** | |
 | `/sources` | Manage source channels (with inline buttons) |
 | `/add <channel>` | Add source channel |
 | `/remove <channel>` | Remove source channel |
-| `/vip <user>` | Add VIP user (instant forward) |
-| `/unvip <user>` | Remove VIP user |
-| `/vips` | Manage VIP users |
 | `/clear` | Remove all sources |
-| `/status` | Show current status |
+| **VIP Users** | |
+| `/vips` | Manage VIP users |
+| `/vip <user>` | Add VIP user (instant forward, bypasses blacklist) |
+| `/unvip <user>` | Remove VIP user |
+| **Blacklist** | |
+| `/blacklist` | Manage blocked channels |
+| `/block <channel>` | Block channel (completely ignore) |
+| `/unblock <channel>` | Unblock channel |
+| **Twitter** | |
+| `/twitters` | Manage Twitter follows |
+| `/twitter <username>` | Follow Twitter account |
+| `/untwitter <username>` | Unfollow Twitter account |
+| **History** | |
 | `/history` | Recent forwarded messages |
-| `/help` | Show all commands |
 
 **Token:** `MONITOR_BOT_TOKEN`
 
@@ -243,6 +254,7 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 | `SOURCE_CHANNELS` | Channels to monitor | `-1001234567890,-1009876543210` |
 | `TARGET_CHANNEL` | Forward destination | `-1001111111111` |
 | `VIP_TARGET_CHANNEL` | VIP user messages destination | `-1002222222222` |
+| `BLACKLIST_CHANNELS` | Channels to completely ignore | `@spam,-1009999999999` |
 | `KEYWORDS` | Filter keywords (or `none`) | `bitcoin,crypto` |
 | `FROM_USERS` | Filter by usernames | `@user1,@user2` |
 

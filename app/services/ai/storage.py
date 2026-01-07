@@ -50,6 +50,21 @@ class AiStorage:
                 );
             """)
             
+            # Token usage tracking per provider/model
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_token_usage (
+                    id SERIAL PRIMARY KEY,
+                    provider VARCHAR(32) NOT NULL,
+                    model VARCHAR(64) NOT NULL,
+                    prompt_tokens BIGINT DEFAULT 0,
+                    response_tokens BIGINT DEFAULT 0,
+                    total_tokens BIGINT DEFAULT 0,
+                    call_count INTEGER DEFAULT 1,
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(provider, model)
+                );
+            """)
+            
             logger.info("AI tables initialized")
 
     # ============= Chat Methods =============

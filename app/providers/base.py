@@ -40,6 +40,40 @@ class BaseProvider(ABC):
             for short_name, full_name in self.fallback_models.items()
         ]
 
+    async def call_with_trace(
+        self, 
+        prompt: str, 
+        model: str, 
+        history: List[Dict[str, str]] = None, 
+        context_prefix: str = ""
+    ) -> Dict[str, Any]:
+        """Call with automatic tracing. Wraps the actual call method."""
+        from app.services.ai.tracer import ai_tracer
+        
+        # Start trace
+        ai_tracer.start_trace(
+            provider=self.name,
+            model=model or getattr(self, 'default_model', 'unknown'),
+            prompt=prompt,
+            system_prompt=context_prefix,
+            history=history
+        )
+        
+        try:
+            result = await self.call(prompt, model, history, context_prefix)
+            ai_tracer.end_trace(
+                response=result.get("content", ""),
+                thinking=result.get("thinking", ""),
+                success=True
+            )
+            return result
+        except Exception as e:
+            ai_tracer.end_trace(
+                success=False,
+                error=str(e)
+            )
+            raise
+
     @abstractmethod
     async def call(self, prompt: str, model: str, history: List[Dict[str, str]] = None, context_prefix: str = "") -> Dict[str, Any]:
         """

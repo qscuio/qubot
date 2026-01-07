@@ -86,7 +86,7 @@ class AiService:
             history = []
 
         try:
-            result = await self.active_provider.call(
+            result = await self.active_provider.call_with_trace(
                 prompt=prompt,
                 model=settings.AI_MODEL,
                 history=history,
@@ -110,7 +110,7 @@ class AiService:
             return {"content": "No AI provider configured"}
         
         try:
-            result = await provider.call(
+            result = await provider.call_with_trace(
                 prompt=prompt,
                 model=provider.default_model,
                 history=[],
@@ -136,7 +136,7 @@ class AiService:
         model = options.get("model") or getattr(provider, "default_model", None)
         system_prompt = options.get("system_prompt", "")
 
-        return await provider.call(
+        return await provider.call_with_trace(
             prompt=prompt,
             model=model,
             history=[],
@@ -251,7 +251,7 @@ Text: {text}"""
         job_data = build_job_prompt("chat", {"message": message})
         model = user_settings.get("model") or getattr(provider, "default_model", None)
         
-        result = await provider.call(
+        result = await provider.call_with_trace(
             prompt=job_data["prompt"],
             model=model,
             history=history,
@@ -287,7 +287,7 @@ Text: {text}"""
         history = options.get("history", [])
         context = options.get("contextPrefix", "") + job_data["system"]
         
-        return await provider.call(
+        return await provider.call_with_trace(
             prompt=job_data["prompt"],
             model=model,
             history=history,

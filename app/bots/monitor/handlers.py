@@ -37,6 +37,7 @@ async def cmd_help(message: types.Message):
         "/start - Main menu with controls\n"
         "/sources - Manage source channels\n"
         "/vips - Manage VIP users\n"
+        "/blacklist - Manage blocked channels\n"
         "/help - This message\n\n"
         "<b>📡 Channel Management</b>\n"
         "/add &lt;channel&gt; - Add source channel\n"
@@ -46,6 +47,10 @@ async def cmd_help(message: types.Message):
         "/vip &lt;user&gt; - Add VIP user (direct forward)\n"
         "/unvip &lt;user&gt; - Remove VIP user\n"
         "/vips - List VIP users\n\n"
+        "<b>⛔ Blacklist</b>\n"
+        "/block &lt;channel&gt; - Block channel (ignore)\n"
+        "/unblock &lt;channel&gt; - Unblock channel\n"
+        "/blacklist - List blocked channels\n\n"
         "<b>📊 Status & History</b>\n"
         "/status - Show current status\n"
         "/history - View recent forwards\n\n"
@@ -98,13 +103,14 @@ def get_main_menu_ui():
     # Management row
     builder.button(text="📡 Sources", callback_data="nav:sources")
     builder.button(text="⭐ VIPs", callback_data="nav:vips")
+    builder.button(text="⛔ Block", callback_data="nav:blacklist")
     builder.button(text="🐦 Twitter", callback_data="nav:twitters")
     
     # Utility row
     builder.button(text="🔄 Sync", callback_data="nav:refresh")
     builder.button(text="❓ Help", callback_data="nav:help")
     
-    builder.adjust(1, 3, 2)
+    builder.adjust(1, 4, 2)
     return text, builder.as_markup()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -597,6 +603,163 @@ async def cmd_history(message: types.Message):
         "<i>History feature coming soon...</i>",
         parse_mode="HTML"
     )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Blacklist Management
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("block"))
+async def cmd_block(message: types.Message, command: CommandObject):
+    if not is_allowed(message.from_user.id): return
+    
+    channel = command.args
+    if not channel:
+        await message.answer(
+            "⛔ <b>Block Channel</b>\n\n"
+            "Usage: <code>/block &lt;channel&gt;</code>\n\n"
+            "Examples:\n"
+            "• <code>/block @channelname</code>\n"
+            "• <code>/block -1001234567890</code>\n\n"
+            "💡 <i>Blocked channels are completely ignored (no forwarding, no reports).</i>",
+            parse_mode="HTML"
+        )
+        return
+    
+    await monitor_service.add_to_blacklist(channel.strip())
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⛔ View Blocked", callback_data="nav:blacklist")
+    builder.button(text="🏠 Main Menu", callback_data="nav:main")
+    builder.adjust(2)
+    
+    await message.answer(
+        f"⛔ Blocked: <code>{channel}</code>",
+        reply_markup=builder.as_markup(),
+        parse_mode="HTML"
+    )
+
+@router.message(Command("unblock"))
+async def cmd_unblock(message: types.Message, command: CommandObject):
+    if not is_allowed(message.from_user.id): return
+    
+    channel = command.args
+    if not channel:
+        await message.answer(
+            "✅ <b>Unblock Channel</b>\n\n"
+            "Usage: <code>/unblock &lt;channel&gt;</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    await monitor_service.remove_from_blacklist(channel.strip())
+    await message.answer(f"✅ Unblocked: <code>{channel}</code>", parse_mode="HTML")
+
+@router.message(Command("blacklist"))
+async def cmd_blacklist(message: types.Message):
+    if not is_allowed(message.from_user.id): return
+    text, markup = get_blacklist_menu_ui()
+    await message.answer(text, reply_markup=markup, parse_mode="HTML")
+
+async def edit_blacklist_menu(message: types.Message):
+    text, markup = get_blacklist_menu_ui()
+    try:
+        await message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+    except:
+        pass
+
+def get_blacklist_menu_ui(page: int = 0):
+    blacklist_items = list(monitor_service.blacklist.values())
+    page_size = 5
+    total_pages = max(1, (len(blacklist_items) + page_size - 1) // page_size)
+    page = max(0, min(page, total_pages - 1))
+    
+    if not blacklist_items:
+        text = (
+            "⛔ <b>Blacklist</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "📭 No blocked channels.\n\n"
+            "💡 <i>Use /block &lt;channel&gt; to block a channel.</i>"
+        )
+        kb = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="◀️ Back", callback_data="nav:main")]
+        ])
+        return text, kb
+    
+    start_idx = page * page_size
+    end_idx = min(start_idx + page_size, len(blacklist_items))
+    page_items = blacklist_items[start_idx:end_idx]
+    
+    text = f"⛔ <b>Blacklist</b> ({len(blacklist_items)} total)\n━━━━━━━━━━━━━━━━━━━━━\n"
+    
+    keyboard = []
+    
+    for i, item in enumerate(page_items, start=start_idx + 1):
+        ch_id = item['id']
+        name = item.get('name', ch_id)
+        
+        display_name = name[:20] + "..." if len(name) > 20 else name
+        if name != ch_id:
+            text += f"{i}. <b>{display_name}</b>\n    <code>{ch_id}</code>\n"
+        else:
+            text += f"{i}. <code>{ch_id}</code>\n"
+        
+        btn_label = f"{i}. {name[:10]}"
+        ch_id_short = ch_id[:30]
+        
+        row = [
+            types.InlineKeyboardButton(text=btn_label, callback_data="bl:noop"),
+            types.InlineKeyboardButton(text="✅ Unblock", callback_data=f"bl:unblock:{ch_id_short}")
+        ]
+        keyboard.append(row)
+    
+    if total_pages > 1:
+        pagination = []
+        if page > 0:
+            pagination.append(types.InlineKeyboardButton(text="◀️ Prev", callback_data=f"bl:page:{page-1}"))
+        pagination.append(types.InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="bl:noop"))
+        if page < total_pages - 1:
+            pagination.append(types.InlineKeyboardButton(text="Next ▶️", callback_data=f"bl:page:{page+1}"))
+        keyboard.append(pagination)
+    
+    keyboard.append([
+        types.InlineKeyboardButton(text="◀️ Back", callback_data="nav:main"),
+    ])
+    
+    kb = types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    return text, kb
+
+@router.callback_query(F.data == "nav:blacklist")
+async def cb_blacklist(callback: types.CallbackQuery):
+    await callback.answer()
+    await edit_blacklist_menu(callback.message)
+
+def find_blacklist_by_prefix(prefix: str) -> str:
+    for bl_id in monitor_service.blacklist.keys():
+        if bl_id.startswith(prefix):
+            return bl_id
+    return prefix
+
+@router.callback_query(F.data.startswith("bl:unblock:"))
+async def cb_unblock(callback: types.CallbackQuery):
+    ch_key = callback.data.split(":", 2)[2]
+    ch_id = find_blacklist_by_prefix(ch_key)
+    await monitor_service.remove_from_blacklist(ch_id)
+    await callback.answer("✅ Unblocked")
+    await edit_blacklist_menu(callback.message)
+
+@router.callback_query(F.data.startswith("bl:page:"))
+async def cb_blacklist_page(callback: types.CallbackQuery):
+    page = int(callback.data.split(":")[2])
+    text, markup = get_blacklist_menu_ui(page)
+    await callback.answer()
+    try:
+        await callback.message.edit_text(text, reply_markup=markup, parse_mode="HTML")
+    except:
+        pass
+
+@router.callback_query(F.data == "bl:noop")
+async def cb_blacklist_noop(callback: types.CallbackQuery):
+    await callback.answer()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Twitter Monitoring

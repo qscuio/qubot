@@ -1,6 +1,7 @@
 from app.services.ai.prompts import build_job_prompt, list_jobs, get_job_definition
 from app.services.ai.storage import ai_storage
 from app.services.ai.service import ai_service, AiService
+from app.services.ai.tracer import ai_tracer, AITracer, TraceRecord
 
 __all__ = [
     "build_job_prompt", 
@@ -8,5 +9,8 @@ __all__ = [
     "get_job_definition", 
     "ai_storage",
     "ai_service",
-    "AiService"
+    "AiService",
+    "ai_tracer",
+    "AITracer",
+    "TraceRecord"
 ]

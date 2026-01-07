@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     KEYWORDS: Optional[str] = None
     FROM_USERS: Optional[str] = None
     ALLOWED_USERS: Optional[str] = None
+    BLACKLIST_CHANNELS: Optional[str] = None  # Channels/groups to exclude from forwarding and reports
     
     # Summarization settings
     MONITOR_SUMMARIZE: bool = True  # Enable message summarization
@@ -98,6 +99,10 @@ class Settings(BaseSettings):
         if isinstance(self.ALLOWED_USERS, str):
             return [int(x.strip()) for x in self.ALLOWED_USERS.split(',') if x.strip()]
         return []
+    
+    @property
+    def blacklist_channels_list(self) -> list:
+        return parse_comma_list(self.BLACKLIST_CHANNELS)
 
     # Database
     DATABASE_URL: Optional[str] = None
