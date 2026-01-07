@@ -77,8 +77,9 @@ class MonitorService:
         # VIP users: user_id -> {id, username, name, enabled}
         self.vip_users: Dict[str, dict] = {}
         
-        # Summarization buffer
-        self.summarize_enabled = settings.MONITOR_SUMMARIZE
+        # Summarization buffer - DISABLED (messages forward immediately now)
+        # We still cache messages for daily reports, but don't buffer for 2-hour summaries
+        self.summarize_enabled = False  # Was: settings.MONITOR_SUMMARIZE
         self.message_buffer = MessageBuffer(
             max_messages=settings.MONITOR_BUFFER_SIZE,
             max_age_seconds=settings.MONITOR_BUFFER_TIMEOUT
