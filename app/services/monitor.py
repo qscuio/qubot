@@ -780,7 +780,8 @@ class MonitorService:
             # Check blacklist - skip channels/groups we don't want to process
             # BUT: VIP users have higher priority than blacklist
             is_vip_sender = self.is_vip_user(sender_id, sender_name)
-            if self.is_blacklisted(chat_username, chat_id) and not is_vip_sender:
+            is_blacklisted = self.is_blacklisted(chat_username, chat_id)
+            if is_blacklisted and not is_vip_sender:
                 logger.info(f"⛔ Blacklisted channel, skipping: {chat_title}")
                 return
 
@@ -838,10 +839,11 @@ class MonitorService:
             logger.info(f"✅ Matched message from {chat_title}")
 
             # 4. Check if sender is VIP (for direct forwarding)
-            is_vip = self.is_vip_user(sender_id, sender_name)
+            is_vip = is_vip_sender
             
-            # 5. Forward ONLY VIP messages, log others
-            if is_vip and self.target_channel:
+            # 5. Forward VIP messages, or any non-blacklisted messages
+            should_forward = is_vip or not is_blacklisted
+            if should_forward and self.target_channel:
                 source_name = chat_title if chat_title != 'Unknown' else (chat_username or chat_id)
                 source_handle = f"@{chat_username}" if chat_username else None
                 message_link = self._build_message_link(chat_username, chat_id, message_id)
@@ -877,7 +879,7 @@ class MonitorService:
                 formatted_msg = self._format_message(
                     msg_html,
                     source_name,
-                    is_vip=True,
+                    is_vip=is_vip,
                     telegraph_url=telegraph_url,
                     sender_name=sender_name,
                     message_time=message_time,
@@ -885,10 +887,14 @@ class MonitorService:
                     source_handle=source_handle,
                     has_media=has_media
                 )
-                logger.info(f"📤 ⭐ VIP Forwarding from {sender_name}...")
+                log_prefix = "⭐ VIP " if is_vip else ""
+                logger.info(f"📤 {log_prefix}Forwarding from {sender_name}...")
                 try:
                     # VIP messages go to VIP channel if configured, else target channel
-                    target = self.vip_target_channel or self.target_channel
+                    if is_vip:
+                        target = self.vip_target_channel or self.target_channel
+                    else:
+                        target = self.target_channel
                     
                     if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
                          target = int(target)
@@ -915,12 +921,14 @@ class MonitorService:
                                 from_peer=chat
                             )
                             logger.info(f"📎 Unsupported media forwarded")
-                    logger.info(f"✅ VIP message forwarded to {target}")
+                    log_label = "VIP " if is_vip else ""
+                    logger.info(f"✅ {log_label}message forwarded to {target}")
                 except Exception as e:
-                    logger.error(f"❌ Failed to forward VIP message: {e}")
+                    log_label = "VIP " if is_vip else ""
+                    logger.error(f"❌ Failed to forward {log_label}message: {e}")
             else:
-                # Non-VIP: just log, don't forward
-                logger.info(f"📝 Logged message from {sender_name} (non-VIP, not forwarded)")
+                # Not forwarded (blacklisted or no target channel configured)
+                logger.info(f"📝 Logged message from {sender_name} (not forwarded)")
 
             # 7. Cache message for daily reports
             await self._cache_message(chat_id, chat_title, sender_name, event.message.message)
