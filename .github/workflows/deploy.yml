@@ -267,6 +267,7 @@ jobs:
             printf 'TG_SESSIONS_JSON=%s\n' '${{ secrets.TG_SESSIONS_JSON }}' > .env
             printf 'RSS_BOT_TOKEN=%s\n' '${{ secrets.RSS_BOT_TOKEN }}' >> .env
             printf 'AI_BOT_TOKEN=%s\n' '${{ secrets.AI_BOT_TOKEN }}' >> .env
+            printf 'AGENT_BOT_TOKEN=%s\n' '${{ secrets.AGENT_BOT_TOKEN }}' >> .env
             printf 'MONITOR_BOT_TOKEN=%s\n' '${{ secrets.MONITOR_BOT_TOKEN }}' >> .env
             printf 'WEBHOOK_URL=%s\n' '${{ secrets.WEBHOOK_URL }}' >> .env
             printf 'BOT_PORT=%s\n' '${{ secrets.BOT_PORT }}' >> .env
