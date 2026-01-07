@@ -1,6 +1,8 @@
 import asyncio
 from typing import Dict, List
 from aiogram import Bot, Dispatcher
+from app.bots.bot_spec import BotSpec
+from app.bots.registry import BOT_SPECS
 from app.core.config import settings
 from app.core.logger import Logger
 
@@ -11,21 +13,11 @@ class BotDispatcher:
         self.apps: List[Dict] = [] # List of {bot: Bot, dp: Dispatcher}
 
     async def start(self):
-        # 1. Monitor Bot
-        if settings.MONITOR_BOT_TOKEN:
-            await self._setup_bot("monitor-bot", settings.MONITOR_BOT_TOKEN, "app.bots.monitor.handlers")
-
-        # 2. AI Bot
-        if settings.AI_BOT_TOKEN:
-            await self._setup_bot("ai-bot", settings.AI_BOT_TOKEN, "app.bots.ai.handlers")
-
-        # 3. Agent Bot (Advanced AI)
-        if settings.AGENT_BOT_TOKEN:
-            await self._setup_bot("agent-bot", settings.AGENT_BOT_TOKEN, "app.bots.ai.handlers_advanced")
-
-        # 4. RSS Bot
-        if settings.RSS_BOT_TOKEN:
-            await self._setup_bot("rss-bot", settings.RSS_BOT_TOKEN, "app.bots.rss.handlers")
+        for spec in BOT_SPECS:
+            if spec.token:
+                await self._setup_bot(spec)
+            else:
+                logger.info(f"{spec.name} skipped (token not configured)")
 
         # Automatic Webhook Setup (with error handling)
         if settings.WEBHOOK_URL:
@@ -34,23 +26,30 @@ class BotDispatcher:
             except Exception as e:
                 logger.error(f"⚠️ Webhook registration failed, will use polling: {e}")
 
-    async def _setup_bot(self, name, token, router_module):
+    async def _setup_bot(self, spec: BotSpec):
         try:
-            bot = Bot(token=token)
+            bot = Bot(token=spec.token)
             dp = Dispatcher()
             
             import importlib
-            module = importlib.import_module(router_module)
+            module = importlib.import_module(spec.router_module)
             if hasattr(module, "router"):
                 dp.include_router(module.router)
             else:
-                logger.warn(f"⚠️ {name}: no router found in {router_module}")
+                logger.warn(f"⚠️ {spec.name}: no router found in {spec.router_module}")
 
-            self.apps.append({"bot": bot, "dp": dp, "name": name})
-            logger.info(f"✅ {name} initialized")
+            if spec.commands:
+                try:
+                    await bot.set_my_commands(spec.commands)
+                    logger.info(f"✅ {spec.name} commands registered ({len(spec.commands)})")
+                except Exception as e:
+                    logger.warn(f"⚠️ {spec.name} command registration failed: {e}")
+
+            self.apps.append({"bot": bot, "dp": dp, "name": spec.name})
+            logger.info(f"✅ {spec.name} initialized")
         except Exception as e:
             import traceback
-            logger.error(f"❌ Failed to setup {name}: {e}\n{traceback.format_exc()}")
+            logger.error(f"❌ Failed to setup {spec.name}: {e}\n{traceback.format_exc()}")
     
     async def _add_router_to_bot(self, bot_name: str, router_module: str):
         """Add an additional router to an existing bot."""

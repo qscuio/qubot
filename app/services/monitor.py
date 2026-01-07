@@ -5,7 +5,7 @@ from datetime import datetime
 from collections import OrderedDict
 from typing import Dict, List, Optional
 from telethon import events
-from telethon.tl import functions, types
+from telethon.tl import types
 from app.core.config import settings
 from app.core.logger import Logger
 from app.core.bot import telegram_service
@@ -65,7 +65,6 @@ class MonitorService:
         # Using OrderedDict to maintain insertion order for LRU eviction
         self._processed_messages = OrderedDict()
         self._max_cache_size = 1000  # Keep last 1000 messages
-        self._admin_cache: Dict[str, dict] = {}
         
         # VIP users: user_id -> {id, username, name, enabled}
         self.vip_users: Dict[str, dict] = {}
@@ -643,45 +642,6 @@ class MonitorService:
             
         return source == str(raw_chat_id)
     
-    async def _is_admin_sender(self, chat, sender, event) -> bool:
-        if getattr(event.message, "post", False):
-            return True
-        if not sender:
-            return False
-        
-        chat_id = getattr(chat, "id", None)
-        cache_key = str(chat_id) if chat_id is not None else None
-        now = time.time()
-        cached = self._admin_cache.get(cache_key) if cache_key else None
-        if cached and cached.get("expires", 0) > now:
-            return sender.id in cached.get("admins", set())
-        
-        try:
-            if isinstance(chat, types.User):
-                # Private chats don't have admin roles.
-                return False
-            if isinstance(chat, types.Chat):
-                full = await telegram_service.main_client(functions.messages.GetFullChat(chat_id=chat.id))
-                participants = full.full_chat.participants
-                if isinstance(participants, types.ChatParticipants):
-                    admins = {
-                        p.user_id for p in participants.participants
-                        if isinstance(p, (types.ChatParticipantAdmin, types.ChatParticipantCreator))
-                    }
-                    if cache_key:
-                        self._admin_cache[cache_key] = {"admins": admins, "expires": now + 300}
-                    return sender.id in admins
-                return False
-            
-            input_channel = await telegram_service.main_client.get_input_entity(chat)
-            result = await telegram_service.main_client(
-                functions.channels.GetParticipantRequest(channel=input_channel, participant=sender)
-            )
-            return isinstance(result.participant, (types.ChannelParticipantAdmin, types.ChannelParticipantCreator))
-        except Exception as e:
-            logger.debug(f"Could not check admin status: {e}")
-            return False
-
     async def handle_message(self, event):
         if not self.is_running:
             return
@@ -787,15 +747,10 @@ class MonitorService:
             # Log match
             logger.info(f"✅ Matched message from {chat_title}")
 
-            # 4. Check if sender is admin (for direct forwarding)
-            is_admin = False
-            if self.summarize_enabled:
-                is_admin = await self._is_admin_sender(chat, sender, event)
-            
-            # 5. Check if sender is VIP (for direct forwarding)
+            # 4. Check if sender is VIP (for direct forwarding)
             is_vip = self.is_vip_user(sender_id, sender_name)
             
-            # 6. Forward or Buffer
+            # 5. Forward or Buffer
             if self.target_channel:
                 source_name = chat_title if chat_title != 'Unknown' else (chat_username or chat_id)
                 source_handle = f"@{chat_username}" if chat_username else None
@@ -816,7 +771,7 @@ class MonitorService:
                 msg_html = html.unparse(event.message.message, event.message.entities)
                 
                 # Admin, VIP, or summarization disabled: forward immediately
-                if is_admin or is_vip or not self.summarize_enabled:
+                if is_vip or not self.summarize_enabled:
                     # Check for URLs to convert to Telegraph (if enabled)
                     # For now, we auto-convert if it looks like a long article or user requests it
                     # (Simple heuristic: if text has link and length > 500)
@@ -836,7 +791,6 @@ class MonitorService:
                     formatted_msg = self._format_message(
                         msg_html,
                         source_name,
-                        is_admin=is_admin,
                         is_vip=is_vip,
                         telegraph_url=telegraph_url,
                         sender_name=sender_name,
@@ -845,7 +799,7 @@ class MonitorService:
                         source_handle=source_handle,
                         has_media=has_media
                     )
-                    logger.info(f"📤 {'⭐ VIP - ' if is_vip else ''}{'🛡️ Admin - ' if is_admin else ''}Forwarding...")
+                    logger.info(f"📤 {'⭐ VIP - ' if is_vip else ''}Forwarding...")
                     try:
                         # VIP messages go to VIP channel if configured
                         if is_vip and self.vip_target_channel:
@@ -1012,7 +966,6 @@ class MonitorService:
         self,
         html_text,
         source_name,
-        is_admin=False,
         is_vip=False,
         telegraph_url=None,
         sender_name=None,
@@ -1036,8 +989,6 @@ class MonitorService:
             meta_bits.append("📎 media")
         if is_vip:
             meta_bits.append("⭐ VIP")
-        if is_admin:
-            meta_bits.append("🛡️ admin")
         meta_line = " • ".join(meta_bits)
         
         lines = [f"📨 <b>{header_name}</b>", "━━━━━━━━━━━━━━━━━━━━━"]
