@@ -301,9 +301,9 @@ jobs:
             printf 'CRAWLER_BOT_TOKEN=%s\n' '${{ secrets.CRAWLER_BOT_TOKEN }}' >> .env
             printf 'STOCK_ALERT_CHANNEL=%s\n' '${{ secrets.STOCK_ALERT_CHANNEL }}' >> .env
             
-            # Deploy
+            # Deploy (fail if build fails)
             docker compose down || true
-            docker compose build --no-cache
+            docker compose build --no-cache || { echo "❌ Build failed!"; exit 1; }
             docker compose up -d
             
             # Wait for userbot to be healthy
