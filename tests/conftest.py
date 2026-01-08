@@ -18,6 +18,7 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 
 # Set testing environment before importing app modules
+import os
 os.environ["TESTING"] = "true"
 os.environ["LOG_LEVEL"] = "ERROR"
 os.environ["API_ENABLED"] = "true"
@@ -151,7 +152,7 @@ async def client(app) -> AsyncGenerator[AsyncClient, None]:
 @pytest.fixture
 def auth_headers():
     """Authentication headers for API requests."""
-    return {"Authorization": "Bearer testkey"}
+    return {"X-API-Key": "testkey"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
