@@ -298,6 +298,8 @@ jobs:
             printf 'LOG_LEVEL=%s\n' '${{ secrets.LOG_LEVEL }}' >> .env
             printf 'TWITTER_ACCOUNTS=%s\n' '${{ secrets.TWITTER_ACCOUNTS }}' >> .env
             printf 'BLACKLIST_CHANNELS=%s\n' '${{ secrets.BLACKLIST_CHANNELS }}' >> .env
+            printf 'CRAWLER_BOT_TOKEN=%s\n' '${{ secrets.CRAWLER_BOT_TOKEN }}' >> .env
+            printf 'STOCK_ALERT_CHANNEL=%s\n' '${{ secrets.STOCK_ALERT_CHANNEL }}' >> .env
             
             # Deploy
             docker compose down || true

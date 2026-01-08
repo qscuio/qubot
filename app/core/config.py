@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     RSS_BOT_TOKEN: Optional[str] = None
     BOT_TOKEN: Optional[str] = None  # Legacy single token
     AGENT_BOT_TOKEN: Optional[str] = None
+    CRAWLER_BOT_TOKEN: Optional[str] = None
+    
+    # Crawler settings
+    CRAWLER_INTERVAL_MS: int = 3600000  # 1 hour default
+    ENABLE_CRAWLER: bool = True
     
     # Webhook
     WEBHOOK_URL: Optional[str] = None
@@ -51,6 +56,10 @@ class Settings(BaseSettings):
     TARGET_CHANNEL: Optional[str] = None
     VIP_TARGET_CHANNEL: Optional[str] = None  # Separate channel for VIP user messages
     REPORT_TARGET_CHANNEL: Optional[str] = None  # Separate channel for daily reports
+    STOCK_ALERT_CHANNEL: Optional[str] = None  # Channel for limit-up stock alerts
+    
+    # Limit-Up Tracker settings
+    ENABLE_LIMIT_UP: bool = True
     KEYWORDS: Optional[str] = None
     FROM_USERS: Optional[str] = None
     ALLOWED_USERS: Optional[str] = None

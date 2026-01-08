@@ -16,6 +16,8 @@ from app.services.rss import rss_service
 from app.services.ai import ai_service
 from app.services.github import github_service
 from app.services.twitter import twitter_service
+from app.services.crawler import crawler_service
+from app.services.limit_up import limit_up_service
 from app.api import api_router
 
 logger = Logger("Main")
@@ -48,6 +50,15 @@ async def lifespan(app: FastAPI):
     if await twitter_service.initialize():
         await twitter_service.start()
 
+    # Crawler service
+    if settings.ENABLE_CRAWLER:
+        await crawler_service.initialize()
+        await crawler_service.start()
+
+    # Limit-Up Tracker
+    if settings.ENABLE_LIMIT_UP:
+        await limit_up_service.start()
+
     # AI Service doesn't need explicit start but is ready
     if ai_service.is_available():
         logger.info("✅ AI Service ready")
@@ -60,6 +71,8 @@ async def lifespan(app: FastAPI):
     await telegram_service.stop()
     await rss_service.stop()
     await twitter_service.stop()
+    await crawler_service.stop()
+    await limit_up_service.stop()
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")

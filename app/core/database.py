@@ -181,6 +181,79 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_hot_words_date 
                 ON hot_words(date);
             """)
+
+            # Crawler Sources Table
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS crawler_sources (
+                    id SERIAL PRIMARY KEY,
+                    url TEXT UNIQUE NOT NULL,
+                    name TEXT,
+                    enabled BOOLEAN DEFAULT TRUE,
+                    crawl_interval_mins INT DEFAULT 60,
+                    last_crawled_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
+            # Crawler Items Table
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS crawler_items (
+                    id SERIAL PRIMARY KEY,
+                    source_id INTEGER REFERENCES crawler_sources(id) ON DELETE CASCADE,
+                    url TEXT UNIQUE,
+                    title TEXT,
+                    content TEXT,
+                    summary TEXT,
+                    published_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
+            # Indexes for crawler
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_crawler_items_time 
+                ON crawler_items(created_at DESC);
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_crawler_items_source 
+                ON crawler_items(source_id);
+            """)
+
+            # Limit-Up Stocks Table (涨停记录)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS limit_up_stocks (
+                    id SERIAL PRIMARY KEY,
+                    code TEXT NOT NULL,
+                    name TEXT,
+                    date DATE NOT NULL,
+                    close_price DECIMAL,
+                    change_pct DECIMAL,
+                    turnover_rate DECIMAL,
+                    limit_times INT DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(code, date)
+                );
+            """)
+
+            # Limit-Up Streaks Table (连板统计)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS limit_up_streaks (
+                    id SERIAL PRIMARY KEY,
+                    code TEXT UNIQUE NOT NULL,
+                    name TEXT,
+                    streak_count INT DEFAULT 1,
+                    first_limit_date DATE,
+                    last_limit_date DATE,
+                    cycle_start DATE,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
+            # Indexes
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_limit_up_date 
+                ON limit_up_stocks(date DESC);
+            """)
             
             logger.info("Database tables initialized")
 
