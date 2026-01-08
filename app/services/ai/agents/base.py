@@ -70,6 +70,12 @@ class Agent(ABC):
             if tool:
                 self._tools.append(tool)
     
+    def add_all_tools(self) -> None:
+        """Add all registered tools to this agent."""
+        for tool in tool_registry.list_all():
+            if tool not in self._tools:
+                self._tools.append(tool)
+    
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
         """Get JSON schemas for all agent tools."""
         return [t.get_schema() for t in self._tools]

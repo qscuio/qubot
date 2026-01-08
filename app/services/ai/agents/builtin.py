@@ -163,7 +163,12 @@ class BaseToolAgent(Agent):
 
 
 class ChatAgent(BaseToolAgent):
-    """General conversational assistant with optional tools."""
+    """General conversational assistant with all available tools."""
+    
+    def __init__(self):
+        super().__init__()
+        # Add all registered tools for maximum capability
+        self.add_all_tools()
     
     @property
     def name(self) -> str:
