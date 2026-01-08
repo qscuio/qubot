@@ -49,9 +49,9 @@ class BaseToolAgent(Agent):
         # Build system prompt with skills
         system_prompt = self._build_system_prompt_with_skills(message, skill_names)
         
-        # Debug logging - show full request
-        logger.debug(f"📋 SYSTEM PROMPT ({len(system_prompt)} chars):\n{system_prompt[:500]}{'...' if len(system_prompt) > 500 else ''}")
-        logger.debug(f"📨 MESSAGES ({len(messages)} msgs): {[{'role': m.get('role'), 'content': m.get('content', '')[:100]} for m in messages]}")
+        # Debug logging - show full request (no truncation)
+        logger.debug(f"📋 SYSTEM PROMPT ({len(system_prompt)} chars):\n{system_prompt}")
+        logger.debug(f"📨 MESSAGES ({len(messages)} msgs):\n{json.dumps(messages, indent=2, ensure_ascii=False)}")
         logger.debug(f"🔧 TOOLS ({len(tool_schemas) if tool_schemas else 0}): {[t['function']['name'] for t in tool_schemas] if tool_schemas else []}")
         
         all_tool_calls = []
@@ -81,7 +81,7 @@ class BaseToolAgent(Agent):
                         history=history or [],
                         context_prefix=system_prompt
                     )
-                    logger.debug(f"📩 RESPONSE (no tools): {result.get('content', '')[:500]}")
+                    logger.debug(f"📩 RESPONSE (no tools):\n{result.get('content', '')}")
                     return AgentResponse(
                         content=result.get("content", ""),
                         thinking=result.get("thinking", ""),
@@ -92,9 +92,9 @@ class BaseToolAgent(Agent):
                 content = result.get("content", "")
                 tool_calls = result.get("tool_calls", [])
                 
-                # Debug logging - show full response
-                logger.debug(f"📩 RESPONSE (loop {loop_count}): content={content[:300] if content else 'None'}{'...' if content and len(content) > 300 else ''}")
-                logger.debug(f"🔧 TOOL CALLS: {tool_calls}")
+                # Debug logging - show full response (no truncation)
+                logger.debug(f"📩 RESPONSE (loop {loop_count}):\n{content}")
+                logger.debug(f"🔧 TOOL CALLS:\n{json.dumps(tool_calls, indent=2, ensure_ascii=False)}")
                 
                 if not tool_calls:
                     # No more tool calls, return final response
