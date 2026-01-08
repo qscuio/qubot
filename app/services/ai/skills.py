@@ -34,6 +34,7 @@ class Skill:
     path: str
     category: str = "custom"  # personal, project, or builtin
     dependencies: List[str] = field(default_factory=list)
+    keywords: List[str] = field(default_factory=list)  # Explicit trigger keywords
     
     def get_prompt(self) -> str:
         """Get the skill as a prompt injection."""
@@ -44,28 +45,50 @@ Instructions:
 {self.instructions}
 """
     
-    def matches(self, query: str) -> bool:
-        """Check if this skill is relevant to a query using stricter matching."""
+    def match_score(self, query: str) -> float:
+        """
+        Calculate relevance score for a query (0.0 = no match, higher = better match).
+        Uses a scoring system for efficient ranking.
+        """
         query_lower = query.lower()
+        query_words = set(query_lower.split())
+        score = 0.0
         
-        # Exact name match (strong signal)
-        if self.name.lower() in query_lower:
-            return True
+        # Exact name match (highest priority)
+        name_lower = self.name.lower()
+        if name_lower in query_lower:
+            score += 10.0
+        elif any(word in name_lower for word in query_words if len(word) > 3):
+            score += 5.0
         
-        # Extract meaningful keywords from description (skip common words)
+        # Explicit keywords match (high priority)
+        for kw in self.keywords:
+            if kw.lower() in query_lower:
+                score += 8.0
+        
+        # Description keyword matching with stopword filtering
         stopwords = {
             "the", "and", "for", "with", "use", "when", "asked", "code", "help",
             "from", "this", "that", "what", "how", "about", "into", "your",
-            "create", "make", "write", "read", "check", "look", "find", "get"
+            "create", "make", "write", "read", "check", "look", "find", "get",
+            "need", "want", "would", "could", "should", "will", "have", "been"
         }
+        
         desc_words = [
-            word for word in self.description.lower().split()
-            if len(word) > 4 and word not in stopwords
+            word.strip(".,!?:;") for word in self.description.lower().split()
+            if len(word) > 3 and word not in stopwords
         ]
         
-        # Require at least 2 keyword matches to reduce false positives
-        matches_count = sum(1 for word in desc_words if word in query_lower)
-        return matches_count >= 2
+        # Score based on keyword overlap
+        for word in desc_words:
+            if word in query_lower:
+                score += 2.0
+        
+        return score
+    
+    def matches(self, query: str) -> bool:
+        """Check if this skill is relevant (for backward compatibility)."""
+        return self.match_score(query) >= 4.0
 
 
 class SkillRegistry:
@@ -156,13 +179,19 @@ class SkillRegistry:
             if isinstance(dependencies, str):
                 dependencies = [dependencies]
             
+            # Parse explicit keywords for efficient matching
+            keywords = metadata.get("keywords", [])
+            if isinstance(keywords, str):
+                keywords = [k.strip() for k in keywords.split(",")]
+            
             return Skill(
                 name=name,
                 description=description,
                 instructions=markdown_body,
                 path=str(path),
                 category=category,
-                dependencies=dependencies
+                dependencies=dependencies,
+                keywords=keywords
             )
         except Exception as e:
             logger.error(f"Failed to parse {path}: {e}")
@@ -186,12 +215,25 @@ class SkillRegistry:
             self.load_skills()
         return list(self._skills.keys())
     
-    def find_matching(self, query: str, max_skills: int = 2) -> List[Skill]:
-        """Find skills that are relevant to a query (limited to prevent prompt inflation)."""
+    def find_matching(self, query: str, max_skills: int = 3) -> List[Skill]:
+        """
+        Find most relevant skills using score-based ranking.
+        Returns top skills sorted by relevance score.
+        """
         if not self._loaded:
             self.load_skills()
-        matching = [s for s in self._skills.values() if s.matches(query)]
-        return matching[:max_skills]  # Limit to prevent noise
+        
+        # Score all skills and filter those with meaningful scores
+        scored = [
+            (skill, skill.match_score(query))
+            for skill in self._skills.values()
+        ]
+        
+        # Filter by minimum threshold and sort by score descending
+        relevant = [(s, score) for s, score in scored if score >= 4.0]
+        relevant.sort(key=lambda x: x[1], reverse=True)
+        
+        return [s for s, _ in relevant[:max_skills]]
     
     def get_skill_info(self) -> List[Dict[str, str]]:
         """Get info about all skills for display."""
@@ -210,13 +252,14 @@ class SkillRegistry:
         """Manually register a skill (for builtin skills)."""
         self._skills[skill.name] = skill
     
-    def build_skill_context(self, query: str = None, skill_names: List[str] = None) -> str:
+    def build_skill_context(self, query: str = None, skill_names: List[str] = None, max_skills: int = 3) -> str:
         """
         Build skill context to inject into prompts.
         
         Args:
             query: If provided, find matching skills
             skill_names: If provided, use these specific skills
+            max_skills: Maximum number of skills to include
             
         Returns:
             Combined skill instructions as a string
@@ -232,7 +275,7 @@ class SkillRegistry:
                 if skill:
                     skills_to_use.append(skill)
         elif query:
-            skills_to_use = self.find_matching(query)
+            skills_to_use = self.find_matching(query, max_skills=max_skills)
         
         if not skills_to_use:
             return ""
@@ -245,6 +288,24 @@ class SkillRegistry:
             ""
         ]
         for skill in skills_to_use:
+            context_parts.append(skill.get_prompt())
+        
+        return "\n".join(context_parts)
+    
+    def build_all_skills_context(self) -> str:
+        """Build context including ALL loaded skills."""
+        if not self._loaded:
+            self.load_skills()
+        
+        if not self._skills:
+            return ""
+        
+        context_parts = [
+            "# Available Skills",
+            "Use the following skill instructions when relevant to the user's request.",
+            ""
+        ]
+        for skill in self._skills.values():
             context_parts.append(skill.get_prompt())
         
         return "\n".join(context_parts)

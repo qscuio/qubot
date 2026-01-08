@@ -163,7 +163,7 @@ class BaseToolAgent(Agent):
 
 
 class ChatAgent(BaseToolAgent):
-    """General conversational assistant with all available tools."""
+    """General conversational assistant with all available tools and smart skill matching."""
     
     def __init__(self):
         super().__init__()
@@ -196,6 +196,25 @@ Operating principles:
 Response style:
 - Lead with the shortest complete answer.
 - Use lists or steps when it improves clarity."""
+    
+    def _build_system_prompt_with_skills(
+        self,
+        message: str,
+        skill_names: List[str] = None
+    ) -> str:
+        """Build system prompt with smart skill matching (up to 5 most relevant)."""
+        base_prompt = self.system_prompt
+        
+        # Use score-based matching with higher limit for chat agent
+        skill_context = skill_registry.build_skill_context(
+            query=message if not skill_names else None,
+            skill_names=skill_names,
+            max_skills=5  # Allow more skills for general chat
+        )
+        
+        if skill_context:
+            return f"{base_prompt}\n\n{skill_context}"
+        return base_prompt
 
 
 class ResearchAgent(BaseToolAgent):
