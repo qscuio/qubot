@@ -29,164 +29,352 @@ Format: `key:userId` pairs, comma-separated. The userId is used for per-user dat
 
 ---
 
-## Endpoints
+## Endpoints Overview
 
 ### Health & Status
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| GET | `/health` | ❌ | Health check |
-| GET | `/api/status` | ✅ | System status |
+| GET | `/api/health` | ✅ | Service health check with status |
 
-#### GET /health
+### Monitor
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/monitor/status` | ✅ | Get current monitor status |
+| POST | `/api/monitor/start` | ✅ | Start the monitoring service |
+| POST | `/api/monitor/stop` | ✅ | Stop the monitoring service |
+
+### AI Chat
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/ai/providers` | ✅ | List available AI providers |
+| GET | `/api/ai/models/{provider}` | ✅ | Get models for a specific provider |
+| POST | `/api/ai/chat` | ✅ | Send message and get AI response |
+| POST | `/api/ai/summarize` | ✅ | Summarize text content |
+
+### RSS Subscriptions
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/rss/subscriptions` | ✅ | List user's RSS subscriptions |
+| POST | `/api/rss/subscribe` | ✅ | Subscribe to a new RSS feed |
+| DELETE | `/api/rss/unsubscribe/{id}` | ✅ | Unsubscribe from a feed |
+
+---
+
+## Detailed API Reference
+
+### GET /api/health
+
+Returns the current health status of all services.
+
+**Request:**
 ```bash
-curl http://localhost:3001/health
+curl http://localhost:3001/api/health \
+  -H "Authorization: Bearer myapikey"
 ```
+
+**Response:**
 ```json
 {
   "status": "ok",
-  "timestamp": "2024-01-04T12:00:00Z",
-  "services": { "ai": true, "rss": true, "monitor": true }
+  "telegram": true,
+  "ai_available": true,
+  "monitor_running": false
 }
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | Overall status (`ok` or `error`) |
+| `telegram` | boolean | Telegram Telethon client connected |
+| `ai_available` | boolean | At least one AI provider configured |
+| `monitor_running` | boolean | Monitor service is active |
+
+---
+
+### GET /api/monitor/status
+
+Get the current status of the channel monitoring service.
+
+**Request:**
+```bash
+curl http://localhost:3001/api/monitor/status \
+  -H "Authorization: Bearer myapikey"
+```
+
+**Response:**
+```json
+{
+  "running": true,
+  "sources": 5,
+  "target": "-1001234567890"
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `running` | boolean | Whether monitoring is active |
+| `sources` | integer | Number of source channels being monitored |
+| `target` | string | Target channel ID for forwarding |
+
+---
+
+### POST /api/monitor/start
+
+Start the channel monitoring service.
+
+**Request:**
+```bash
+curl -X POST http://localhost:3001/api/monitor/start \
+  -H "Authorization: Bearer myapikey"
+```
+
+**Response:**
+```json
+{"status": "started"}
 ```
 
 ---
 
-### AI Chat
+### POST /api/monitor/stop
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/ai/settings` | Get AI settings |
-| PUT | `/api/ai/settings` | Update provider/model |
-| GET | `/api/ai/providers` | List AI providers |
-| GET | `/api/ai/models` | Get models for current provider |
-| GET | `/api/ai/jobs` | List AI job types |
-| POST | `/api/ai/jobs/:id` | Run a job by id |
-| POST | `/api/ai/chat` | Send message, get response |
-| POST | `/api/ai/chat/stream` | Stream response via SSE |
-| GET | `/api/ai/chats` | List chat sessions |
-| POST | `/api/ai/chats` | Create new chat |
-| GET | `/api/ai/chats/:id` | Get chat with messages |
-| PUT | `/api/ai/chats/:id` | Switch/rename chat |
-| DELETE | `/api/ai/chats/:id/messages` | Clear chat history |
-| POST | `/api/ai/chats/:id/export` | Export to markdown |
-| POST | `/api/ai/analyze` | Run analysis prompt |
-| POST | `/api/ai/summarize` | Summarize text |
-| POST | `/api/ai/translate` | Translate text |
-| POST | `/api/ai/language-learning` | Language learning response |
-| POST | `/api/ai/research` | Research brief |
-| POST | `/api/ai/categorize` | Categorize text |
-| POST | `/api/ai/extract` | Extract structured fields |
-| POST | `/api/ai/sentiment` | Sentiment analysis |
-| POST | `/api/ai/filter-match` | Smart filter match |
-| POST | `/api/ai/digest` | Digest multiple messages |
-| POST | `/api/ai/rank` | Rank items by relevance |
-| POST | `/api/ai/tool-plan` | Plan tool usage |
-| POST | `/api/ai/function-call` | Function routing |
-| POST | `/api/ai/skill-call` | Skill routing |
+Stop the channel monitoring service.
 
-#### POST /api/ai/chat
+**Request:**
 ```bash
-curl -X POST http://localhost:3001/api/ai/chat \
-  -H "Authorization: Bearer myapikey" \
-  -H "Content-Type: application/json" \
-  -d '{"message": "What is quantum computing?"}'
+curl -X POST http://localhost:3001/api/monitor/stop \
+  -H "Authorization: Bearer myapikey"
 ```
+
+**Response:**
 ```json
-{
-  "content": "Quantum computing is...",
-  "thinking": null,
-  "chatId": 5,
-  "provider": "groq",
-  "model": "llama3-70b-8192"
-}
+{"status": "stopped"}
 ```
 
-#### POST /api/ai/chat/stream
-Server-Sent Events (SSE) stream of response chunks.
-```bash
-curl -N -X POST http://localhost:3001/api/ai/chat/stream \
-  -H "Authorization: Bearer myapikey" \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello"}'
-```
+---
 
-Example events:
-```
-event: meta
-data: {"chatId":5,"provider":"groq","model":"llama-3.3-70b-versatile"}
+### GET /api/ai/providers
 
-event: chunk
-data: {"token":"Hello"}
+List all available AI providers and their configuration status.
 
-event: done
-data: {"content":"Hello there!"}
-```
-
-#### GET /api/ai/providers
+**Request:**
 ```bash
 curl http://localhost:3001/api/ai/providers \
   -H "Authorization: Bearer myapikey"
 ```
+
+**Response:**
 ```json
 {
   "providers": [
-    { "key": "groq", "name": "Groq", "configured": true },
-    { "key": "gemini", "name": "Google Gemini", "configured": false }
+    {"key": "groq", "name": "Groq", "configured": true},
+    {"key": "gemini", "name": "Google Gemini", "configured": true},
+    {"key": "openai", "name": "OpenAI", "configured": false},
+    {"key": "claude", "name": "Anthropic Claude", "configured": false},
+    {"key": "nvidia", "name": "NVIDIA NIM", "configured": false},
+    {"key": "glm", "name": "GLM (zhipuai)", "configured": false},
+    {"key": "minimax", "name": "MiniMax", "configured": false},
+    {"key": "openrouter", "name": "OpenRouter", "configured": true}
   ]
 }
 ```
 
-`/api/ai/models` also accepts an optional `provider` query to preview models before switching providers.
+**Response Fields:**
 
-#### GET /api/ai/jobs
+| Field | Type | Description |
+|-------|------|-------------|
+| `providers` | array | List of provider objects |
+| `providers[].key` | string | Provider identifier |
+| `providers[].name` | string | Display name |
+| `providers[].configured` | boolean | Whether API key is set |
+
+---
+
+### GET /api/ai/models/{provider}
+
+Get available models for a specific AI provider.
+
+**Request:**
 ```bash
-curl http://localhost:3001/api/ai/jobs \
+curl http://localhost:3001/api/ai/models/groq \
   -H "Authorization: Bearer myapikey"
 ```
 
-#### POST /api/ai/jobs/:id
-```bash
-curl -X POST http://localhost:3001/api/ai/jobs/translate \
-  -H "Authorization: Bearer myapikey" \
-  -H "Content-Type: application/json" \
-  -d '{"payload":{"text":"Hello","targetLanguage":"French"}}'
+**Response:**
+```json
+{
+  "provider": "groq",
+  "models": [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-70b-versatile",
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it"
+  ]
+}
 ```
 
-#### POST /api/ai/summarize
+**URL Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `provider` | string | ✅ | Provider key (e.g., `groq`, `gemini`, `openai`) |
+
+---
+
+### POST /api/ai/chat
+
+Send a message and get an AI response. Uses the user's configured provider and model.
+
+**Request:**
+```bash
+curl -X POST http://localhost:3001/api/ai/chat \
+  -H "Authorization: Bearer myapikey" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "What is quantum computing?",
+    "system_prompt": "You are a helpful physics teacher."
+  }'
+```
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `message` | string | ✅ | User message to send |
+| `provider` | string | ❌ | Override AI provider |
+| `model` | string | ❌ | Override model name |
+| `system_prompt` | string | ❌ | Custom system prompt |
+
+**Response:**
+```json
+{
+  "content": "Quantum computing is a type of computation that harnesses quantum mechanical phenomena like superposition and entanglement to process information in fundamentally different ways than classical computers...",
+  "provider": "groq",
+  "model": "llama-3.3-70b-versatile"
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `content` | string | AI-generated response |
+| `provider` | string | Provider used for generation |
+| `model` | string | Model used for generation |
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 503 | AI service not configured (no provider API keys set) |
+
+---
+
+### POST /api/ai/summarize
+
+Summarize text content with configurable length and language.
+
+**Request:**
 ```bash
 curl -X POST http://localhost:3001/api/ai/summarize \
   -H "Authorization: Bearer myapikey" \
   -H "Content-Type: application/json" \
-  -d '{"text":"Long text...","maxLength":200}'
+  -d '{
+    "text": "A very long article about technology trends...",
+    "max_length": 200,
+    "language": "en"
+  }'
 ```
 
-#### POST /api/ai/function-call
+**Request Body:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `text` | string | ✅ | - | Text content to summarize |
+| `max_length` | integer | ❌ | 200 | Maximum summary length in characters |
+| `language` | string | ❌ | `en` | Output language: `en` (English) or `zh` (Chinese) |
+
+**Response:**
+```json
+{
+  "summary": "This article discusses emerging technology trends including AI, quantum computing, and sustainable tech. Key points include: increased AI adoption, breakthrough in quantum error correction, and green data center initiatives.",
+  "language": "en"
+}
+```
+
+**Response Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `summary` | string | Generated summary |
+| `language` | string | Language of the summary |
+
+---
+
+### GET /api/rss/subscriptions
+
+List all RSS subscriptions for the authenticated user.
+
+**Request:**
 ```bash
-curl -X POST http://localhost:3001/api/ai/function-call \
-  -H "Authorization: Bearer myapikey" \
-  -H "Content-Type: application/json" \
-  -d '{"task":"Create a user","functions":[{"name":"createUser","description":"Create user","parameters":{}}]}'
+curl http://localhost:3001/api/rss/subscriptions \
+  -H "Authorization: Bearer myapikey"
+```
+
+**Response:**
+```json
+{
+  "subscriptions": [
+    {
+      "id": 1,
+      "url": "https://example.com/feed.xml",
+      "title": "Example Blog",
+      "chat_id": "123456789",
+      "created_at": "2024-01-04T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "url": "https://news.ycombinator.com/rss",
+      "title": "Hacker News",
+      "chat_id": "123456789",
+      "created_at": "2024-01-05T08:30:00Z"
+    }
+  ]
+}
 ```
 
 ---
 
-### RSS Subscriptions
+### POST /api/rss/subscribe
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/rss/subscriptions` | List subscriptions |
-| POST | `/api/rss/subscriptions` | Subscribe to feed |
-| DELETE | `/api/rss/subscriptions/:id` | Unsubscribe |
-| POST | `/api/rss/validate` | Validate RSS URL |
+Subscribe to a new RSS feed.
 
-#### POST /api/rss/subscriptions
+**Request:**
 ```bash
-curl -X POST http://localhost:3001/api/rss/subscriptions \
+curl -X POST http://localhost:3001/api/rss/subscribe \
   -H "Authorization: Bearer myapikey" \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com/feed.xml"}'
+  -d '{
+    "url": "https://example.com/feed.xml",
+    "chat_id": "123456789"
+  }'
 ```
+
+**Request Body:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `url` | string | ✅ | - | RSS/Atom feed URL |
+| `chat_id` | string | ❌ | User's ID | Target chat for notifications |
+
+**Response:**
 ```json
 {
   "added": true,
@@ -195,95 +383,99 @@ curl -X POST http://localhost:3001/api/rss/subscriptions \
 }
 ```
 
----
+**Response Fields:**
 
-### Channel Monitor
+| Field | Type | Description |
+|-------|------|-------------|
+| `added` | boolean | Whether subscription was created |
+| `title` | string | Detected feed title |
+| `url` | string | Feed URL |
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/monitor/sources` | List source channels |
-| POST | `/api/monitor/sources` | Add source channel |
-| DELETE | `/api/monitor/sources/:id` | Remove source |
-| GET | `/api/monitor/filters` | Get user's filter policies |
-| PUT | `/api/monitor/filters` | Update filter policies |
-| GET | `/api/monitor/history` | Get forwarded messages |
-| POST | `/api/monitor/start` | Start monitoring |
-| POST | `/api/monitor/stop` | Stop monitoring |
+**Error Responses:**
 
-#### POST /api/monitor/sources
-```bash
-curl -X POST http://localhost:3001/api/monitor/sources \
-  -H "Authorization: Bearer myapikey" \
-  -H "Content-Type: application/json" \
-  -d '{"channelId": "@channel_name"}'
-```
-
-#### PUT /api/monitor/filters
-```bash
-curl -X PUT http://localhost:3001/api/monitor/filters \
-  -H "Authorization: Bearer myapikey" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channels": ["@channel1"],
-    "keywords": ["bitcoin", "crypto"],
-    "users": [],
-    "enabled": true
-  }'
-```
+| Status | Description |
+|--------|-------------|
+| 400 | Invalid RSS URL or feed cannot be parsed |
 
 ---
 
-## WebSocket
+### DELETE /api/rss/unsubscribe/{source_id}
 
-Real-time message streaming from monitored channels.
+Unsubscribe from an RSS feed.
 
-**Connection:**
+**Request:**
+```bash
+curl -X DELETE http://localhost:3001/api/rss/unsubscribe/1 \
+  -H "Authorization: Bearer myapikey"
 ```
-ws://localhost:3001/ws/monitor?token=<API_KEY>
-```
 
-**Received messages:**
+**URL Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `source_id` | string | ✅ | Subscription ID to remove |
+
+**Response:**
 ```json
-{
-  "type": "message",
-  "data": {
-    "id": 12345,
-    "text": "Message content...",
-    "source": "@channel_name",
-    "sourceId": "-1001234567890",
-    "timestamp": "2024-01-04T12:00:00Z"
-  }
-}
+{"removed": true}
 ```
 
-**Send to update filters:**
-```json
-{
-  "type": "update_filters",
-  "filters": {
-    "keywords": ["important"],
-    "enabled": true
-  }
-}
-```
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 404 | Subscription not found |
 
 ---
 
 ## Error Responses
 
+All error responses follow this format:
+
 ```json
 {
-  "error": "Error type",
-  "message": "Detailed error message"
+  "detail": "Error message"
 }
 ```
 
+**Common HTTP Status Codes:**
+
 | Status | Meaning |
 |--------|---------|
-| 400 | Bad request (missing/invalid params) |
-| 401 | Unauthorized (invalid/missing API key) |
-| 404 | Not found |
+| 400 | Bad request (missing/invalid parameters) |
+| 401 | Unauthorized (invalid or missing API key) |
+| 404 | Resource not found |
+| 503 | Service unavailable (e.g., AI not configured) |
 | 500 | Internal server error |
+
+---
+
+## AI Service Methods
+
+The AI service provides additional methods used internally by the application. These are not exposed as REST endpoints but document the full capability:
+
+| Method | Description | Used By |
+|--------|-------------|---------|
+| `chat` | Interactive chat with history | Telegram AI Bot |
+| `summarize` | Summarize text | Monitor reports, API |
+| `translate` | Translate between languages | Job system |
+| `categorize` | Classify text into categories | Content analysis |
+| `get_sentiment` | Sentiment analysis | Message scoring |
+| `analyze` | General-purpose analysis | Reports, insights |
+| `run_job` | Execute a predefined AI job | Job catalog |
+
+**Available AI Jobs:**
+
+| Job ID | Description |
+|--------|-------------|
+| `chat` | General chat assistant |
+| `summarize` | Text summarization |
+| `translate` | Language translation |
+| `categorize` | Text categorization |
+| `sentiment` | Sentiment analysis |
+| `chat_summary` | Conversation context summary |
+| `chat_notes` | Structured knowledge extraction |
+| `analysis` | Flexible analysis with custom format |
 
 ---
 
@@ -291,6 +483,6 @@ ws://localhost:3001/ws/monitor?token=<API_KEY>
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `API_ENABLED` | `true` | Enable/disable API |
+| `API_ENABLED` | `true` | Enable/disable REST API |
 | `API_PORT` | `3001` | API server port |
 | `API_KEYS` | - | API keys (format: `key:userId,...`) |

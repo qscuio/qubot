@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import httpx
 from app.core.logger import Logger
 
@@ -33,23 +33,28 @@ class TelegraphService:
             logger.error(f"Error creating account: {e}")
             return None
 
-    async def create_page(self, title: str, content_html: str, author_name: str = None) -> Optional[str]:
+    async def create_page(
+        self,
+        title: str,
+        content_html: str = "",
+        author_name: str = None,
+        content_nodes: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[str]:
         """Create a page on Telegraph. Returns the URL."""
         if not self.access_token:
             # Create a default account if none exists
             await self.create_account("QuBot", "QuBot Monitor")
             
         try:
-            # Simple content conversion: wrap text in paragraphs
-            # For complex HTML, we'd need a parser, but let's keep it simple for now
-            # Telegraph expects a JSON list of Nodes
-            content_json = [{"tag": "p", "children": [content_html]}]
+            # Telegraph expects a JSON list of Nodes. Fallback to a plain paragraph.
+            if content_nodes is None:
+                content_nodes = [{"tag": "p", "children": [content_html or ""]}]
             
             import json
             params = {
                 "access_token": self.access_token,
                 "title": title,
-                "content": json.dumps(content_json),
+                "content": json.dumps(content_nodes),
                 "return_content": False
             }
             if author_name:

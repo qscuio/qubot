@@ -443,7 +443,7 @@ class LimitUpService:
         lines.append(f"\n🔴 <b>收盘涨停</b> ({len(sealed_stocks)}只)\n")
         for i, s in enumerate(sealed_stocks[:15], 1):
             streak = f"[{s['limit_times']}板]" if s['limit_times'] > 1 else ""
-            chart_url = get_chart_url(s['code'])
+            chart_url = await get_chart_url(s['code'], s.get('name'))
             lines.append(f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) {streak}")
         
         if len(sealed_stocks) > 15:
@@ -453,7 +453,7 @@ class LimitUpService:
         if burst_stocks:
             lines.append(f"\n💥 <b>曾涨停</b> (炸板, {len(burst_stocks)}只)\n")
             for i, s in enumerate(burst_stocks[:10], 1):
-                chart_url = get_chart_url(s['code'])
+                chart_url = await get_chart_url(s['code'], s.get('name'))
                 change = f"{s['change_pct']:.1f}%" if s.get('change_pct') else ""
                 lines.append(f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) {change}")
             if len(burst_stocks) > 10:
@@ -463,14 +463,14 @@ class LimitUpService:
         if streaks:
             lines.append(f"\n🔥 <b>连板榜</b>\n")
             for s in streaks[:10]:
-                chart_url = get_chart_url(s['code'])
+                chart_url = await get_chart_url(s['code'], s.get('name'))
                 lines.append(f"• <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['streak_count']}连板")
         
         # Strong stocks
         if strong:
             lines.append(f"\n💪 <b>近期强势股</b> (7日多次涨停)\n")
             for s in strong[:10]:
-                chart_url = get_chart_url(s['code'])
+                chart_url = await get_chart_url(s['code'], s.get('name'))
                 lines.append(f"• <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['limit_count']}次涨停")
         
         text = "\n".join(lines)

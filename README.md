@@ -4,15 +4,27 @@ A modular Telegram application with REST API support, built with Python (FastAPI
 
 ## Features
 
+### Core Features
 - 🤖 **Multi-Bot Architecture** - Multiple Userbots (MTProto) + unlimited Bot API bots
 - 🔀 **Master-Slave Monitoring** - First session forwards to target, others monitor only
 - 🌐 **REST API** - Full API for AI, RSS, and monitoring
--  **Channel Monitoring** - Monitor Telegram channels with keyword filters
+- 📡 **Channel Monitoring** - Monitor Telegram channels with keyword filters and AI summarization
 - 📰 **RSS Subscriptions** - User-managed subscriptions delivered to TARGET_CHANNEL
-- 🧠 **AI Chat** - Multi-provider AI (Groq, Gemini, OpenAI, Claude, NVIDIA) with chat history
+- 🧠 **AI Chat** - Multi-provider AI (Groq, Gemini, OpenAI, Claude, NVIDIA, GLM, MiniMax, OpenRouter) with chat history
 - 🔗 **Webhook Mode** - Production-ready with webhook support
 - 💾 **PostgreSQL Storage** - Persistent subscriptions, chat history, settings
 - 🐳 **Dockerized** - Easy deployment with Docker Compose
+
+### A-Stock Market Features (China Market)
+- 📊 **Limit-Up Tracker (涨停追踪)** - Track daily limit-up stocks, streaks (连板), sealed vs burst (首板/炸板)
+- 🏭 **Sector Analysis (板块分析)** - Industry & concept sector tracking with daily/weekly/monthly reports
+- 🔍 **AI Stock Scanner (启动信号扫描器)** - Scans for startup signals: breakout, volume surge, MA bullish
+
+### Content Intelligence
+- 🐦 **Twitter Monitoring** - Follow Twitter accounts, auto-forward new tweets to VIP channel
+- 🕷️ **Web Crawler** - Crawl websites, extract content, store structured data
+- 🔥 **Hot Words (热词统计)** - Daily trending word statistics with Chinese text segmentation (jieba)
+- 🗜️ **Smart Compression** - Message deduplication (SimHash), quality scoring, and auto-categorization
 
 ## Bots
 
@@ -121,13 +133,25 @@ qubot/
 │   │   ├── ai/              # AI service + providers
 │   │   ├── rss.py           # RSS subscription service
 │   │   ├── monitor.py       # Channel monitoring service
-│   │   └── github.py        # GitHub export service
+│   │   ├── github.py        # GitHub export service
+│   │   ├── limit_up.py      # Limit-up stock tracker (涨停追踪)
+│   │   ├── sector.py        # Sector analysis service (板块分析)
+│   │   ├── stock_scanner.py # AI stock scanner (启动信号扫描器)
+│   │   ├── twitter.py       # Twitter monitoring service
+│   │   ├── crawler.py       # Web crawler service
+│   │   ├── hot_words.py     # Hot words statistics
+│   │   ├── market_keywords.py # Market keywords library
+│   │   ├── message_compressor.py # Message compression
+│   │   └── message_dedup.py # Deduplication (SimHash)
 │   ├── providers/           # AI providers
 │   │   ├── groq.py
 │   │   ├── gemini.py
 │   │   ├── openai.py
 │   │   ├── claude.py
-│   │   └── nvidia.py
+│   │   ├── nvidia.py
+│   │   ├── glm.py
+│   │   ├── minimax.py
+│   │   └── openrouter.py
 │   ├── core/                # Core infrastructure
 │   │   ├── config.py        # Settings (pydantic)
 │   │   ├── database.py      # PostgreSQL + Redis
@@ -207,30 +231,22 @@ curl http://localhost:3888/health
 
 ## Environment Variables
 
-### Telegram Sessions
-
-| Variable | Description |
-|----------|-------------|
-| `TG_SESSIONS_JSON` | Sessions JSON array (see format above) |
-
-### Bot Tokens
-
-| Variable | Description |
-|----------|-------------|
-| `MONITOR_BOT_TOKEN` | Monitor bot (@BotFather) |
-| `AI_BOT_TOKEN` | AI bot (@BotFather) |
-| `AGENT_BOT_TOKEN` | Agent bot (@BotFather) |
-| `RSS_BOT_TOKEN` | RSS bot (@BotFather) |
-
-### Webhook
+### Telegram & Bots
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `WEBHOOK_URL` | Webhook base URL | `https://bot.yourdomain.com` |
-| `BOT_PORT` | Webhook server port | `3888` |
+| `TG_SESSIONS_JSON` | Telegram sessions JSON array (see Quick Deploy) | `[{"session":"...","api_id":123}]` |
+| `MONITOR_BOT_TOKEN` | Monitor bot token (@BotFather) | - |
+| `AI_BOT_TOKEN` | AI bot token (@BotFather) | - |
+| `AGENT_BOT_TOKEN` | Agent bot token (@BotFather) | - |
+| `RSS_BOT_TOKEN` | RSS bot token (@BotFather) | - |
+| `CRAWLER_BOT_TOKEN` | Crawler bot token (@BotFather) | - |
+| `ALLOWED_USERS` | Allowed Telegram user IDs | `123456789,987654321` |
+| `WEBHOOK_URL` | Webhook base URL (optional) | `https://bot.yourdomain.com` |
+| `BOT_PORT` | Webhook server port | `3000` |
 | `BOT_SECRET` | Webhook security token | Random string |
 
-### AI Providers
+### AI Configuration
 
 QuBot supports **8 AI providers** with dynamic model fetching:
 
@@ -247,7 +263,21 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 
 > **Tip:** OpenRouter is recommended as it provides access to all providers through a single API key.
 
-### Monitoring
+**Advanced AI Settings:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AI_ADVANCED_PROVIDER` | Provider for advanced AI features | `groq` |
+| `AI_EXTENDED_THINKING` | Enable Claude extended thinking | `false` |
+| `SEARX_URL` | SearXNG URL for web search tool | - |
+| `GITHUB_TOKEN` | GitHub token for GitHub tools | - |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API token | - |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID | - |
+| `AI_ALLOWED_PATHS` | Comma-separated allowed paths for file tools | - |
+
+### Monitoring & Content
+
+**Channel Monitoring:**
 
 | Variable | Description | Example |
 |----------|-------------|---------|
@@ -255,36 +285,54 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 | `TARGET_CHANNEL` | Forward destination | `-1001111111111` |
 | `VIP_TARGET_CHANNEL` | VIP user messages destination | `-1002222222222` |
 | `REPORT_TARGET_CHANNEL` | Daily reports destination | `-1003333333333` |
+| `STOCK_ALERT_CHANNEL` | Limit-up stock alerts destination | `-1004444444444` |
 | `BLACKLIST_CHANNELS` | Channels to completely ignore | `@spam,-1009999999999` |
 | `KEYWORDS` | Filter keywords (or `none`) | `bitcoin,crypto` |
 | `FROM_USERS` | Filter by usernames | `@user1,@user2` |
 
-### Access Control
+**Message Processing:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MONITOR_SUMMARIZE` | Enable AI summarization | `true` |
+| `MONITOR_BUFFER_SIZE` | Summarize after N messages | `200` |
+| `MONITOR_BUFFER_TIMEOUT` | Summarize after N seconds | `7200` (2 hours) |
+| `COMPRESSOR_MIN_LENGTH` | Minimum message length | `15` |
+| `COMPRESSOR_MAX_MESSAGES` | Max messages after compression | `200` |
+| `COMPRESSOR_SCORE_THRESHOLD` | Minimum quality score (0.0-1.0) | `0.2` |
+| `DEDUP_CACHE_SIZE` | Max fingerprints to store | `5000` |
+| `DEDUP_SIMILARITY_THRESHOLD` | SimHash similarity threshold (0.0-1.0) | `0.85` |
+
+**Twitter Monitoring:**
 
 | Variable | Description |
 |----------|-------------|
-| `ALLOWED_USERS` | Allowed Telegram user IDs | `123456789,987654321` |
+| `TWITTER_ACCOUNTS` | Twitter credentials JSON: `[{"username":"x","password":"x","email":"x"}]` |
 
-### REST API
+### Services & Features
 
-| Variable | Description |
-|----------|-------------|
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ENABLE_LIMIT_UP` | Enable limit-up stock tracker (涨停追踪) | `true` |
+| `ENABLE_SECTOR` | Enable sector analysis (板块分析) | `true` |
+| `ENABLE_CRAWLER` | Enable web crawler service | `true` |
+| `CRAWLER_INTERVAL_MS` | Crawl interval in milliseconds | `3600000` (1 hour) |
+| `NOTES_REPO` | GitHub repo for chat exports | `git@github.com:user/notes.git` |
+| `GIT_SSH_KEY_PATH` | SSH key path for GitHub | `/root/.ssh/github_actions` |
+
+### Infrastructure
+
+| Variable | Description | Default |
+|----------|-------------|---------|
 | `API_ENABLED` | Enable REST API | `true` |
-| `API_KEYS` | API keys (key=userId,...) | `mykey=1` |
-
-### GitHub Export
-
-| Variable | Description |
-|----------|-------------|
-| `NOTES_REPO` | GitHub repo for exports | `git@github.com:user/notes.git` |
-| `GIT_SSH_KEY_PATH` | SSH key path | `/root/.ssh/github_actions` |
-
-### Other
-
-| Variable | Description |
-|----------|-------------|
-| `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` |
-| `RATE_LIMIT_MS` | Rate limiting (ms) | `5000` |
+| `API_PORT` | REST API server port | `3001` |
+| `API_KEYS` | API keys (format: `key:userId,...`) | - |
+| `WEBFRONT_URL` | Web frontend URL (for Nginx SSL) | - |
+| `DATABASE_URL` | PostgreSQL connection URL | Auto-configured |
+| `REDIS_URL` | Redis connection URL | - |
+| `LOG_LEVEL` | Log level: `debug`, `info`, `warn`, `error` | `info` |
+| `RATE_LIMIT_MS` | Rate limiting (ms) | `1000` |
+| `RSS_POLL_INTERVAL_MS` | RSS poll interval | `300000` (5 min) |
 
 ## GitHub Actions Deployment
 
