@@ -15,6 +15,7 @@ import pytz
 from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
+from app.core.stock_links import get_chart_url
 
 logger = Logger("StockScanner")
 
@@ -114,8 +115,7 @@ class StockScanner:
             
             text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
             for s in stocks[:8]:
-                market = 'sh' if s['code'].startswith('6') else 'sz'
-                url = f"http://quote.eastmoney.com/{market}{s['code']}.html"
+                url = get_chart_url(s["code"])
                 text += f"  • <a href=\"{url}\">{s['name']}</a> ({s['code']})\n"
             if len(stocks) > 8:
                 text += f"  ...及其他 {len(stocks) - 8} 只\n"

@@ -15,6 +15,7 @@ from app.services.stock_scanner import stock_scanner
 from app.core.config import settings
 from app.core.database import db
 from app.core.logger import Logger
+from app.core.stock_links import get_chart_url
 
 logger = Logger("CrawlerBot")
 router = Router()
@@ -28,20 +29,6 @@ def is_allowed(user_id: int) -> bool:
     if not settings.allowed_users_list:
         return True
     return user_id in settings.allowed_users_list
-
-
-def get_chart_url(code: str) -> str:
-    """Generate EastMoney K-line chart URL for a stock code.
-    
-    Shanghai stocks (6xxxxx) use 'sh' prefix
-    Shenzhen stocks (0xxxxx, 3xxxxx) use 'sz' prefix
-    """
-    code = str(code).zfill(6)
-    if code.startswith('6'):
-        market = 'sh'
-    else:
-        market = 'sz'
-    return f"http://quote.eastmoney.com/{market}{code}.html"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -734,4 +721,3 @@ async def cmd_help(message: types.Message):
         "/sync - 同步涨停"
     )
     await message.answer(text, parse_mode="HTML")
-
