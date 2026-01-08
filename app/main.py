@@ -94,6 +94,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")
 
+# Security middleware (rate limiting + scanner blocking)
+from app.core.security import SecurityMiddleware, rate_limiter
+app.add_middleware(SecurityMiddleware, rate_limiter=rate_limiter)
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
