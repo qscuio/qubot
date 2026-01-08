@@ -69,6 +69,7 @@ class MonitorService:
         self.channels: Dict[str, dict] = {}
         self.target_channel = settings.TARGET_CHANNEL
         self.vip_target_channel = settings.VIP_TARGET_CHANNEL  # Separate channel for VIP
+        self.report_target_channel = settings.REPORT_TARGET_CHANNEL or settings.TARGET_CHANNEL  # For daily reports
         # Deduplication cache: stores (chat_id, message_id) tuples
         # Using OrderedDict to maintain insertion order for LRU eviction
         self._processed_messages = OrderedDict()
@@ -489,7 +490,7 @@ class MonitorService:
             # ═══════════════════════════════════════════════════════════════
             # Step 5: Send report to Telegram
             # ═══════════════════════════════════════════════════════════════
-            if self.target_channel:
+            if self.report_target_channel:
                 # Truncate for Telegram if too long
                 tg_report = report_content
                 if len(tg_report) > 4000:
@@ -505,7 +506,7 @@ class MonitorService:
                 if json_url:
                     formatted += f" | <a href='{json_url}'>原始数据</a>"
                 
-                target = self.target_channel
+                target = self.report_target_channel
                 if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
                     target = int(target)
                 

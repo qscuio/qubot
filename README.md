@@ -254,6 +254,7 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 | `SOURCE_CHANNELS` | Channels to monitor | `-1001234567890,-1009876543210` |
 | `TARGET_CHANNEL` | Forward destination | `-1001111111111` |
 | `VIP_TARGET_CHANNEL` | VIP user messages destination | `-1002222222222` |
+| `REPORT_TARGET_CHANNEL` | Daily reports destination | `-1003333333333` |
 | `BLACKLIST_CHANNELS` | Channels to completely ignore | `@spam,-1009999999999` |
 | `KEYWORDS` | Filter keywords (or `none`) | `bitcoin,crypto` |
 | `FROM_USERS` | Filter by usernames | `@user1,@user2` |

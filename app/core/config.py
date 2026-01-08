@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     SOURCE_CHANNELS: Optional[str] = None
     TARGET_CHANNEL: Optional[str] = None
     VIP_TARGET_CHANNEL: Optional[str] = None  # Separate channel for VIP user messages
+    REPORT_TARGET_CHANNEL: Optional[str] = None  # Separate channel for daily reports
     KEYWORDS: Optional[str] = None
     FROM_USERS: Optional[str] = None
     ALLOWED_USERS: Optional[str] = None
