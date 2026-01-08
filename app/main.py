@@ -57,7 +57,13 @@ async def lifespan(app: FastAPI):
 
     # Limit-Up Tracker
     if settings.ENABLE_LIMIT_UP:
+        await limit_up_service.initialize()
         await limit_up_service.start()
+
+    # Stock Scanner (启动信号扫描)
+    if settings.ENABLE_LIMIT_UP:
+        from app.services.stock_scanner import stock_scanner
+        await stock_scanner.start()
 
     # AI Service doesn't need explicit start but is ready
     if ai_service.is_available():
@@ -73,6 +79,9 @@ async def lifespan(app: FastAPI):
     await twitter_service.stop()
     await crawler_service.stop()
     await limit_up_service.stop()
+    if settings.ENABLE_LIMIT_UP:
+        from app.services.stock_scanner import stock_scanner
+        await stock_scanner.stop()
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")

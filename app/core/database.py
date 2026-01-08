@@ -254,6 +254,19 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_limit_up_date 
                 ON limit_up_stocks(date DESC);
             """)
+
+            # Startup Watchlist (启动追踪 - 一个月内涨停过一次的股票)
+            # 当同一股票在一个月内涨停第二次时剔除
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS startup_watchlist (
+                    id SERIAL PRIMARY KEY,
+                    code TEXT UNIQUE NOT NULL,
+                    name TEXT,
+                    first_limit_date DATE,
+                    first_limit_price DECIMAL,
+                    added_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
             
             logger.info("Database tables initialized")
 

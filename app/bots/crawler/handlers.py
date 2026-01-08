@@ -11,6 +11,7 @@ from datetime import date
 
 from app.services.crawler import crawler_service
 from app.services.limit_up import limit_up_service
+from app.services.stock_scanner import stock_scanner
 from app.core.config import settings
 from app.core.database import db
 from app.core.logger import Logger
@@ -27,6 +28,20 @@ def is_allowed(user_id: int) -> bool:
     if not settings.allowed_users_list:
         return True
     return user_id in settings.allowed_users_list
+
+
+def get_chart_url(code: str) -> str:
+    """Generate EastMoney K-line chart URL for a stock code.
+    
+    Shanghai stocks (6xxxxx) use 'sh' prefix
+    Shenzhen stocks (0xxxxx, 3xxxxx) use 'sz' prefix
+    """
+    code = str(code).zfill(6)
+    if code.startswith('6'):
+        market = 'sh'
+    else:
+        market = 'sz'
+    return f"http://quote.eastmoney.com/{market}{code}.html"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -353,11 +368,14 @@ async def cb_lu_main(callback: types.CallbackQuery):
     
     builder = InlineKeyboardBuilder()
     builder.button(text="📈 今日涨停", callback_data="lu:today")
+    builder.button(text="🆕 首板", callback_data="lu:first")
     builder.button(text="🔥 连板榜", callback_data="lu:streak")
     builder.button(text="💪 强势股", callback_data="lu:strong")
-    builder.button(text="🔄 同步涨停", callback_data="lu:sync")
+    builder.button(text="👀 启动追踪", callback_data="lu:watch")
+    builder.button(text="� 信号扫描", callback_data="lu:scan")
+    builder.button(text="�🔄 同步涨停", callback_data="lu:sync")
     builder.button(text="◀️ 返回", callback_data="main")
-    builder.adjust(2, 2, 1)
+    builder.adjust(2, 2, 2, 2)
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -404,10 +422,63 @@ async def get_today_ui():
         text = f"📈 <b>今日涨停</b> ({len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, r in enumerate(rows, 1):
             streak = f" [{r['limit_times']}板]" if r['limit_times'] > 1 else ""
-            text += f"{i}. {r['name']} ({r['code']}){streak}\n"
+            chart_url = get_chart_url(r['code'])
+            text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}){streak}\n"
     
     builder = InlineKeyboardBuilder()
     builder.button(text="🔄 刷新", callback_data="lu:today")
+    builder.button(text="◀️ 返回", callback_data="lu:main")
+    builder.adjust(2)
+    
+    return text, builder.as_markup()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# First-Board (首板 - First-time Limit-up)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("first"))
+async def cmd_first(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    text, markup = await get_first_ui()
+    await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+
+
+@router.callback_query(F.data == "lu:first")
+async def cb_first(callback: types.CallbackQuery):
+    await callback.answer()
+    text, markup = await get_first_ui()
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+    except:
+        pass
+
+
+async def get_first_ui():
+    """Get today's first-time limit-up stocks (首板)."""
+    if not db.pool:
+        return "❌ 数据库未连接", None
+    
+    today = date.today()
+    # First-board: stocks with limit_times = 1 (first limit-up)
+    rows = await db.pool.fetch("""
+        SELECT code, name, close_price, change_pct, turnover_rate
+        FROM limit_up_stocks WHERE date = $1 AND limit_times = 1
+        ORDER BY turnover_rate DESC LIMIT 15
+    """, today)
+    
+    if not rows:
+        text = "🆕 <b>首板</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无首板数据\n\n点击同步获取"
+    else:
+        text = f"🆕 <b>首板</b> ({len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        for i, r in enumerate(rows, 1):
+            chart_url = get_chart_url(r['code'])
+            turnover = f"换手{r['turnover_rate']:.1f}%" if r['turnover_rate'] else ""
+            text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {turnover}\n"
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔄 刷新", callback_data="lu:first")
     builder.button(text="◀️ 返回", callback_data="lu:main")
     builder.adjust(2)
     
@@ -444,7 +515,8 @@ async def get_streak_ui():
     else:
         text = f"🔥 <b>连板榜</b> ({len(streaks)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, s in enumerate(streaks, 1):
-            text += f"{i}. {s['name']} ({s['code']}) - <b>{s['streak_count']}连板</b>\n"
+            chart_url = get_chart_url(s['code'])
+            text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - <b>{s['streak_count']}连板</b>\n"
     
     builder = InlineKeyboardBuilder()
     builder.button(text="🔄 刷新", callback_data="lu:streak")
@@ -484,10 +556,54 @@ async def get_strong_ui():
     else:
         text = f"💪 <b>强势股</b> (7日, {len(strong)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, s in enumerate(strong, 1):
-            text += f"{i}. {s['name']} ({s['code']}) - {s['limit_count']}次涨停\n"
+            chart_url = get_chart_url(s['code'])
+            text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['limit_count']}次涨停\n"
     
     builder = InlineKeyboardBuilder()
     builder.button(text="🔄 刷新", callback_data="lu:strong")
+    builder.button(text="◀️ 返回", callback_data="lu:main")
+    builder.adjust(2)
+    
+    return text, builder.as_markup()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Startup Watchlist (启动追踪)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("watch"))
+async def cmd_watch(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    text, markup = await get_watch_ui()
+    await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+
+
+@router.callback_query(F.data == "lu:watch")
+async def cb_watch(callback: types.CallbackQuery):
+    await callback.answer()
+    text, markup = await get_watch_ui()
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+    except:
+        pass
+
+
+async def get_watch_ui():
+    """Get startup watchlist (一个月内涨停一次的股票)."""
+    watchlist = await limit_up_service.get_startup_watchlist()
+    
+    if not watchlist:
+        text = "👀 <b>启动追踪</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无观察股\n\n<i>一个月内涨停一次的股票会加入观察</i>"
+    else:
+        text = f"👀 <b>启动追踪</b> ({len(watchlist)})\n━━━━━━━━━━━━━━━━━━━━━\n<i>一个月涨停一次，再次涨停将剔除</i>\n\n"
+        for i, w in enumerate(watchlist, 1):
+            chart_url = get_chart_url(w['code'])
+            limit_date = w['first_limit_date'].strftime('%m/%d') if w['first_limit_date'] else ''
+            text += f"{i}. <a href=\"{chart_url}\">{w['name']}</a> ({w['code']}) {limit_date}\n"
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔄 刷新", callback_data="lu:watch")
     builder.button(text="◀️ 返回", callback_data="lu:main")
     builder.adjust(2)
     
@@ -540,6 +656,57 @@ async def cb_lu_sync(callback: types.CallbackQuery):
         )
     except Exception as e:
         await callback.message.edit_text(f"❌ 同步失败: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI Stock Scanner
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("scan"))
+async def cmd_scan(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    
+    status = await message.answer("🔍 正在扫描全A股启动信号...\n\n⏳ 需要几分钟，请稍候")
+    
+    try:
+        signals = await stock_scanner.scan_all_stocks(limit=300)
+        
+        if not signals or all(len(v) == 0 for v in signals.values()):
+            await status.edit_text("🔍 扫描完成\n\n📭 暂无信号")
+            return
+        
+        text = "🔍 <b>启动信号扫描</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        for signal_type, stocks in signals.items():
+            if not stocks:
+                continue
+            
+            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈"}.get(signal_type, "•")
+            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列"}.get(signal_type, signal_type)
+            
+            text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
+            for s in stocks[:6]:
+                chart_url = get_chart_url(s['code'])
+                text += f"  • <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
+            if len(stocks) > 6:
+                text += f"  ...及其他 {len(stocks) - 6} 只\n"
+            text += "\n"
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 重新扫描", callback_data="lu:scan")
+        builder.button(text="◀️ 返回", callback_data="lu:main")
+        builder.adjust(2)
+        
+        await status.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+    except Exception as e:
+        await status.edit_text(f"❌ 扫描失败: {e}")
+
+
+@router.callback_query(F.data == "lu:scan")
+async def cb_scan(callback: types.CallbackQuery):
+    await callback.answer("扫描中...")
+    await cmd_scan(callback.message)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

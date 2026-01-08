@@ -63,6 +63,57 @@ class LimitUpService:
                 pass
         logger.info("Limit-Up Tracker stopped")
     
+    async def initialize(self):
+        """Initialize service - ensure at least 7 trading days of history."""
+        if not db.pool:
+            return
+        
+        # Get distinct dates we already have
+        existing_dates = await db.pool.fetch("""
+            SELECT DISTINCT date FROM limit_up_stocks 
+            ORDER BY date DESC LIMIT 14
+        """)
+        existing_set = {row['date'] for row in existing_dates}
+        
+        if len(existing_set) >= 7:
+            logger.info(f"Found {len(existing_set)} days of history, sufficient")
+            return
+        
+        needed = 7 - len(existing_set)
+        logger.info(f"Have {len(existing_set)} days, need {needed} more, backfilling...")
+        
+        today = date.today()
+        days_collected = 0
+        days_checked = 0
+        
+        while days_collected < needed and days_checked < 14:
+            target_date = today - timedelta(days=days_checked)
+            days_checked += 1
+            
+            # Skip weekends
+            if target_date.weekday() >= 5:
+                continue
+            
+            # Skip dates we already have
+            if target_date in existing_set:
+                continue
+            
+            try:
+                stocks = await self.collect_limit_ups(target_date)
+                if stocks:
+                    logger.info(f"Backfilled {target_date}: {len(stocks)} stocks")
+                    days_collected += 1
+                else:
+                    logger.info(f"No data for {target_date}")
+                
+                # Small delay to avoid rate limiting
+                await asyncio.sleep(1)
+            except Exception as e:
+                logger.warn(f"Failed to backfill {target_date}: {e}")
+        
+        logger.info(f"Backfill complete: added {days_collected} days")
+    
+    
     # ─────────────────────────────────────────────────────────────────────────
     # Data Collection (4PM Daily)
     # ─────────────────────────────────────────────────────────────────────────
@@ -101,6 +152,9 @@ class LimitUpService:
             
             # Update streak stats
             await self._update_streaks(target_date, stocks)
+            
+            # Update startup watchlist
+            await self._update_startup_watchlist(target_date, stocks)
             
             logger.info(f"Collected {len(stocks)} limit-up stocks for {date_str}")
             return stocks
@@ -177,6 +231,43 @@ class LimitUpService:
             except Exception as e:
                 logger.warn(f"Failed to update streak for {stock['code']}: {e}")
     
+    async def _update_startup_watchlist(self, target_date: date, stocks: List[Dict]):
+        """Update startup watchlist (启动追踪).
+        
+        - Add stocks with 1 limit-up in past month
+        - Remove stocks when they hit 2nd limit-up in past month
+        """
+        if not db.pool:
+            return
+        
+        month_ago = target_date - timedelta(days=30)
+        
+        for stock in stocks:
+            try:
+                # Count limit-ups in past month for this stock
+                count = await db.pool.fetchval("""
+                    SELECT COUNT(*) FROM limit_up_stocks 
+                    WHERE code = $1 AND date >= $2
+                """, stock["code"], month_ago)
+                
+                if count == 1:
+                    # First limit-up this month, add to watchlist
+                    await db.pool.execute("""
+                        INSERT INTO startup_watchlist 
+                        (code, name, first_limit_date, first_limit_price)
+                        VALUES ($1, $2, $3, $4)
+                        ON CONFLICT (code) DO NOTHING
+                    """, stock["code"], stock["name"], target_date, stock["close_price"])
+                elif count >= 2:
+                    # Second limit-up this month, remove from watchlist
+                    await db.pool.execute("""
+                        DELETE FROM startup_watchlist WHERE code = $1
+                    """, stock["code"])
+                    
+            except Exception as e:
+                logger.warn(f"Failed to update watchlist for {stock['code']}: {e}")
+    
+    
     # ─────────────────────────────────────────────────────────────────────────
     # Morning Price Updates
     # ─────────────────────────────────────────────────────────────────────────
@@ -239,6 +330,20 @@ class LimitUpService:
     # ─────────────────────────────────────────────────────────────────────────
     # Reports
     # ─────────────────────────────────────────────────────────────────────────
+    
+    async def get_startup_watchlist(self) -> List[Dict]:
+        """Get startup watchlist (启动追踪 - 一个月内涨停一次的股票)."""
+        if not db.pool:
+            return []
+        
+        rows = await db.pool.fetch("""
+            SELECT code, name, first_limit_date, first_limit_price
+            FROM startup_watchlist
+            ORDER BY first_limit_date DESC
+            LIMIT 30
+        """)
+        
+        return [dict(r) for r in rows]
     
     async def get_strong_stocks(self, days: int = 7) -> List[Dict]:
         """Get strong stocks (multiple limit-ups in recent days)."""
