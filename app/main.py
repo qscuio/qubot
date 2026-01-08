@@ -18,6 +18,7 @@ from app.services.github import github_service
 from app.services.twitter import twitter_service
 from app.services.crawler import crawler_service
 from app.services.limit_up import limit_up_service
+from app.services.sector import sector_service
 from app.api import api_router
 
 logger = Logger("Main")
@@ -65,6 +66,11 @@ async def lifespan(app: FastAPI):
         from app.services.stock_scanner import stock_scanner
         await stock_scanner.start()
 
+    # Sector Tracker (板块分析追踪)
+    if settings.ENABLE_SECTOR:
+        await sector_service.initialize()
+        await sector_service.start()
+
     # AI Service doesn't need explicit start but is ready
     if ai_service.is_available():
         logger.info("✅ AI Service ready")
@@ -82,6 +88,8 @@ async def lifespan(app: FastAPI):
     if settings.ENABLE_LIMIT_UP:
         from app.services.stock_scanner import stock_scanner
         await stock_scanner.stop()
+    if settings.ENABLE_SECTOR:
+        await sector_service.stop()
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")

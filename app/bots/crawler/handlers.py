@@ -12,6 +12,7 @@ from datetime import date
 from app.services.crawler import crawler_service
 from app.services.limit_up import limit_up_service
 from app.services.stock_scanner import stock_scanner
+from app.services.sector import sector_service
 from app.core.config import settings
 from app.core.database import db
 from app.core.logger import Logger
@@ -54,7 +55,8 @@ async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
     builder.button(text="🕷️ 网站爬虫", callback_data="crawler:main")
     builder.button(text="📈 涨停追踪", callback_data="lu:main")
-    builder.adjust(2)
+    builder.button(text="📊 板块分析", callback_data="sector:main")
+    builder.adjust(3)
     
     await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
 
@@ -105,7 +107,8 @@ async def cb_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     builder.button(text="🕷️ 网站爬虫", callback_data="crawler:main")
     builder.button(text="📈 涨停追踪", callback_data="lu:main")
-    builder.adjust(2)
+    builder.button(text="📊 板块分析", callback_data="sector:main")
+    builder.adjust(3)
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -356,13 +359,14 @@ async def cb_lu_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     builder.button(text="📈 今日涨停", callback_data="lu:today")
     builder.button(text="🆕 首板", callback_data="lu:first")
-    builder.button(text="🔥 连板榜", callback_data="lu:streak")
+    builder.button(text="� 曾涨停", callback_data="lu:burst")
+    builder.button(text="�🔥 连板榜", callback_data="lu:streak")
     builder.button(text="💪 强势股", callback_data="lu:strong")
     builder.button(text="👀 启动追踪", callback_data="lu:watch")
-    builder.button(text="� 信号扫描", callback_data="lu:scan")
-    builder.button(text="�🔄 同步涨停", callback_data="lu:sync")
+    builder.button(text="🔍 信号扫描", callback_data="lu:scan")
+    builder.button(text="🔄 同步涨停", callback_data="lu:sync")
     builder.button(text="◀️ 返回", callback_data="main")
-    builder.adjust(2, 2, 2, 2)
+    builder.adjust(2, 2, 2, 2, 1)
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -443,22 +447,22 @@ async def cb_first(callback: types.CallbackQuery):
 
 
 async def get_first_ui():
-    """Get today's first-time limit-up stocks (首板)."""
+    """Get today's first-time limit-up stocks (首板 - 收盘涨停 limit_times=1)."""
     if not db.pool:
         return "❌ 数据库未连接", None
     
     today = date.today()
-    # First-board: stocks with limit_times = 1 (first limit-up)
+    # First-board: stocks with limit_times = 1 AND is_sealed = true (收盘涨停)
     rows = await db.pool.fetch("""
         SELECT code, name, close_price, change_pct, turnover_rate
-        FROM limit_up_stocks WHERE date = $1 AND limit_times = 1
+        FROM limit_up_stocks WHERE date = $1 AND limit_times = 1 AND is_sealed = TRUE
         ORDER BY turnover_rate DESC LIMIT 15
     """, today)
     
     if not rows:
-        text = "🆕 <b>首板</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无首板数据\n\n点击同步获取"
+        text = "🆕 <b>首板</b> (收盘封板)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无首板数据\n\n点击同步获取"
     else:
-        text = f"🆕 <b>首板</b> ({len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        text = f"🆕 <b>首板</b> (收盘封板, {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, r in enumerate(rows, 1):
             chart_url = get_chart_url(r['code'])
             turnover = f"换手{r['turnover_rate']:.1f}%" if r['turnover_rate'] else ""
@@ -466,6 +470,58 @@ async def get_first_ui():
     
     builder = InlineKeyboardBuilder()
     builder.button(text="🔄 刷新", callback_data="lu:first")
+    builder.button(text="◀️ 返回", callback_data="lu:main")
+    builder.adjust(2)
+    
+    return text, builder.as_markup()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Burst Limit-Ups (曾涨停/炸板)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("burst"))
+async def cmd_burst(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    text, markup = await get_burst_ui()
+    await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+
+
+@router.callback_query(F.data == "lu:burst")
+async def cb_burst(callback: types.CallbackQuery):
+    await callback.answer()
+    text, markup = await get_burst_ui()
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+    except:
+        pass
+
+
+async def get_burst_ui():
+    """Get today's burst limit-up stocks (曾涨停/炸板 - 触及涨停但收盘未封住)."""
+    if not db.pool:
+        return "❌ 数据库未连接", None
+    
+    today = date.today()
+    # Burst: stocks with is_sealed = false (曾涨停/炸板)
+    rows = await db.pool.fetch("""
+        SELECT code, name, close_price, change_pct, turnover_rate
+        FROM limit_up_stocks WHERE date = $1 AND is_sealed = FALSE
+        ORDER BY change_pct DESC LIMIT 20
+    """, today)
+    
+    if not rows:
+        text = "💥 <b>曾涨停</b> (炸板)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无炸板数据\n\n点击同步获取"
+    else:
+        text = f"💥 <b>曾涨停</b> (炸板, {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n<i>日内涨停但收盘未封住</i>\n\n"
+        for i, r in enumerate(rows, 1):
+            chart_url = get_chart_url(r['code'])
+            change = f"{r['change_pct']:.1f}%" if r['change_pct'] else ""
+            text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {change}\n"
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔄 刷新", callback_data="lu:burst")
     builder.button(text="◀️ 返回", callback_data="lu:main")
     builder.adjust(2)
     
@@ -696,6 +752,296 @@ async def cb_scan(callback: types.CallbackQuery):
     await cmd_scan(callback.message)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 板块分析 (Sector Analysis)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.callback_query(F.data == "sector:main")
+async def cb_sector_main(callback: types.CallbackQuery):
+    await callback.answer()
+    
+    text = (
+        "📊 <b>板块分析</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "🏭 行业板块 + 💡概念板块\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "<i>每日16:05自动收集</i>"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🏭 行业板块", callback_data="sector:industry")
+    builder.button(text="💡 概念板块", callback_data="sector:concept")
+    builder.button(text="🔥 7日强势", callback_data="sector:hot:7")
+    builder.button(text="📈 14日强势", callback_data="sector:hot:14")
+    builder.button(text="📊 30日强势", callback_data="sector:hot:30")
+    builder.button(text="📉 弱势板块", callback_data="sector:weak")
+    builder.button(text="📋 今日日报", callback_data="sector:report")
+    builder.button(text="🔄 同步数据", callback_data="sector:sync")
+    builder.button(text="◀️ 返回", callback_data="main")
+    builder.adjust(2, 3, 2, 2)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Industry Sectors (行业板块)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("industry"))
+async def cmd_industry(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    text, markup = await get_sector_ui("industry")
+    await message.answer(text, parse_mode="HTML", reply_markup=markup)
+
+
+@router.callback_query(F.data == "sector:industry")
+async def cb_industry(callback: types.CallbackQuery):
+    await callback.answer()
+    text, markup = await get_sector_ui("industry")
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    except:
+        pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Concept Sectors (概念板块)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("concept"))
+async def cmd_concept(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    text, markup = await get_sector_ui("concept")
+    await message.answer(text, parse_mode="HTML", reply_markup=markup)
+
+
+@router.callback_query(F.data == "sector:concept")
+async def cb_concept(callback: types.CallbackQuery):
+    await callback.answer()
+    text, markup = await get_sector_ui("concept")
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    except:
+        pass
+
+
+async def get_sector_ui(sector_type: str):
+    """Get sector list UI."""
+    sectors = await sector_service.get_realtime_sectors(sector_type=sector_type, limit=20)
+    
+    type_name = "行业板块" if sector_type == "industry" else "概念板块"
+    type_icon = "🏭" if sector_type == "industry" else "💡"
+    
+    if not sectors:
+        text = f"{type_icon} <b>{type_name}</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无数据\n\n点击同步获取"
+    else:
+        # Count up/down
+        up_count = sum(1 for s in sectors if s['change_pct'] > 0)
+        down_count = len(sectors) - up_count
+        
+        text = f"{type_icon} <b>{type_name}</b> (涨{up_count}/跌{down_count})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        # Top gainers
+        text += "📈 <b>领涨</b>\n"
+        for i, s in enumerate(sectors[:8], 1):
+            pct = f"{s['change_pct']:+.2f}%"
+            leader = f"({s['leading_stock']})" if s.get('leading_stock') else ""
+            text += f"{i}. {s['name']} {pct} {leader}\n"
+        
+        # Bottom losers
+        text += "\n📉 <b>领跌</b>\n"
+        for s in sectors[-3:]:
+            pct = f"{s['change_pct']:+.2f}%"
+            text += f"  • {s['name']} {pct}\n"
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔄 刷新", callback_data=f"sector:{sector_type}")
+    builder.button(text="◀️ 返回", callback_data="sector:main")
+    builder.adjust(2)
+    
+    return text, builder.as_markup()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Strong Sectors (强势板块)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("hot7"))
+async def cmd_hot7(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    text, markup = await get_hot_ui(7)
+    await message.answer(text, parse_mode="HTML", reply_markup=markup)
+
+
+@router.message(Command("hot14"))
+async def cmd_hot14(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    text, markup = await get_hot_ui(14)
+    await message.answer(text, parse_mode="HTML", reply_markup=markup)
+
+
+@router.message(Command("hot30"))
+async def cmd_hot30(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    text, markup = await get_hot_ui(30)
+    await message.answer(text, parse_mode="HTML", reply_markup=markup)
+
+
+@router.callback_query(F.data.startswith("sector:hot:"))
+async def cb_hot(callback: types.CallbackQuery):
+    await callback.answer()
+    days = int(callback.data.split(":")[2])
+    text, markup = await get_hot_ui(days)
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    except:
+        pass
+
+
+async def get_hot_ui(days: int):
+    """Get strong sectors UI."""
+    sectors = await sector_service.get_strong_sectors(days=days, limit=15)
+    
+    if not sectors:
+        text = f"🔥 <b>{days}日强势板块</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无数据\n\n需要积累{days}天历史数据"
+    else:
+        text = f"🔥 <b>{days}日强势板块</b> TOP15\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        for i, s in enumerate(sectors, 1):
+            type_icon = "🏭" if s['type'] == 'industry' else "💡"
+            total_pct = f"{float(s['total_change']):+.2f}%"
+            up_days = s.get('up_days', 0)
+            total_days = s.get('total_days', 0)
+            win_rate = f"({up_days}/{total_days}天阳)" if total_days > 0 else ""
+            text += f"{i}. {type_icon} {s['name']} {total_pct} {win_rate}\n"
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="7日", callback_data="sector:hot:7")
+    builder.button(text="14日", callback_data="sector:hot:14")
+    builder.button(text="30日", callback_data="sector:hot:30")
+    builder.button(text="◀️ 返回", callback_data="sector:main")
+    builder.adjust(3, 1)
+    
+    return text, builder.as_markup()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Weak Sectors (弱势板块)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.callback_query(F.data == "sector:weak")
+async def cb_weak(callback: types.CallbackQuery):
+    await callback.answer()
+    
+    sectors = await sector_service.get_weak_sectors(days=7, limit=15)
+    
+    if not sectors:
+        text = "📉 <b>7日弱势板块</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无数据"
+    else:
+        text = "📉 <b>7日弱势板块</b> TOP15\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        
+        for i, s in enumerate(sectors, 1):
+            type_icon = "🏭" if s['type'] == 'industry' else "💡"
+            total_pct = f"{float(s['total_change']):+.2f}%"
+            down_days = s.get('down_days', 0)
+            total_days = s.get('total_days', 0)
+            lose_rate = f"({down_days}/{total_days}天阴)" if total_days > 0 else ""
+            text += f"{i}. {type_icon} {s['name']} {total_pct} {lose_rate}\n"
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔄 刷新", callback_data="sector:weak")
+    builder.button(text="◀️ 返回", callback_data="sector:main")
+    builder.adjust(2)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sector Sync (同步数据)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("sector_sync"))
+async def cmd_sector_sync(message: types.Message):
+    if not is_allowed(message.from_user.id):
+        return
+    
+    status = await message.answer("⏳ 正在同步板块数据...")
+    
+    try:
+        result = await sector_service.collect_all_sectors()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🏭 行业板块", callback_data="sector:industry")
+        builder.button(text="💡 概念板块", callback_data="sector:concept")
+        builder.adjust(2)
+        
+        await status.edit_text(
+            f"✅ 同步完成\n\n"
+            f"🏭 行业板块: <b>{result['industry']}</b>\n"
+            f"💡 概念板块: <b>{result['concept']}</b>",
+            parse_mode="HTML",
+            reply_markup=builder.as_markup()
+        )
+    except Exception as e:
+        await status.edit_text(f"❌ 同步失败: {e}")
+
+
+@router.callback_query(F.data == "sector:sync")
+async def cb_sector_sync(callback: types.CallbackQuery):
+    await callback.answer("⏳ 同步中...")
+    
+    try:
+        result = await sector_service.collect_all_sectors()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🏭 行业板块", callback_data="sector:industry")
+        builder.button(text="💡 概念板块", callback_data="sector:concept")
+        builder.button(text="◀️ 返回", callback_data="sector:main")
+        builder.adjust(2, 1)
+        
+        await callback.message.edit_text(
+            f"✅ 同步完成\n\n"
+            f"🏭 行业板块: <b>{result['industry']}</b>\n"
+            f"💡 概念板块: <b>{result['concept']}</b>",
+            parse_mode="HTML",
+            reply_markup=builder.as_markup()
+        )
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 同步失败: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sector Report (板块日报)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.callback_query(F.data == "sector:report")
+async def cb_sector_report(callback: types.CallbackQuery):
+    await callback.answer("生成日报中...")
+    
+    try:
+        report = await sector_service.generate_daily_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 刷新", callback_data="sector:report")
+        builder.button(text="◀️ 返回", callback_data="sector:main")
+        builder.adjust(2)
+        
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 生成失败: {e}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Help
 # ─────────────────────────────────────────────────────────────────────────────
@@ -716,8 +1062,20 @@ async def cmd_help(message: types.Message):
         "/recent - 最新内容\n\n"
         "<b>📈 涨停追踪</b>\n"
         "/today - 今日涨停\n"
+        "/first - 首板(收盘封板)\n"
+        "/burst - 曾涨停(炸板)\n"
         "/streak - 连板榜\n"
         "/strong - 强势股\n"
-        "/sync - 同步涨停"
+        "/watch - 启动追踪\n"
+        "/scan - 信号扫描\n"
+        "/sync - 同步涨停\n\n"
+        "<b>📊 板块分析</b>\n"
+        "/industry - 行业板块\n"
+        "/concept - 概念板块\n"
+        "/hot7 - 7日强势板块\n"
+        "/hot14 - 14日强势板块\n"
+        "/hot30 - 30日强势板块\n"
+        "/sector_sync - 同步板块数据"
     )
     await message.answer(text, parse_mode="HTML")
+

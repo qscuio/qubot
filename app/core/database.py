@@ -230,9 +230,16 @@ class Database:
                     change_pct DECIMAL,
                     turnover_rate DECIMAL,
                     limit_times INT DEFAULT 1,
+                    is_sealed BOOLEAN DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT NOW(),
                     UNIQUE(code, date)
                 );
+            """)
+            
+            # Add is_sealed column if not exists (migration for existing DBs)
+            await conn.execute("""
+                ALTER TABLE limit_up_stocks 
+                ADD COLUMN IF NOT EXISTS is_sealed BOOLEAN DEFAULT TRUE;
             """)
 
             # Limit-Up Streaks Table (连板统计)
@@ -265,6 +272,48 @@ class Database:
                     first_limit_date DATE,
                     first_limit_price DECIMAL,
                     added_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
+            # Sector Daily Performance (板块每日表现)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS sector_daily (
+                    id SERIAL PRIMARY KEY,
+                    code TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    date DATE NOT NULL,
+                    change_pct DECIMAL,
+                    close_price DECIMAL,
+                    turnover DECIMAL,
+                    leading_stock TEXT,
+                    leading_stock_pct DECIMAL,
+                    up_count INT,
+                    down_count INT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(code, date)
+                );
+            """)
+            
+            # Index for sector daily queries
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sector_daily_date 
+                ON sector_daily(date DESC);
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sector_daily_type 
+                ON sector_daily(type);
+            """)
+
+            # Sector Reports (板块报告)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS sector_reports (
+                    id SERIAL PRIMARY KEY,
+                    report_type TEXT NOT NULL,
+                    report_date DATE NOT NULL,
+                    content TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(report_type, report_date)
                 );
             """)
             

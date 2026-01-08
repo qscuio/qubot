@@ -13,7 +13,8 @@ CRAWLER_BOT_COMMANDS = [
     BotCommand(command="recent", description="最新内容"),
     # Limit-up commands
     BotCommand(command="today", description="今日涨停"),
-    BotCommand(command="first", description="首板"),
+    BotCommand(command="first", description="首板(收盘封板)"),
+    BotCommand(command="burst", description="曾涨停(炸板)"),
     BotCommand(command="streak", description="连板榜"),
     BotCommand(command="strong", description="强势股"),
     BotCommand(command="watch", description="启动追踪"),

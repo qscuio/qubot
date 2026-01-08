@@ -32,9 +32,15 @@ class BotDispatcher:
             bot = Bot(token=spec.token)
             dp = Dispatcher()
 
+            # Apply access control middleware to ALL event types
             allowed_middleware = AllowedUsersMiddleware()
             dp.message.middleware(allowed_middleware)
             dp.callback_query.middleware(allowed_middleware)
+            dp.inline_query.middleware(allowed_middleware)
+            dp.edited_message.middleware(allowed_middleware)
+            dp.channel_post.middleware(allowed_middleware)
+            dp.edited_channel_post.middleware(allowed_middleware)
+            dp.chosen_inline_result.middleware(allowed_middleware)
             
             import importlib
             module = importlib.import_module(spec.router_module)

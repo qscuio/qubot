@@ -13,6 +13,7 @@ import pytz
 from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
+from app.core.stock_links import get_chart_url
 
 logger = Logger("LimitUpService")
 
@@ -119,7 +120,12 @@ class LimitUpService:
     # ─────────────────────────────────────────────────────────────────────────
     
     async def collect_limit_ups(self, target_date: date = None) -> List[Dict]:
-        """Collect today's limit-up stocks from AkShare."""
+        """Collect today's limit-up stocks from AkShare.
+        
+        Fetches both:
+        - Sealed limit-ups (收盘涨停/首板): is_sealed=True
+        - Burst limit-ups (曾涨停/炸板): is_sealed=False
+        """
         ak = self._get_akshare()
         if not ak:
             return []
@@ -127,36 +133,63 @@ class LimitUpService:
         target_date = target_date or date.today()
         date_str = target_date.strftime("%Y%m%d")
         
+        stocks = []
+        
         try:
-            # Get limit-up pool from EastMoney via AkShare
-            df = await asyncio.to_thread(ak.stock_zt_pool_em, date=date_str)
+            # 1. Get sealed limit-up pool (收盘涨停/首板)
+            df_sealed = await asyncio.to_thread(ak.stock_zt_pool_em, date=date_str)
             
-            if df is None or df.empty:
+            if df_sealed is not None and not df_sealed.empty:
+                for _, row in df_sealed.iterrows():
+                    stock = {
+                        "code": str(row.get("代码", "")),
+                        "name": str(row.get("名称", "")),
+                        "close_price": float(row.get("最新价", 0)),
+                        "change_pct": float(row.get("涨跌幅", 0)),
+                        "turnover_rate": float(row.get("换手率", 0)),
+                        "limit_times": int(row.get("连板数", 1)),
+                        "is_sealed": True,  # 收盘涨停
+                    }
+                    stocks.append(stock)
+                logger.info(f"Found {len(stocks)} sealed limit-up stocks for {date_str}")
+            
+            # 2. Get burst limit-up pool (曾涨停/炸板)
+            try:
+                df_burst = await asyncio.to_thread(ak.stock_zt_pool_zbgc_em, date=date_str)
+                
+                if df_burst is not None and not df_burst.empty:
+                    burst_count = 0
+                    for _, row in df_burst.iterrows():
+                        stock = {
+                            "code": str(row.get("代码", "")),
+                            "name": str(row.get("名称", "")),
+                            "close_price": float(row.get("最新价", 0)),
+                            "change_pct": float(row.get("涨跌幅", 0)),
+                            "turnover_rate": float(row.get("换手率", 0)),
+                            "limit_times": 1,  # 炸板不算连板
+                            "is_sealed": False,  # 曾涨停/炸板
+                        }
+                        stocks.append(stock)
+                        burst_count += 1
+                    logger.info(f"Found {burst_count} burst limit-up stocks for {date_str}")
+            except Exception as e:
+                logger.warn(f"Failed to fetch burst limit-ups (may not be available): {e}")
+            
+            if not stocks:
                 logger.info(f"No limit-up stocks found for {date_str}")
                 return []
             
-            stocks = []
-            for _, row in df.iterrows():
-                stock = {
-                    "code": str(row.get("代码", "")),
-                    "name": str(row.get("名称", "")),
-                    "close_price": float(row.get("最新价", 0)),
-                    "change_pct": float(row.get("涨跌幅", 0)),
-                    "turnover_rate": float(row.get("换手率", 0)),
-                    "limit_times": int(row.get("连板数", 1)),
-                }
-                stocks.append(stock)
-            
-            # Save to database
+            # Save to database (only sealed ones for streak tracking)
             await self._save_limit_ups(target_date, stocks)
             
-            # Update streak stats
-            await self._update_streaks(target_date, stocks)
+            # Update streak stats (only for sealed limit-ups)
+            sealed_stocks = [s for s in stocks if s.get("is_sealed", True)]
+            await self._update_streaks(target_date, sealed_stocks)
             
-            # Update startup watchlist
-            await self._update_startup_watchlist(target_date, stocks)
+            # Update startup watchlist (only for sealed limit-ups)
+            await self._update_startup_watchlist(target_date, sealed_stocks)
             
-            logger.info(f"Collected {len(stocks)} limit-up stocks for {date_str}")
+            logger.info(f"Collected {len(stocks)} total limit-up stocks for {date_str}")
             return stocks
             
         except Exception as e:
@@ -172,20 +205,23 @@ class LimitUpService:
             try:
                 await db.pool.execute("""
                     INSERT INTO limit_up_stocks 
-                    (code, name, date, close_price, change_pct, turnover_rate, limit_times)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    (code, name, date, close_price, change_pct, turnover_rate, limit_times, is_sealed)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (code, date) DO UPDATE SET
                         close_price = EXCLUDED.close_price,
                         change_pct = EXCLUDED.change_pct,
-                        limit_times = EXCLUDED.limit_times
+                        limit_times = EXCLUDED.limit_times,
+                        is_sealed = EXCLUDED.is_sealed
                 """, 
                     stock["code"], stock["name"], target_date,
                     stock["close_price"], stock["change_pct"],
-                    stock["turnover_rate"], stock["limit_times"]
+                    stock["turnover_rate"], stock["limit_times"],
+                    stock.get("is_sealed", True)
                 )
             except Exception as e:
                 logger.warn(f"Failed to save {stock['code']}: {e}")
     
+
     async def _update_streaks(self, target_date: date, stocks: List[Dict]):
         """Update consecutive limit-up streak statistics."""
         if not db.pool:
@@ -391,37 +427,58 @@ class LimitUpService:
         strong = await self.get_strong_stocks()
         streaks = await self.get_streak_leaders()
         
+        # Separate sealed and burst stocks
+        sealed_stocks = [s for s in stocks if s.get("is_sealed", True)]
+        burst_stocks = [s for s in stocks if not s.get("is_sealed", True)]
+        
         now = datetime.now(CHINA_TZ)
         
         # Build report
         lines = [
             f"📊 <b>涨停股日报</b> {now.strftime('%Y-%m-%d %H:%M')}",
             "━━━━━━━━━━━━━━━━━━━━━",
-            f"\n🔴 <b>今日涨停</b> ({len(stocks)}只)\n",
         ]
         
-        # Today's limit-ups (top 15)
-        for i, s in enumerate(stocks[:15], 1):
+        # Sealed limit-ups (收盘涨停)
+        lines.append(f"\n🔴 <b>收盘涨停</b> ({len(sealed_stocks)}只)\n")
+        for i, s in enumerate(sealed_stocks[:15], 1):
             streak = f"[{s['limit_times']}板]" if s['limit_times'] > 1 else ""
-            lines.append(f"{i}. {s['name']} ({s['code']}) {streak}")
+            chart_url = get_chart_url(s['code'])
+            lines.append(f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) {streak}")
         
-        if len(stocks) > 15:
-            lines.append(f"...及其他 {len(stocks)-15} 只")
+        if len(sealed_stocks) > 15:
+            lines.append(f"...及其他 {len(sealed_stocks)-15} 只")
+        
+        # Burst limit-ups (曾涨停/炸板)
+        if burst_stocks:
+            lines.append(f"\n💥 <b>曾涨停</b> (炸板, {len(burst_stocks)}只)\n")
+            for i, s in enumerate(burst_stocks[:10], 1):
+                chart_url = get_chart_url(s['code'])
+                change = f"{s['change_pct']:.1f}%" if s.get('change_pct') else ""
+                lines.append(f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) {change}")
+            if len(burst_stocks) > 10:
+                lines.append(f"...及其他 {len(burst_stocks)-10} 只")
         
         # Streak leaders
         if streaks:
             lines.append(f"\n🔥 <b>连板榜</b>\n")
             for s in streaks[:10]:
-                lines.append(f"• {s['name']} ({s['code']}) - {s['streak_count']}连板")
+                chart_url = get_chart_url(s['code'])
+                lines.append(f"• <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['streak_count']}连板")
         
         # Strong stocks
         if strong:
             lines.append(f"\n💪 <b>近期强势股</b> (7日多次涨停)\n")
             for s in strong[:10]:
-                lines.append(f"• {s['name']} ({s['code']}) - {s['limit_count']}次涨停")
+                chart_url = get_chart_url(s['code'])
+                lines.append(f"• <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['limit_count']}次涨停")
         
         text = "\n".join(lines)
-        await telegram_service.send_message(settings.STOCK_ALERT_CHANNEL, text, parse_mode="html")
+        await telegram_service.send_message(
+            settings.STOCK_ALERT_CHANNEL, text, 
+            parse_mode="html", 
+            link_preview=False
+        )
         logger.info("Sent afternoon limit-up report")
     
     async def send_morning_price_update(self):
