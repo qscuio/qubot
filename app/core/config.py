@@ -73,8 +73,12 @@ class Settings(BaseSettings):
     
     # Message Compression Pipeline
     COMPRESSOR_MIN_LENGTH: int = 15  # Minimum message length
-    COMPRESSOR_MAX_MESSAGES: int = 50  # Max messages after compression
+    COMPRESSOR_MAX_MESSAGES: int = 200  # Max messages after compression
     COMPRESSOR_SCORE_THRESHOLD: float = 0.2  # Minimum quality score
+    
+    # Message Deduplication
+    DEDUP_CACHE_SIZE: int = 5000  # Max fingerprints to store
+    DEDUP_SIMILARITY_THRESHOLD: float = 0.85  # Minimum similarity to consider duplicate (0.0-1.0)
     
     # Twitter monitoring
     TWITTER_ACCOUNTS: Optional[str] = None  # JSON array of Twitter accounts

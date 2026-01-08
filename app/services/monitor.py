@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.logger import Logger
 from app.core.bot import telegram_service
 from app.core.database import db
+from app.services.message_dedup import get_deduplicator
 
 logger = Logger("MonitorService")
 
@@ -525,8 +526,23 @@ class MonitorService:
             logger.error(f"Failed to generate report: {e}")
     
     async def _cache_message(self, channel_id: str, channel_name: str, sender_name: str, message_text: str):
-        """Cache a message for daily report."""
+        """Cache a message for daily report with deduplication check."""
         if not db.pool:
+            return
+        
+        # Skip empty or very short messages
+        if not message_text or len(message_text) < 20:
+            return
+        
+        # Check for duplicate content before caching
+        is_dup, reason = get_deduplicator().is_duplicate(
+            message_text,
+            channel_id=channel_id,
+            check_near_duplicates=True
+        )
+        
+        if is_dup:
+            logger.debug(f"🔄 Skipping duplicate message ({reason}): {message_text[:50]}...")
             return
         
         try:
@@ -991,7 +1007,19 @@ class MonitorService:
             # Log match
             logger.info(f"✅ Matched message from {chat_title}")
 
-            # 4. Check if sender is VIP (for direct forwarding)
+            # 4. Check for duplicate content (before forwarding)
+            full_text = event.message.message or ''
+            is_content_dup, dup_reason = get_deduplicator().is_duplicate(
+                full_text, 
+                channel_id=chat_id,
+                check_near_duplicates=True
+            )
+            if is_content_dup and not is_vip_sender:
+                # Allow VIP duplicates (important sources may repeat)
+                logger.info(f"🔄 Skipping duplicate content ({dup_reason}): {msg_text[:50]}...")
+                return
+
+            # 5. Check if sender is VIP (for direct forwarding)
             is_vip = is_vip_sender
             
             # 5. Forward VIP messages, or any non-blacklisted messages

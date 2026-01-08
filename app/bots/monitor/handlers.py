@@ -69,9 +69,10 @@ async def cmd_help(message: types.Message):
         "/block &lt;channel&gt; - Block channel (ignore)\n"
         "/unblock &lt;channel&gt; - Unblock channel\n"
         "/blacklist - List blocked channels\n\n"
-        "<b>📊 Status & History</b>\n"
+        "<b>📊 Status & Stats</b>\n"
         "/status - Show current status\n"
-        "/history - View recent forwards\n\n"
+        "/history - View recent forwards\n"
+        "/dedup - Deduplication statistics\n\n"
         "💡 <i>Use the main menu for quick access to all features!</i>"
     )
     await message.answer(help_text, parse_mode="HTML")
@@ -1016,3 +1017,68 @@ async def cb_twitter_page(callback: types.CallbackQuery):
 @router.callback_query(F.data == "tw:noop")
 async def cb_twitter_noop(callback: types.CallbackQuery):
     await safe_answer(callback)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deduplication Stats
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("dedup"))
+async def cmd_dedup(message: types.Message):
+    if not is_allowed(message.from_user.id): return
+    
+    from app.services.message_dedup import get_deduplicator
+    dedup = get_deduplicator()
+    stats = dedup.get_stats()
+    
+    text = (
+        "🔄 <b>消息去重统计</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📊 <b>总检查:</b> <code>{stats['total_checked']}</code>\n"
+        f"✅ <b>唯一消息:</b> <code>{stats['unique_messages']}</code>\n"
+        f"🔁 <b>完全重复:</b> <code>{stats['exact_duplicates']}</code>\n"
+        f"🔄 <b>近似重复:</b> <code>{stats['near_duplicates']}</code>\n\n"
+        f"💾 <b>指纹缓存:</b> <code>{stats['cache_size']}</code>\n"
+        f"📝 <b>哈希缓存:</b> <code>{stats['exact_cache_size']}</code>\n"
+        f"📈 <b>去重率:</b> <code>{stats['dedup_rate']:.1%}</code>"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🗑️ 清空缓存", callback_data="dedup:clear")
+    builder.button(text="◀️ 返回", callback_data="nav:main")
+    builder.adjust(2)
+    
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data == "dedup:clear")
+async def cb_dedup_clear(callback: types.CallbackQuery):
+    from app.services.message_dedup import get_deduplicator
+    dedup = get_deduplicator()
+    dedup.clear()
+    await safe_answer(callback, "🗑️ 去重缓存已清空")
+    
+    # Refresh stats
+    stats = dedup.get_stats()
+    text = (
+        "🔄 <b>消息去重统计</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📊 <b>总检查:</b> <code>{stats['total_checked']}</code>\n"
+        f"✅ <b>唯一消息:</b> <code>{stats['unique_messages']}</code>\n"
+        f"🔁 <b>完全重复:</b> <code>{stats['exact_duplicates']}</code>\n"
+        f"🔄 <b>近似重复:</b> <code>{stats['near_duplicates']}</code>\n\n"
+        f"💾 <b>指纹缓存:</b> <code>{stats['cache_size']}</code>\n"
+        f"📝 <b>哈希缓存:</b> <code>{stats['exact_cache_size']}</code>\n"
+        f"📈 <b>去重率:</b> <code>{stats['dedup_rate']:.1%}</code>"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🗑️ 清空缓存", callback_data="dedup:clear")
+    builder.button(text="◀️ 返回", callback_data="nav:main")
+    builder.adjust(2)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
