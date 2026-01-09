@@ -15,6 +15,7 @@ MONITOR_BOT_COMMANDS = [
     BotCommand(command="twitter", description="Add Twitter"),
     BotCommand(command="untwitter", description="Remove Twitter"),
     BotCommand(command="twitters", description="List Twitters"),
+    BotCommand(command="test", description="Test channels"),
     BotCommand(command="help", description="Help"),
 ]
 
