@@ -18,6 +18,8 @@ class TelegramService:
         self._pending_handlers = []
         # Track our own user IDs (to avoid forwarding our own messages)
         self.own_user_ids: set[int] = set()
+        # Cache of resolved entities by ID for faster lookups
+        self.entity_cache: dict[int, object] = {}
 
     def _normalize_peer_id(self, value):
         if value is None:
@@ -125,13 +127,28 @@ class TelegramService:
 
     async def _sync_dialogs(self, client, index):
         """
-        Sync dialogs for a specific client.
+        Sync dialogs for a specific client and cache entities.
         """
         try:
             logger.info(f"[{index}] Syncing dialogs...")
             dialogs = await client.get_dialogs()
             channels = [d for d in dialogs if d.is_channel or d.is_group]
             logger.info(f"[{index}] Synced {len(dialogs)} dialogs ({len(channels)} channels/groups)")
+            
+            # Cache all entities for later use
+            for dialog in dialogs:
+                entity = dialog.entity
+                if entity:
+                    # Store by entity ID
+                    entity_id = getattr(entity, 'id', None)
+                    if entity_id:
+                        self.entity_cache[entity_id] = entity
+                        # Also store with -100 prefix for channels
+                        if dialog.is_channel or dialog.is_group:
+                            prefixed_id = int(f"-100{entity_id}")
+                            self.entity_cache[prefixed_id] = entity
+            
+            logger.info(f"[{index}] Cached {len(self.entity_cache)} entities")
         except Exception as e:
             logger.warn(f"[{index}] Failed to sync dialogs: {e}")
 
@@ -173,12 +190,33 @@ class TelegramService:
             logger.warn("Cannot send message, no main client connected")
             return
         
-        # Try to resolve the peer entity first
+        # Resolve the peer entity
         resolved_peer = peer
         try:
-            # For channel IDs (especially with -100 prefix), we need to resolve the entity
-            if isinstance(peer, (str, int)):
-                resolved_peer = await self.main_client.get_entity(peer)
+            # Convert string to int if it's a numeric string
+            peer_id = peer
+            if isinstance(peer, str):
+                peer_str = peer.strip()
+                if peer_str.lstrip('-').isdigit():
+                    peer_id = int(peer_str)
+            
+            # First check our entity cache (populated from dialogs)
+            if isinstance(peer_id, int) and peer_id in self.entity_cache:
+                resolved_peer = self.entity_cache[peer_id]
+                logger.debug(f"Found peer {peer_id} in entity cache")
+            # For channel IDs with -100 prefix, also check without prefix
+            elif isinstance(peer_id, int) and str(peer_id).startswith('-100'):
+                channel_id = int(str(peer_id)[4:])
+                if channel_id in self.entity_cache:
+                    resolved_peer = self.entity_cache[channel_id]
+                    logger.debug(f"Found channel {channel_id} in entity cache")
+                else:
+                    # Try with PeerChannel
+                    from telethon.tl.types import PeerChannel
+                    resolved_peer = await self.main_client.get_entity(PeerChannel(channel_id))
+            else:
+                # Fallback to get_entity
+                resolved_peer = await self.main_client.get_entity(peer_id if isinstance(peer_id, int) else peer)
         except Exception as e:
             logger.warn(f"Could not resolve peer {peer}: {e}")
             # Continue with original peer, might still work for some cases
