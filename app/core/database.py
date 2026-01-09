@@ -326,6 +326,100 @@ class Database:
                     created_at TIMESTAMP DEFAULT NOW()
                 );
             """)
+
+            # Market Reports Table (市场分析报告)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS market_reports (
+                    id SERIAL PRIMARY KEY,
+                    report_type TEXT NOT NULL,
+                    report_date DATE NOT NULL,
+                    period_start DATE,
+                    period_end DATE,
+                    strongest_stocks JSONB,
+                    weakest_stocks JSONB,
+                    strongest_sectors JSONB,
+                    weakest_sectors JSONB,
+                    ai_analysis TEXT,
+                    content TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(report_type, report_date)
+                );
+            """)
+            
+            # Index for market reports queries
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_market_reports_date 
+                ON market_reports(report_date DESC);
+            """)
+
+            # User Watchlist Table (用户自选列表)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_watchlist (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    code TEXT NOT NULL,
+                    name TEXT,
+                    add_price DECIMAL,
+                    add_date DATE NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(user_id, code)
+                );
+            """)
+            
+            # Index for watchlist queries
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_watchlist_user 
+                ON user_watchlist(user_id);
+            """)
+            
+            # AI Chats Table (AI对话记录)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_chats (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    title TEXT DEFAULT 'New Chat',
+                    summary TEXT,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            
+            # AI Messages Table (AI消息记录)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_messages (
+                    id SERIAL PRIMARY KEY,
+                    chat_id INTEGER REFERENCES ai_chats(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            
+            # AI Settings Table (AI设置)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_settings (
+                    user_id BIGINT PRIMARY KEY,
+                    provider TEXT DEFAULT 'groq',
+                    model TEXT,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            
+            # AI Token Usage Table (token使用统计)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS ai_token_usage (
+                    id SERIAL PRIMARY KEY,
+                    provider VARCHAR(32) NOT NULL,
+                    model VARCHAR(64) NOT NULL,
+                    prompt_tokens BIGINT DEFAULT 0,
+                    response_tokens BIGINT DEFAULT 0,
+                    total_tokens BIGINT DEFAULT 0,
+                    call_count INTEGER DEFAULT 1,
+                    updated_at TIMESTAMPTZ DEFAULT NOW(),
+                    UNIQUE(provider, model)
+                );
+            """)
             
             # Seed allowed users from env if not already in DB
             env_users = settings.allowed_users_list or []

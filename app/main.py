@@ -19,6 +19,8 @@ from app.services.twitter import twitter_service
 from app.services.crawler import crawler_service
 from app.services.limit_up import limit_up_service
 from app.services.sector import sector_service
+from app.services.market_report import market_report_service
+from app.services.watchlist import watchlist_service
 from app.api import api_router
 
 logger = Logger("Main")
@@ -71,6 +73,14 @@ async def lifespan(app: FastAPI):
         await sector_service.initialize()
         await sector_service.start()
 
+    # Market Report Service (市场分析报告)
+    if settings.ENABLE_MARKET_REPORT:
+        await market_report_service.initialize()
+        await market_report_service.start()
+
+    # Watchlist Service (用户自选列表)
+    await watchlist_service.start()
+
     # AI Service doesn't need explicit start but is ready
     if ai_service.is_available():
         logger.info("✅ AI Service ready")
@@ -90,6 +100,9 @@ async def lifespan(app: FastAPI):
         await stock_scanner.stop()
     if settings.ENABLE_SECTOR:
         await sector_service.stop()
+    if settings.ENABLE_MARKET_REPORT:
+        await market_report_service.stop()
+    await watchlist_service.stop()
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")

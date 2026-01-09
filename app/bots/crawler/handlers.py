@@ -14,6 +14,8 @@ from app.services.crawler import crawler_service
 from app.services.limit_up import limit_up_service
 from app.services.stock_scanner import stock_scanner
 from app.services.sector import sector_service
+from app.services.market_report import market_report_service
+from app.services.watchlist import watchlist_service
 from app.core.config import settings
 from app.core.database import db
 from app.core.logger import Logger
@@ -79,7 +81,9 @@ async def cmd_start(message: types.Message):
     builder.button(text="🕷️ 网站爬虫", callback_data="crawler:main")
     builder.button(text="📈 涨停追踪", callback_data="lu:main")
     builder.button(text="📊 板块分析", callback_data="sector:main")
-    builder.adjust(3)
+    builder.button(text="📋 市场报告", callback_data="report:main")
+    builder.button(text="⭐ 自选列表", callback_data="watch:list")
+    builder.adjust(2, 2, 1)
     
     await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
 
@@ -131,7 +135,9 @@ async def cb_main(callback: types.CallbackQuery):
     builder.button(text="🕷️ 网站爬虫", callback_data="crawler:main")
     builder.button(text="📈 涨停追踪", callback_data="lu:main")
     builder.button(text="📊 板块分析", callback_data="sector:main")
-    builder.adjust(3)
+    builder.button(text="📋 市场报告", callback_data="report:main")
+    builder.button(text="⭐ 自选列表", callback_data="watch:list")
+    builder.adjust(2, 2, 1)
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -728,6 +734,24 @@ async def cb_lu_sync(callback: types.CallbackQuery):
 # AI Stock Scanner
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Temporary cache for scan results (store in memory for pagination)
+_scan_results_cache = {}
+
+SIGNAL_NAMES = {
+    "breakout": "突破信号",
+    "volume": "放量信号", 
+    "ma_bullish": "多头排列",
+    "small_bullish_5": "底部5小阳"
+}
+
+SIGNAL_ICONS = {
+    "breakout": "🔺",
+    "volume": "📊",
+    "ma_bullish": "📈",
+    "small_bullish_5": "🌅"
+}
+
+
 @router.message(Command("scan"))
 async def cmd_scan(message: types.Message):
     if not await is_allowed(message.from_user.id):
@@ -742,27 +766,36 @@ async def cmd_scan(message: types.Message):
             await status.edit_text("🔍 扫描完成\n\n📭 暂无信号")
             return
         
+        # Cache results for pagination
+        user_id = message.from_user.id if hasattr(message, 'from_user') else 0
+        _scan_results_cache[user_id] = signals
+        
         text = "🔍 <b>启动信号扫描</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         
         for signal_type, stocks in signals.items():
             if not stocks:
                 continue
             
-            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈"}.get(signal_type, "•")
-            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列"}.get(signal_type, signal_type)
+            icon = SIGNAL_ICONS.get(signal_type, "•")
+            name = SIGNAL_NAMES.get(signal_type, signal_type)
             
             text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
-            for s in stocks[:6]:
+            for s in stocks[:5]:
                 chart_url = await get_chart_url(s['code'], s.get('name'))
                 text += f"  • <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
-            if len(stocks) > 6:
-                text += f"  ...及其他 {len(stocks) - 6} 只\n"
+            if len(stocks) > 5:
+                text += f"  <i>...及其他 {len(stocks) - 5} 只</i>\n"
             text += "\n"
         
         builder = InlineKeyboardBuilder()
+        # Add buttons to view full list for each signal type
+        for signal_type, stocks in signals.items():
+            if stocks:
+                name = SIGNAL_NAMES.get(signal_type, signal_type)
+                builder.button(text=f"📋 {name}全部", callback_data=f"scan:list:{signal_type}:0")
         builder.button(text="🔄 重新扫描", callback_data="lu:scan")
         builder.button(text="◀️ 返回", callback_data="lu:main")
-        builder.adjust(2)
+        builder.adjust(2, 2, 2)
         
         await status.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
     except Exception as e:
@@ -772,7 +805,121 @@ async def cmd_scan(message: types.Message):
 @router.callback_query(F.data == "lu:scan")
 async def cb_scan(callback: types.CallbackQuery):
     await safe_answer(callback, "扫描中...")
-    await cmd_scan(callback.message)
+    
+    # Create a mock message object for cmd_scan
+    class MockMessage:
+        def __init__(self, msg):
+            self.from_user = callback.from_user
+            self._msg = msg
+        
+        async def answer(self, text, **kwargs):
+            try:
+                await self._msg.edit_text(text, **kwargs)
+            except:
+                pass
+            return self._msg
+    
+    mock_msg = MockMessage(callback.message)
+    await cmd_scan(mock_msg)
+
+
+@router.callback_query(F.data.startswith("scan:list:"))
+async def cb_scan_list(callback: types.CallbackQuery):
+    """View paginated list of scan results for a signal type."""
+    await safe_answer(callback)
+    
+    parts = callback.data.split(":")
+    signal_type = parts[2]
+    page = int(parts[3]) if len(parts) > 3 else 0
+    
+    user_id = callback.from_user.id
+    signals = _scan_results_cache.get(user_id, {})
+    stocks = signals.get(signal_type, [])
+    
+    if not stocks:
+        await callback.answer("暂无数据，请重新扫描")
+        return
+    
+    # Pagination settings
+    per_page = 15
+    total_pages = (len(stocks) + per_page - 1) // per_page
+    page = max(0, min(page, total_pages - 1))
+    
+    start = page * per_page
+    end = start + per_page
+    page_stocks = stocks[start:end]
+    
+    icon = SIGNAL_ICONS.get(signal_type, "•")
+    name = SIGNAL_NAMES.get(signal_type, signal_type)
+    
+    text = f"{icon} <b>{name}</b> ({len(stocks)}只)\n"
+    text += f"━━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"<i>第 {page + 1}/{total_pages} 页</i>\n\n"
+    
+    for i, s in enumerate(page_stocks, start + 1):
+        chart_url = await get_chart_url(s['code'], s.get('name'))
+        text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
+    
+    builder = InlineKeyboardBuilder()
+    
+    # Pagination buttons
+    if page > 0:
+        builder.button(text="⬅️ 上一页", callback_data=f"scan:list:{signal_type}:{page-1}")
+    if page < total_pages - 1:
+        builder.button(text="➡️ 下一页", callback_data=f"scan:list:{signal_type}:{page+1}")
+    
+    builder.button(text="◀️ 返回扫描", callback_data="scan:back")
+    builder.adjust(2, 1)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+    except:
+        pass
+
+
+@router.callback_query(F.data == "scan:back")
+async def cb_scan_back(callback: types.CallbackQuery):
+    """Return to scan results summary."""
+    await safe_answer(callback)
+    
+    user_id = callback.from_user.id
+    signals = _scan_results_cache.get(user_id, {})
+    
+    if not signals or all(len(v) == 0 for v in signals.values()):
+        # No cached results, trigger new scan
+        await callback.message.edit_text("📭 缓存已失效，请重新扫描")
+        return
+    
+    text = "🔍 <b>启动信号扫描</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    for signal_type, stocks in signals.items():
+        if not stocks:
+            continue
+        
+        icon = SIGNAL_ICONS.get(signal_type, "•")
+        name = SIGNAL_NAMES.get(signal_type, signal_type)
+        
+        text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
+        for s in stocks[:5]:
+            chart_url = await get_chart_url(s['code'], s.get('name'))
+            text += f"  • <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
+        if len(stocks) > 5:
+            text += f"  <i>...及其他 {len(stocks) - 5} 只</i>\n"
+        text += "\n"
+    
+    builder = InlineKeyboardBuilder()
+    for signal_type, stocks in signals.items():
+        if stocks:
+            name = SIGNAL_NAMES.get(signal_type, signal_type)
+            builder.button(text=f"📋 {name}全部", callback_data=f"scan:list:{signal_type}:0")
+    builder.button(text="🔄 重新扫描", callback_data="lu:scan")
+    builder.button(text="◀️ 返回", callback_data="lu:main")
+    builder.adjust(2, 2, 2)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+    except:
+        pass
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1260,5 +1407,335 @@ async def get_userlist_ui():
         builder.adjust(2, 2, 2, 2, 2, 2)
     else:
         builder.adjust(2)
+    
+    return text, builder.as_markup()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 市场报告 (Market Report)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.callback_query(F.data == "report:main")
+async def cb_report_main(callback: types.CallbackQuery):
+    await safe_answer(callback)
+    
+    # Get latest report info
+    latest_weekly = await market_report_service.get_latest_report("weekly")
+    latest_monthly = await market_report_service.get_latest_report("monthly")
+    
+    weekly_info = f"最近: {latest_weekly['report_date'].strftime('%m/%d')}" if latest_weekly else "暂无"
+    monthly_info = f"最近: {latest_monthly['report_date'].strftime('%m月')}" if latest_monthly else "暂无"
+    
+    text = (
+        "📋 <b>市场报告</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📅 周报: {weekly_info}\n"
+        f"📆 月报: {monthly_info}\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "<i>周五20:00自动发送周报</i>\n"
+        "<i>月末20:00自动发送月报</i>"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 即时周报", callback_data="report:weekly")
+    builder.button(text="📈 即时月报", callback_data="report:monthly")
+    builder.button(text="📋 近7日分析", callback_data="report:days:7")
+    builder.button(text="📋 近14日分析", callback_data="report:days:14")
+    builder.button(text="◀️ 返回", callback_data="main")
+    builder.adjust(2, 2, 1)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
+@router.message(Command("report"))
+async def cmd_report(message: types.Message, command: CommandObject):
+    """Generate market report on-demand."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    args = command.args if command else None
+    days = 7  # Default
+    
+    if args:
+        try:
+            days = int(args)
+        except ValueError:
+            pass
+    
+    status = await message.answer(f"📊 正在生成近{days}日市场报告...\n\n⏳ 需要AI分析，请稍候")
+    
+    try:
+        report = await market_report_service.generate_on_demand_report(days=days)
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 刷新", callback_data=f"report:days:{days}")
+        builder.button(text="◀️ 返回", callback_data="report:main")
+        builder.adjust(2)
+        
+        await status.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await status.edit_text(f"❌ 报告生成失败: {e}")
+
+
+@router.callback_query(F.data == "report:weekly")
+async def cb_report_weekly(callback: types.CallbackQuery):
+    await safe_answer(callback, "生成周报中...")
+    
+    try:
+        await callback.message.edit_text("📊 正在生成周报...\n\n⏳ 需要AI分析，请稍候", parse_mode="HTML")
+        
+        report = await market_report_service.generate_weekly_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 刷新", callback_data="report:weekly")
+        builder.button(text="◀️ 返回", callback_data="report:main")
+        builder.adjust(2)
+        
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 周报生成失败: {e}")
+
+
+@router.callback_query(F.data == "report:monthly")
+async def cb_report_monthly(callback: types.CallbackQuery):
+    await safe_answer(callback, "生成月报中...")
+    
+    try:
+        await callback.message.edit_text("📈 正在生成月报...\n\n⏳ 需要AI分析，请稍候", parse_mode="HTML")
+        
+        report = await market_report_service.generate_monthly_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 刷新", callback_data="report:monthly")
+        builder.button(text="◀️ 返回", callback_data="report:main")
+        builder.adjust(2)
+        
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 月报生成失败: {e}")
+
+
+@router.callback_query(F.data.startswith("report:days:"))
+async def cb_report_days(callback: types.CallbackQuery):
+    days = int(callback.data.split(":")[2])
+    await safe_answer(callback, f"生成{days}日报告...")
+    
+    try:
+        await callback.message.edit_text(f"📋 正在生成近{days}日市场报告...\n\n⏳ 需要AI分析，请稍候", parse_mode="HTML")
+        
+        report = await market_report_service.generate_on_demand_report(days=days)
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 刷新", callback_data=f"report:days:{days}")
+        builder.button(text="◀️ 返回", callback_data="report:main")
+        builder.adjust(2)
+        
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 报告生成失败: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 自选列表 (User Watchlist)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.message(Command("watch"))
+async def cmd_watch_add(message: types.Message, command: CommandObject):
+    """Add a stock to watchlist: /watch 600519 or /watch 600519 贵州茅台"""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    args = command.args if command else None
+    if not args:
+        # Show usage
+        text = (
+            "⭐ <b>自选列表</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "用法:\n"
+            "• <code>/watch 600519</code> - 添加股票\n"
+            "• <code>/unwatch 600519</code> - 删除股票\n"
+            "• <code>/mywatch</code> - 查看自选列表\n\n"
+            "<i>每天下午17:00自动发送自选报告</i>"
+        )
+        await message.answer(text, parse_mode="HTML")
+        return
+    
+    parts = args.split(maxsplit=1)
+    code = parts[0].strip()
+    name = parts[1].strip() if len(parts) > 1 else None
+    
+    # Normalize code (remove leading zeros if needed for some stocks)
+    if not code.isdigit():
+        await message.answer("❌ 股票代码应为数字")
+        return
+    
+    status = await message.answer(f"⏳ 正在添加 {code}...")
+    
+    try:
+        result = await watchlist_service.add_stock(
+            user_id=message.from_user.id,
+            code=code,
+            name=name
+        )
+        
+        stock_name = result.get('name', code)
+        add_price = result.get('add_price', 0)
+        price_str = f"价格: {add_price:.2f}" if add_price else ""
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📋 查看自选", callback_data="watch:list")
+        builder.adjust(1)
+        
+        await status.edit_text(
+            f"✅ 已添加 <b>{stock_name}</b> ({code})\n{price_str}",
+            parse_mode="HTML",
+            reply_markup=builder.as_markup()
+        )
+    except Exception as e:
+        await status.edit_text(f"❌ 添加失败: {e}")
+
+
+@router.message(Command("unwatch"))
+async def cmd_watch_remove(message: types.Message, command: CommandObject):
+    """Remove a stock from watchlist: /unwatch 600519"""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    args = command.args if command else None
+    if not args:
+        await message.answer("用法: <code>/unwatch 600519</code>", parse_mode="HTML")
+        return
+    
+    code = args.strip().split()[0]
+    
+    success = await watchlist_service.remove_stock(
+        user_id=message.from_user.id,
+        code=code
+    )
+    
+    if success:
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📋 查看自选", callback_data="watch:list")
+        builder.adjust(1)
+        
+        await message.answer(
+            f"✅ 已从自选删除 {code}",
+            reply_markup=builder.as_markup()
+        )
+    else:
+        await message.answer(f"❌ 删除失败，{code} 可能不在自选列表中")
+
+
+@router.message(Command("mywatch"))
+async def cmd_mywatch(message: types.Message):
+    """View watchlist with real-time prices."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    status = await message.answer("⏳ 正在加载自选列表...")
+    
+    try:
+        text, markup = await get_watchlist_ui(message.from_user.id)
+        await status.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+    except Exception as e:
+        await status.edit_text(f"❌ 加载失败: {e}")
+
+
+@router.callback_query(F.data == "watch:list")
+async def cb_watch_list(callback: types.CallbackQuery):
+    """View watchlist."""
+    await safe_answer(callback)
+    
+    try:
+        await callback.message.edit_text("⏳ 正在加载...", parse_mode="HTML")
+        text, markup = await get_watchlist_ui(callback.from_user.id)
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 加载失败: {e}")
+
+
+@router.callback_query(F.data.startswith("watch:del:"))
+async def cb_watch_del(callback: types.CallbackQuery):
+    """Delete stock from watchlist."""
+    code = callback.data.split(":")[2]
+    
+    success = await watchlist_service.remove_stock(
+        user_id=callback.from_user.id,
+        code=code
+    )
+    
+    if success:
+        await safe_answer(callback, f"✅ 已删除 {code}")
+    else:
+        await safe_answer(callback, "❌ 删除失败")
+    
+    # Refresh list
+    try:
+        text, markup = await get_watchlist_ui(callback.from_user.id)
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+    except:
+        pass
+
+
+async def get_watchlist_ui(user_id: int):
+    """Get watchlist UI with real-time prices."""
+    stocks = await watchlist_service.get_watchlist_with_prices(user_id)
+    
+    if not stocks:
+        text = (
+            "⭐ <b>自选列表</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n"
+            "📭 暂无自选股票\n\n"
+            "用 <code>/watch 600519</code> 添加"
+        )
+        builder = InlineKeyboardBuilder()
+        builder.button(text="◀️ 返回", callback_data="main")
+        return text, builder.as_markup()
+    
+    # Sort by total change descending
+    stocks.sort(key=lambda x: x.get('total_change', 0), reverse=True)
+    
+    text = f"⭐ <b>自选列表</b> ({len(stocks)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    for s in stocks:
+        name = s.get('name', s['code'])
+        code = s['code']
+        current = s.get('current_price', 0)
+        today = s.get('today_change', 0)
+        total = s.get('total_change', 0)
+        add_date = s.get('add_date')
+        
+        # Icon based on total performance
+        if total > 5:
+            icon = "🟢"  # Big gain
+        elif total > 0:
+            icon = "⬆️"  # Small gain
+        elif total > -5:
+            icon = "⬇️"  # Small loss
+        else:
+            icon = "🔴"  # Big loss
+        
+        chart_url = await get_chart_url(code, name)
+        date_str = add_date.strftime('%m/%d') if add_date else ""
+        
+        text += (
+            f"{icon} <a href=\"{chart_url}\"><b>{name}</b></a> ({code})\n"
+            f"   💰 {current:.2f} | 今日 {today:+.2f}% | 累计 <b>{total:+.2f}%</b>\n"
+            f"   <i>加入: {date_str}</i>\n\n"
+        )
+    
+    builder = InlineKeyboardBuilder()
+    
+    # Add delete buttons for each stock (limit to 8)
+    for s in stocks[:8]:
+        name_short = s.get('name', s['code'])[:6]
+        builder.button(text=f"❌ {name_short}", callback_data=f"watch:del:{s['code']}")
+    
+    builder.button(text="🔄 刷新", callback_data="watch:list")
+    builder.button(text="◀️ 返回", callback_data="main")
+    builder.adjust(2, 2, 2, 2, 2)
     
     return text, builder.as_markup()
