@@ -518,8 +518,18 @@ class LimitUpService:
     
     async def _scheduler_loop(self):
         """Background scheduler for timed tasks."""
-        # Morning report times
-        morning_times = ["09:25", "09:30", "09:35", "09:45", "09:50", "09:55", "10:00"]
+        # Morning report times: every minute from 9:20 to 10:00, skipping 9:25-9:30 (call auction)
+        morning_times = []
+        for hour in [9, 10]:
+            for minute in range(60):
+                if hour == 9 and minute < 20:
+                    continue  # Start from 9:20
+                if hour == 9 and 25 <= minute <= 30:
+                    continue  # Skip 9:25-9:30 (call auction period)
+                if hour == 10 and minute > 0:
+                    continue  # Stop after 10:00
+                morning_times.append(f"{hour:02d}:{minute:02d}")
+        
         afternoon_time = "16:00"
         
         triggered_today = set()
@@ -551,8 +561,8 @@ class LimitUpService:
             except Exception as e:
                 logger.error(f"Scheduler error: {e}")
             
-            # Check every 30 seconds
-            await asyncio.sleep(30)
+            # Check every 20 seconds (to not miss minute-based triggers)
+            await asyncio.sleep(20)
 
 
 # Singleton
