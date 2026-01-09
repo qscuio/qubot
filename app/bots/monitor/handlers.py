@@ -709,6 +709,54 @@ async def cmd_history(message: types.Message):
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Test Channel Connectivity
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("test"))
+async def cmd_test(message: types.Message):
+    """Send test message to all configured target channels using userbot."""
+    if not is_allowed(message.from_user.id): return
+    
+    from app.core.bot import telegram_service
+    from datetime import datetime
+    import pytz
+    
+    now = datetime.now(pytz.timezone("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
+    
+    # All target channels to test
+    channels = {
+        "TARGET_CHANNEL": settings.TARGET_CHANNEL,
+        "VIP_TARGET_CHANNEL": settings.VIP_TARGET_CHANNEL,
+        "REPORT_TARGET_CHANNEL": settings.REPORT_TARGET_CHANNEL,
+        "STOCK_ALERT_CHANNEL": settings.STOCK_ALERT_CHANNEL,
+        "ALERT_CHANNEL": settings.ALERT_CHANNEL,
+    }
+    
+    results = []
+    
+    for name, channel in channels.items():
+        if not channel:
+            results.append(f"⏭️ <b>{name}</b>: <i>Not configured</i>")
+            continue
+        
+        test_msg = f"🧪 <b>Test Message</b>\n\nChannel: {name}\nTime: {now}\nSent via userbot"
+        
+        try:
+            await telegram_service.send_message(channel, test_msg, parse_mode="html")
+            results.append(f"✅ <b>{name}</b>: <code>{channel}</code>")
+        except Exception as e:
+            error_msg = str(e)[:50]
+            results.append(f"❌ <b>{name}</b>: <code>{channel}</code>\n    Error: {error_msg}")
+    
+    response = (
+        "🧪 <b>Channel Test Results</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n" +
+        "\n\n".join(results)
+    )
+    
+    await message.answer(response, parse_mode="HTML")
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Blacklist Management
 # ─────────────────────────────────────────────────────────────────────────────
 

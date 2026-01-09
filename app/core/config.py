@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     VIP_TARGET_CHANNEL: Optional[str] = None  # Separate channel for VIP user messages
     REPORT_TARGET_CHANNEL: Optional[str] = None  # Separate channel for daily reports
     STOCK_ALERT_CHANNEL: Optional[str] = None  # Channel for limit-up stock alerts
+    ALERT_CHANNEL: Optional[str] = None  # Channel for security alerts
     
     # Limit-Up Tracker settings
     ENABLE_LIMIT_UP: bool = True

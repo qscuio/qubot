@@ -24,9 +24,6 @@ logger = Logger("Security")
 # Enable/disable iptables blocking (requires root or sudo permissions)
 ENABLE_IPTABLES_BLOCKING = os.getenv("ENABLE_IPTABLES_BLOCKING", "false").lower() == "true"
 
-# Channel to send security alerts to
-ALERT_CHANNEL = os.getenv("ALERT_CHANNEL")
-
 # Keep track of IPs already blocked at firewall level to avoid duplicate rules
 _firewall_blocked_ips: Set[str] = set()
 
@@ -34,12 +31,19 @@ _firewall_blocked_ips: Set[str] = set()
 _notified_ips: Set[str] = set()
 
 
+def _get_alert_channel():
+    """Get ALERT_CHANNEL from settings (lazy load to avoid circular import)."""
+    from app.core.config import settings
+    return settings.ALERT_CHANNEL
+
+
 async def send_attack_notification(ip: str, reason: str, path: str = None, count: int = None):
     """
     Send a notification about an attack to the configured alert channel.
     This runs asynchronously to avoid blocking the request.
     """
-    if not ALERT_CHANNEL:
+    alert_channel = _get_alert_channel()
+    if not alert_channel:
         logger.debug("No ALERT_CHANNEL configured, skipping notification")
         return
     
