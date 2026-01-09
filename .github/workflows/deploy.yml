@@ -300,6 +300,7 @@ jobs:
             printf 'BLACKLIST_CHANNELS=%s\n' '${{ secrets.BLACKLIST_CHANNELS }}' >> .env
             printf 'CRAWLER_BOT_TOKEN=%s\n' '${{ secrets.CRAWLER_BOT_TOKEN }}' >> .env
             printf 'STOCK_ALERT_CHANNEL=%s\n' '${{ secrets.STOCK_ALERT_CHANNEL }}' >> .env
+            printf 'ALERT_CHANNEL=%s\n' '${{ secrets.ALERT_CHANNEL }}' >> .env
             
             # Deploy (fail if build fails)
             docker compose down || true
