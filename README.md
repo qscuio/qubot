@@ -243,7 +243,7 @@ curl http://localhost:3888/health
 | `CRAWLER_BOT_TOKEN` | Crawler bot token (@BotFather) | - |
 | `ALLOWED_USERS` | Allowed Telegram user IDs | `123456789,987654321` |
 | `WEBHOOK_URL` | Webhook base URL (optional) | `https://bot.yourdomain.com` |
-| `BOT_PORT` | Webhook server port | `3000` |
+| `BOT_PORT` | Webhook server port | `10001` |
 | `BOT_SECRET` | Webhook security token | Random string |
 
 ### AI Configuration
@@ -325,7 +325,7 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `API_ENABLED` | Enable REST API | `true` |
-| `API_PORT` | REST API server port | `3001` |
+| `API_PORT` | REST API server port | `10002` |
 | `API_KEYS` | API keys (format: `key:userId,...`) | - |
 | `WEBFRONT_URL` | Web frontend URL (for Nginx SSL) | - |
 | `DATABASE_URL` | PostgreSQL connection URL | Auto-configured |
@@ -336,21 +336,65 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 
 ## GitHub Actions Deployment
 
-Add these secrets to your GitHub repository:
+### Multi-VPS Deployment
+
+The workflow supports deploying to **multiple VPS servers in parallel**, each with its own configuration.
+
+#### Step 1: Create GitHub Environments
+
+Go to your repo → **Settings** → **Environments** → **New environment**
+
+Create environments named:
+- `vps1`
+- `vps2`
+- `vps3` (optional)
+
+#### Step 2: Add Secrets to Each Environment
+
+For **each environment**, add these VPS-specific secrets:
 
 | Secret | Description |
 |--------|-------------|
-| `VPS_HOST` | VPS IP address |
-| `VPS_USER` | SSH user |
+| `DEPLOY_ENABLED` | Set to `true` to enable deployment, any other value to skip |
+| `VPS_HOST` | VPS IP address or hostname |
+| `VPS_USER` | SSH username |
 | `VPS_SSH_KEY` | Private SSH key |
-| `TG_SESSIONS_JSON` | Sessions JSON (single line) |
-| `MONITOR_BOT_TOKEN` | Monitor bot token |
-| `AI_BOT_TOKEN` | AI bot token |
-| `AGENT_BOT_TOKEN` | Agent bot token |
-| `RSS_BOT_TOKEN` | RSS bot token |
-| `WEBHOOK_URL` | Webhook URL |
-| `BOT_SECRET` | Webhook secret |
-| ... | (other env variables) |
+| `TG_SESSIONS_JSON` | Telegram sessions JSON (single line) |
+| `WEBHOOK_URL` | Webhook URL for this VPS |
+| `WEBFRONT_URL` | Web frontend URL (if different per VPS) |
+| `TARGET_CHANNEL` | Target channel for this instance |
+| `VIP_TARGET_CHANNEL` | VIP target channel |
+| `REPORT_TARGET_CHANNEL` | Report target channel |
+| Bot tokens | `AI_BOT_TOKEN`, `MONITOR_BOT_TOKEN`, etc. |
+
+#### Step 3: Shared Secrets (Repository Level)
+
+Secrets that are **the same across all VPS** can stay at repository level (Settings → Secrets → Actions):
+
+| Secret | Description |
+|--------|-------------|
+| `GEMINI_API_KEY` | Gemini API key |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `GROQ_API_KEY` | Groq API key |
+| `CLAUDE_API_KEY` | Claude API key |
+| Other API keys... | Shared across all instances |
+| `ALLOWED_USERS` | Allowed user IDs (if same) |
+| `KEYWORDS` | Filter keywords (if same) |
+
+> **Note:** GitHub Actions checks environment secrets first, then falls back to repository secrets. Environment-level secrets override repository-level secrets with the same name.
+
+#### Enable/Disable VPS Deployment
+
+To **disable** deployment to a VPS without removing its configuration:
+- Set `DEPLOY_ENABLED` to `false` (or any value other than `true`)
+- The workflow will skip all steps for that environment
+
+To **add or remove VPS servers**, edit `.github/workflows/deploy.yml`:
+```yaml
+strategy:
+  matrix:
+    environment: [vps1, vps2]  # Add/remove environments here
+```
 
 ## Debugging
 

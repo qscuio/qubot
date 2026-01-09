@@ -5,10 +5,10 @@ The REST API enables building alternative frontends (web UI, mobile app, CLI) wh
 ## Base URL
 
 ```
-http://localhost:3001
+http://localhost:10002
 ```
 
-Default port is `3001`. Configure via `API_PORT` environment variable.
+Default port is `10002`. Configure via `API_PORT` environment variable.
 
 ## Authentication
 
@@ -72,7 +72,7 @@ Returns the current health status of all services.
 
 **Request:**
 ```bash
-curl http://localhost:3001/api/health \
+curl http://localhost:10002/api/health \
   -H "Authorization: Bearer myapikey"
 ```
 
@@ -103,7 +103,7 @@ Get the current status of the channel monitoring service.
 
 **Request:**
 ```bash
-curl http://localhost:3001/api/monitor/status \
+curl http://localhost:10002/api/monitor/status \
   -H "Authorization: Bearer myapikey"
 ```
 
@@ -132,7 +132,7 @@ Start the channel monitoring service.
 
 **Request:**
 ```bash
-curl -X POST http://localhost:3001/api/monitor/start \
+curl -X POST http://localhost:10002/api/monitor/start \
   -H "Authorization: Bearer myapikey"
 ```
 
@@ -149,7 +149,7 @@ Stop the channel monitoring service.
 
 **Request:**
 ```bash
-curl -X POST http://localhost:3001/api/monitor/stop \
+curl -X POST http://localhost:10002/api/monitor/stop \
   -H "Authorization: Bearer myapikey"
 ```
 
@@ -166,7 +166,7 @@ List all available AI providers and their configuration status.
 
 **Request:**
 ```bash
-curl http://localhost:3001/api/ai/providers \
+curl http://localhost:10002/api/ai/providers \
   -H "Authorization: Bearer myapikey"
 ```
 
@@ -203,7 +203,7 @@ Get available models for a specific AI provider.
 
 **Request:**
 ```bash
-curl http://localhost:3001/api/ai/models/groq \
+curl http://localhost:10002/api/ai/models/groq \
   -H "Authorization: Bearer myapikey"
 ```
 
@@ -234,7 +234,7 @@ Send a message and get an AI response. Uses the user's configured provider and m
 
 **Request:**
 ```bash
-curl -X POST http://localhost:3001/api/ai/chat \
+curl -X POST http://localhost:10002/api/ai/chat \
   -H "Authorization: Bearer myapikey" \
   -H "Content-Type: application/json" \
   -d '{
@@ -283,7 +283,7 @@ Summarize text content with configurable length and language.
 
 **Request:**
 ```bash
-curl -X POST http://localhost:3001/api/ai/summarize \
+curl -X POST http://localhost:10002/api/ai/summarize \
   -H "Authorization: Bearer myapikey" \
   -H "Content-Type: application/json" \
   -d '{
@@ -324,7 +324,7 @@ List all RSS subscriptions for the authenticated user.
 
 **Request:**
 ```bash
-curl http://localhost:3001/api/rss/subscriptions \
+curl http://localhost:10002/api/rss/subscriptions \
   -H "Authorization: Bearer myapikey"
 ```
 
@@ -358,7 +358,7 @@ Subscribe to a new RSS feed.
 
 **Request:**
 ```bash
-curl -X POST http://localhost:3001/api/rss/subscribe \
+curl -X POST http://localhost:10002/api/rss/subscribe \
   -H "Authorization: Bearer myapikey" \
   -H "Content-Type: application/json" \
   -d '{
@@ -405,7 +405,7 @@ Unsubscribe from an RSS feed.
 
 **Request:**
 ```bash
-curl -X DELETE http://localhost:3001/api/rss/unsubscribe/1 \
+curl -X DELETE http://localhost:10002/api/rss/unsubscribe/1 \
   -H "Authorization: Bearer myapikey"
 ```
 
@@ -484,5 +484,5 @@ The AI service provides additional methods used internally by the application. T
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `API_ENABLED` | `true` | Enable/disable REST API |
-| `API_PORT` | `3001` | API server port |
+| `API_PORT` | `10002` | API server port |
 | `API_KEYS` | - | API keys (format: `key:userId,...`) |
