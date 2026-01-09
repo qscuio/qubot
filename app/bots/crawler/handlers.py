@@ -1485,8 +1485,13 @@ async def cb_report_weekly(callback: types.CallbackQuery):
     await safe_answer(callback, "生成周报中...")
     
     try:
-        await callback.message.edit_text("📊 正在生成周报...\n\n⏳ 需要AI分析，请稍候", parse_mode="HTML")
+        # Show loading message (ignore if same)
+        try:
+            await callback.message.edit_text("📊 正在生成周报...\n\n⏳ 需要AI分析，请稍候", parse_mode="HTML")
+        except TelegramBadRequest:
+            pass  # Ignore if loading message same as current
         
+        # Generate report
         report = await market_report_service.generate_weekly_report()
         
         builder = InlineKeyboardBuilder()
@@ -1494,9 +1499,17 @@ async def cb_report_weekly(callback: types.CallbackQuery):
         builder.button(text="◀️ 返回", callback_data="report:main")
         builder.adjust(2)
         
-        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        # Send report (ignore if same as before)
+        try:
+            await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        except TelegramBadRequest as e:
+            if "not modified" not in str(e):
+                raise  # Re-raise if it's a different error
     except Exception as e:
-        await callback.message.edit_text(f"❌ 周报生成失败: {e}")
+        try:
+            await callback.message.edit_text(f"❌ 周报生成失败: {e}")
+        except:
+            pass
 
 
 @router.callback_query(F.data == "report:monthly")
@@ -1504,8 +1517,13 @@ async def cb_report_monthly(callback: types.CallbackQuery):
     await safe_answer(callback, "生成月报中...")
     
     try:
-        await callback.message.edit_text("📈 正在生成月报...\n\n⏳ 需要AI分析，请稍候", parse_mode="HTML")
+        # Show loading message (ignore if same)
+        try:
+            await callback.message.edit_text("📈 正在生成月报...\n\n⏳ 需要AI分析，请稍候", parse_mode="HTML")
+        except TelegramBadRequest:
+            pass
         
+        # Generate report
         report = await market_report_service.generate_monthly_report()
         
         builder = InlineKeyboardBuilder()
@@ -1513,9 +1531,17 @@ async def cb_report_monthly(callback: types.CallbackQuery):
         builder.button(text="◀️ 返回", callback_data="report:main")
         builder.adjust(2)
         
-        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        # Send report (ignore if same as before)
+        try:
+            await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        except TelegramBadRequest as e:
+            if "not modified" not in str(e):
+                raise
     except Exception as e:
-        await callback.message.edit_text(f"❌ 月报生成失败: {e}")
+        try:
+            await callback.message.edit_text(f"❌ 月报生成失败: {e}")
+        except:
+            pass
 
 
 @router.callback_query(F.data.startswith("report:days:"))
@@ -1524,8 +1550,13 @@ async def cb_report_days(callback: types.CallbackQuery):
     await safe_answer(callback, f"生成{days}日报告...")
     
     try:
-        await callback.message.edit_text(f"📋 正在生成近{days}日市场报告...\n\n⏳ 需要AI分析，请稍候", parse_mode="HTML")
+        # Show loading message (ignore if same)
+        try:
+            await callback.message.edit_text(f"📋 正在生成近{days}日市场报告...\n\n⏳ 需要AI分析，请稍候", parse_mode="HTML")
+        except TelegramBadRequest:
+            pass
         
+        # Generate report
         report = await market_report_service.generate_on_demand_report(days=days)
         
         builder = InlineKeyboardBuilder()
@@ -1533,9 +1564,17 @@ async def cb_report_days(callback: types.CallbackQuery):
         builder.button(text="◀️ 返回", callback_data="report:main")
         builder.adjust(2)
         
-        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        # Send report (ignore if same as before)
+        try:
+            await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        except TelegramBadRequest as e:
+            if "not modified" not in str(e):
+                raise
     except Exception as e:
-        await callback.message.edit_text(f"❌ 报告生成失败: {e}")
+        try:
+            await callback.message.edit_text(f"❌ 报告生成失败: {e}")
+        except:
+            pass
 
 
 # ═══════════════════════════════════════════════════════════════════════════
