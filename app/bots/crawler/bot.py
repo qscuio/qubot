@@ -20,6 +20,10 @@ CRAWLER_BOT_COMMANDS = [
     BotCommand(command="watch", description="启动追踪"),
     BotCommand(command="scan", description="信号扫描"),
     BotCommand(command="sync", description="同步涨停"),
+    # User management commands
+    BotCommand(command="useradd", description="添加用户"),
+    BotCommand(command="userdel", description="删除用户"),
+    BotCommand(command="userlist", description="用户列表"),
     BotCommand(command="help", description="帮助"),
 ]
 

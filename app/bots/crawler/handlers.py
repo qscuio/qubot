@@ -7,6 +7,7 @@ Telegram bot interface for web crawler and limit-up stock tracking.
 from aiogram import Router, F, types
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.exceptions import TelegramBadRequest
 from datetime import date
 
 from app.services.crawler import crawler_service
@@ -26,10 +27,32 @@ router = Router()
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def is_allowed(user_id: int) -> bool:
-    if not settings.allowed_users_list:
+async def safe_answer(callback: types.CallbackQuery, text: str = None) -> None:
+    """Safely answer callback query, ignoring stale query errors."""
+    try:
+        await callback.answer(text)
+    except TelegramBadRequest:
+        pass  # Query too old or already answered
+
+
+async def get_allowed_users() -> list:
+    """Get allowed users from database."""
+    if not db.pool:
+        return []
+    try:
+        rows = await db.pool.fetch("SELECT user_id FROM allowed_users")
+        return [row['user_id'] for row in rows]
+    except Exception:
+        return []
+
+
+async def is_allowed(user_id: int) -> bool:
+    """Check if user is allowed (from database)."""
+    allowed_users = await get_allowed_users()
+    # If no allowed users configured, allow all
+    if not allowed_users:
         return True
-    return user_id in settings.allowed_users_list
+    return user_id in allowed_users
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -38,7 +61,7 @@ def is_allowed(user_id: int) -> bool:
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     
     sources = await crawler_service.get_sources()
@@ -67,7 +90,7 @@ async def cmd_start(message: types.Message):
 
 @router.callback_query(F.data == "crawler:main")
 async def cb_crawler_main(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     sources = await crawler_service.get_sources()
     items = await crawler_service.get_recent_items(limit=5)
     
@@ -93,7 +116,7 @@ async def cb_crawler_main(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "main")
 async def cb_main(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     sources = await crawler_service.get_sources()
     streaks = await limit_up_service.get_streak_leaders()
     
@@ -122,7 +145,7 @@ async def cb_main(callback: types.CallbackQuery):
 
 @router.message(Command("add"))
 async def cmd_add(message: types.Message, command: CommandObject):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     
     args = command.args
@@ -168,7 +191,7 @@ async def cmd_add(message: types.Message, command: CommandObject):
 
 @router.message(Command("list"))
 async def cmd_list(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_sources_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -176,7 +199,7 @@ async def cmd_list(message: types.Message):
 
 @router.callback_query(F.data == "crawler:list")
 async def cb_list(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_sources_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -217,7 +240,7 @@ async def get_sources_ui():
 
 @router.message(Command("remove"))
 async def cmd_remove(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_sources_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -228,14 +251,14 @@ async def cb_delete(callback: types.CallbackQuery):
     source_id = int(callback.data.split(":")[2])
     result = await crawler_service.remove_source(source_id)
     if result:
-        await callback.answer("✅ 已删除")
+        await safe_answer(callback, "✅ 已删除")
         text, markup = await get_sources_ui()
         try:
             await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
         except:
             pass
     else:
-        await callback.answer("❌ 删除失败", show_alert=True)
+        await safe_answer(callback, "❌ 删除失败")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -244,7 +267,7 @@ async def cb_delete(callback: types.CallbackQuery):
 
 @router.message(Command("crawl"))
 async def cmd_crawl(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     
     status = await message.answer("⏳ 正在爬取...")
@@ -269,7 +292,7 @@ async def cmd_crawl(message: types.Message):
 
 @router.callback_query(F.data == "crawler:crawl")
 async def cb_crawl(callback: types.CallbackQuery):
-    await callback.answer("⏳ 爬取中...")
+    await safe_answer(callback, "⏳ 爬取中...")
     
     try:
         result = await crawler_service.crawl_all()
@@ -296,7 +319,7 @@ async def cb_crawl(callback: types.CallbackQuery):
 
 @router.message(Command("recent"))
 async def cmd_recent(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_recent_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -304,7 +327,7 @@ async def cmd_recent(message: types.Message):
 
 @router.callback_query(F.data == "crawler:recent")
 async def cb_recent(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_recent_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -343,7 +366,7 @@ async def get_recent_ui():
 
 @router.callback_query(F.data == "lu:main")
 async def cb_lu_main(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     streaks = await limit_up_service.get_streak_leaders()
     strong = await limit_up_service.get_strong_stocks()
     
@@ -380,7 +403,7 @@ async def cb_lu_main(callback: types.CallbackQuery):
 
 @router.message(Command("today"))
 async def cmd_today(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_today_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
@@ -388,7 +411,7 @@ async def cmd_today(message: types.Message):
 
 @router.callback_query(F.data == "lu:today")
 async def cb_today(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_today_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
@@ -430,7 +453,7 @@ async def get_today_ui():
 
 @router.message(Command("first"))
 async def cmd_first(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_first_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -438,7 +461,7 @@ async def cmd_first(message: types.Message):
 
 @router.callback_query(F.data == "lu:first")
 async def cb_first(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_first_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -482,7 +505,7 @@ async def get_first_ui():
 
 @router.message(Command("burst"))
 async def cmd_burst(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_burst_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -490,7 +513,7 @@ async def cmd_burst(message: types.Message):
 
 @router.callback_query(F.data == "lu:burst")
 async def cb_burst(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_burst_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -534,7 +557,7 @@ async def get_burst_ui():
 
 @router.message(Command("streak"))
 async def cmd_streak(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_streak_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
@@ -542,7 +565,7 @@ async def cmd_streak(message: types.Message):
 
 @router.callback_query(F.data == "lu:streak")
 async def cb_streak(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_streak_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
@@ -575,7 +598,7 @@ async def get_streak_ui():
 
 @router.message(Command("strong"))
 async def cmd_strong(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_strong_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
@@ -583,7 +606,7 @@ async def cmd_strong(message: types.Message):
 
 @router.callback_query(F.data == "lu:strong")
 async def cb_strong(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_strong_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
@@ -616,7 +639,7 @@ async def get_strong_ui():
 
 @router.message(Command("watch"))
 async def cmd_watch(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_watch_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -624,7 +647,7 @@ async def cmd_watch(message: types.Message):
 
 @router.callback_query(F.data == "lu:watch")
 async def cb_watch(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_watch_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
@@ -659,7 +682,7 @@ async def get_watch_ui():
 
 @router.message(Command("sync"))
 async def cmd_sync(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     
     status = await message.answer("⏳ 正在同步涨停数据...")
@@ -682,7 +705,7 @@ async def cmd_sync(message: types.Message):
 
 @router.callback_query(F.data == "lu:sync")
 async def cb_lu_sync(callback: types.CallbackQuery):
-    await callback.answer("⏳ 同步中...")
+    await safe_answer(callback, "⏳ 同步中...")
     
     try:
         stocks = await limit_up_service.collect_limit_ups()
@@ -707,7 +730,7 @@ async def cb_lu_sync(callback: types.CallbackQuery):
 
 @router.message(Command("scan"))
 async def cmd_scan(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     
     status = await message.answer("🔍 正在扫描全A股启动信号...\n\n⏳ 需要几分钟，请稍候")
@@ -748,7 +771,7 @@ async def cmd_scan(message: types.Message):
 
 @router.callback_query(F.data == "lu:scan")
 async def cb_scan(callback: types.CallbackQuery):
-    await callback.answer("扫描中...")
+    await safe_answer(callback, "扫描中...")
     await cmd_scan(callback.message)
 
 
@@ -758,7 +781,7 @@ async def cb_scan(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "sector:main")
 async def cb_sector_main(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     
     text = (
         "📊 <b>板块分析</b>\n"
@@ -792,7 +815,7 @@ async def cb_sector_main(callback: types.CallbackQuery):
 
 @router.message(Command("industry"))
 async def cmd_industry(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_sector_ui("industry")
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
@@ -800,7 +823,7 @@ async def cmd_industry(message: types.Message):
 
 @router.callback_query(F.data == "sector:industry")
 async def cb_industry(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_sector_ui("industry")
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
@@ -814,7 +837,7 @@ async def cb_industry(callback: types.CallbackQuery):
 
 @router.message(Command("concept"))
 async def cmd_concept(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_sector_ui("concept")
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
@@ -822,7 +845,7 @@ async def cmd_concept(message: types.Message):
 
 @router.callback_query(F.data == "sector:concept")
 async def cb_concept(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     text, markup = await get_sector_ui("concept")
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
@@ -873,7 +896,7 @@ async def get_sector_ui(sector_type: str):
 
 @router.message(Command("hot7"))
 async def cmd_hot7(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_hot_ui(7)
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
@@ -881,7 +904,7 @@ async def cmd_hot7(message: types.Message):
 
 @router.message(Command("hot14"))
 async def cmd_hot14(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_hot_ui(14)
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
@@ -889,7 +912,7 @@ async def cmd_hot14(message: types.Message):
 
 @router.message(Command("hot30"))
 async def cmd_hot30(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_hot_ui(30)
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
@@ -897,7 +920,7 @@ async def cmd_hot30(message: types.Message):
 
 @router.callback_query(F.data.startswith("sector:hot:"))
 async def cb_hot(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     days = int(callback.data.split(":")[2])
     text, markup = await get_hot_ui(days)
     try:
@@ -939,7 +962,7 @@ async def get_hot_ui(days: int):
 
 @router.callback_query(F.data == "sector:weak")
 async def cb_weak(callback: types.CallbackQuery):
-    await callback.answer()
+    await safe_answer(callback)
     
     sectors = await sector_service.get_weak_sectors(days=7, limit=15)
     
@@ -973,7 +996,7 @@ async def cb_weak(callback: types.CallbackQuery):
 
 @router.message(Command("sector_sync"))
 async def cmd_sector_sync(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     
     status = await message.answer("⏳ 正在同步板块数据...")
@@ -999,7 +1022,7 @@ async def cmd_sector_sync(message: types.Message):
 
 @router.callback_query(F.data == "sector:sync")
 async def cb_sector_sync(callback: types.CallbackQuery):
-    await callback.answer("⏳ 同步中...")
+    await safe_answer(callback, "⏳ 同步中...")
     
     try:
         result = await sector_service.collect_all_sectors()
@@ -1027,7 +1050,7 @@ async def cb_sector_sync(callback: types.CallbackQuery):
 
 @router.callback_query(F.data == "sector:report")
 async def cb_sector_report(callback: types.CallbackQuery):
-    await callback.answer("生成日报中...")
+    await safe_answer(callback, "生成日报中...")
     
     try:
         report = await sector_service.generate_daily_report()
@@ -1048,7 +1071,7 @@ async def cb_sector_report(callback: types.CallbackQuery):
 
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
-    if not is_allowed(message.from_user.id):
+    if not await is_allowed(message.from_user.id):
         return
     
     text = (
@@ -1075,6 +1098,167 @@ async def cmd_help(message: types.Message):
         "/hot7 - 7日强势板块\n"
         "/hot14 - 14日强势板块\n"
         "/hot30 - 30日强势板块\n"
-        "/sector_sync - 同步板块数据"
+        "/sector_sync - 同步板块数据\n\n"
+        "<b>👤 用户管理</b>\n"
+        "/useradd - 添加用户\n"
+        "/userdel - 删除用户\n"
+        "/userlist - 用户列表"
     )
     await message.answer(text, parse_mode="HTML")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# User Management (用户管理)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("useradd"))
+async def cmd_useradd(message: types.Message, command: CommandObject):
+    """Add a user to allowed list: /useradd <user_id> [username]"""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    if not command.args:
+        await message.answer("❌ 用法: /useradd <user_id> [username]")
+        return
+    
+    args = command.args.split()
+    try:
+        user_id = int(args[0])
+    except ValueError:
+        await message.answer("❌ user_id 必须是数字")
+        return
+    
+    username = args[1] if len(args) > 1 else None
+    
+    if not db.pool:
+        await message.answer("❌ 数据库未连接")
+        return
+    
+    try:
+        await db.pool.execute("""
+            INSERT INTO allowed_users (user_id, username, added_by)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (user_id) DO UPDATE SET username = $2
+        """, user_id, username, message.from_user.id)
+        
+        name_str = f" (@{username})" if username else ""
+        await message.answer(f"✅ 已添加用户: <code>{user_id}</code>{name_str}", parse_mode="HTML")
+    except Exception as e:
+        await message.answer(f"❌ 添加失败: {e}")
+
+
+@router.message(Command("userdel"))
+async def cmd_userdel(message: types.Message, command: CommandObject):
+    """Remove a user from allowed list: /userdel <user_id>"""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    if not command.args:
+        await message.answer("❌ 用法: /userdel <user_id>")
+        return
+    
+    try:
+        user_id = int(command.args.strip())
+    except ValueError:
+        await message.answer("❌ user_id 必须是数字")
+        return
+    
+    if not db.pool:
+        await message.answer("❌ 数据库未连接")
+        return
+    
+    try:
+        result = await db.pool.execute("""
+            DELETE FROM allowed_users WHERE user_id = $1
+        """, user_id)
+        
+        if result == "DELETE 1":
+            await message.answer(f"✅ 已删除用户: <code>{user_id}</code>", parse_mode="HTML")
+        else:
+            await message.answer(f"⚠️ 用户不存在: <code>{user_id}</code>", parse_mode="HTML")
+    except Exception as e:
+        await message.answer(f"❌ 删除失败: {e}")
+
+
+@router.message(Command("userlist"))
+async def cmd_userlist(message: types.Message):
+    """List all allowed users."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    text, markup = await get_userlist_ui()
+    await message.answer(text, parse_mode="HTML", reply_markup=markup)
+
+
+@router.callback_query(F.data == "user:list")
+async def cb_userlist(callback: types.CallbackQuery):
+    await safe_answer(callback)
+    text, markup = await get_userlist_ui()
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+    except:
+        pass
+
+
+@router.callback_query(F.data.startswith("user:del:"))
+async def cb_user_del(callback: types.CallbackQuery):
+    user_id = int(callback.data.split(":")[2])
+    
+    if not db.pool:
+        await safe_answer(callback, "❌ 数据库未连接")
+        return
+    
+    try:
+        await db.pool.execute("DELETE FROM allowed_users WHERE user_id = $1", user_id)
+        await safe_answer(callback, "✅ 已删除")
+        
+        text, markup = await get_userlist_ui()
+        try:
+            await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+        except:
+            pass
+    except Exception as e:
+        await safe_answer(callback, f"❌ 失败: {e}")
+
+
+async def get_userlist_ui():
+    """Get user list UI."""
+    # Get all users from DB (includes seeded env users)
+    db_users = []
+    if db.pool:
+        try:
+            rows = await db.pool.fetch("""
+                SELECT user_id, username, added_by, created_at
+                FROM allowed_users ORDER BY created_at DESC
+            """)
+            db_users = list(rows)
+        except:
+            pass
+    
+    text = "👤 <b>授权用户</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    if db_users:
+        for row in db_users:
+            username = f" (@{row['username']})" if row['username'] else ""
+            source = " 🔒" if row['username'] == 'env' else ""
+            text += f"  • <code>{row['user_id']}</code>{username}{source}\n"
+    else:
+        text += "📭 无授权用户 (允许所有人)"
+    
+    builder = InlineKeyboardBuilder()
+    
+    # Add delete buttons for users
+    for row in db_users[:10]:  # Limit to 10 buttons
+        label = f"❌ {row['username'] or row['user_id']}"
+        builder.button(text=label, callback_data=f"user:del:{row['user_id']}")
+    
+    builder.button(text="🔄 刷新", callback_data="user:list")
+    builder.button(text="◀️ 返回", callback_data="main")
+    
+    # Adjust layout
+    if db_users:
+        builder.adjust(2, 2, 2, 2, 2, 2)
+    else:
+        builder.adjust(2)
+    
+    return text, builder.as_markup()

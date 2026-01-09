@@ -316,6 +316,25 @@ class Database:
                     UNIQUE(report_type, report_date)
                 );
             """)
+
+            # Allowed Users Table (授权用户)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS allowed_users (
+                    user_id BIGINT PRIMARY KEY,
+                    username TEXT,
+                    added_by BIGINT,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            
+            # Seed allowed users from env if not already in DB
+            env_users = settings.allowed_users_list or []
+            for user_id in env_users:
+                await conn.execute("""
+                    INSERT INTO allowed_users (user_id, username, added_by)
+                    VALUES ($1, 'env', 0)
+                    ON CONFLICT (user_id) DO NOTHING
+                """, user_id)
             
             logger.info("Database tables initialized")
 
