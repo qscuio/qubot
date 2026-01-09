@@ -223,7 +223,10 @@ class LimitUpService:
     
 
     async def _update_streaks(self, target_date: date, stocks: List[Dict]):
-        """Update consecutive limit-up streak statistics."""
+        """Update consecutive limit-up streak statistics.
+        
+        Uses AkShare's limit_times as the authoritative streak count.
+        """
         if not db.pool:
             return
         
@@ -234,35 +237,32 @@ class LimitUpService:
         
         for stock in stocks:
             try:
+                # Use AkShare's limit_times as the authoritative consecutive count
+                streak_count = stock.get("limit_times", 1) or 1
+                
                 existing = await db.pool.fetchrow("""
                     SELECT * FROM limit_up_streaks WHERE code = $1
                 """, stock["code"])
                 
                 if existing:
-                    # Check if consecutive (within 3 trading days)
-                    last_date = existing["last_limit_date"]
-                    days_diff = (target_date - last_date).days
-                    
-                    if days_diff <= 3:  # Consecutive
-                        new_streak = existing["streak_count"] + 1
-                    else:
-                        new_streak = 1  # Reset
-                    
+                    # Update existing entry with current streak from AkShare
                     await db.pool.execute("""
                         UPDATE limit_up_streaks SET
                             streak_count = $2,
                             last_limit_date = $3,
+                            name = COALESCE($4, name),
                             updated_at = NOW()
                         WHERE code = $1
-                    """, stock["code"], new_streak, target_date)
+                    """, stock["code"], streak_count, target_date, stock.get("name"))
                 else:
-                    # New entry
+                    # New entry - use AkShare's limit_times
+                    first_date = target_date - timedelta(days=streak_count - 1)  # Estimate first limit date
                     await db.pool.execute("""
                         INSERT INTO limit_up_streaks 
                         (code, name, streak_count, first_limit_date, last_limit_date, cycle_start)
                         VALUES ($1, $2, $3, $4, $5, $6)
-                    """, stock["code"], stock["name"], stock["limit_times"],
-                        target_date, target_date, cycle_start)
+                    """, stock["code"], stock["name"], streak_count,
+                        first_date, target_date, cycle_start)
                         
             except Exception as e:
                 logger.warn(f"Failed to update streak for {stock['code']}: {e}")

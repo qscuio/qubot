@@ -5,6 +5,7 @@ Scans all A-share stocks for startup signals:
 - Breakout: Close > 20-day high
 - Volume surge: Volume > 5-day avg × 2  
 - MA bullish: MA5 > MA10 > MA20 with golden cross
+- Small bullish 5: 5 consecutive small bullish candles at bottom (底部连续5个小阳线)
 """
 
 import asyncio
@@ -134,6 +135,7 @@ class StockScanner:
             "breakout": [],
             "volume": [],
             "ma_bullish": [],
+            "small_bullish_5": [],  # 底部连续5个小阳线
         }
         
         try:
@@ -178,6 +180,9 @@ class StockScanner:
                     
                     if self._check_ma_bullish(hist, pd):
                         signals["ma_bullish"].append(stock_info)
+                    
+                    if self._check_small_bullish_5(hist, pd):
+                        signals["small_bullish_5"].append(stock_info)
                     
                     checked += 1
                     
@@ -230,6 +235,53 @@ class StockScanner:
             golden_cross = ma5 > ma10 and ma5_prev <= ma10_prev
             
             return bullish and golden_cross
+        except:
+            return False
+    
+    def _check_small_bullish_5(self, hist, pd) -> bool:
+        """检查底部连续5个小阳线信号.
+        
+        条件:
+        1. 最近5日都是阳线 (收盘 > 开盘)
+        2. 每日涨幅在0.5%-3%之间 (小阳线)
+        3. 股价在近20日低位 (底部)
+        """
+        try:
+            # Get last 5 days
+            last_5 = hist.tail(5)
+            
+            if len(last_5) < 5:
+                return False
+            
+            # Check all 5 days are bullish (close > open) and small body
+            for i in range(5):
+                row = last_5.iloc[i]
+                open_price = row['开盘']
+                close = row['收盘']
+                
+                # Must be bullish
+                if close <= open_price:
+                    return False
+                
+                # Calculate body percentage
+                body_pct = (close - open_price) / open_price * 100
+                
+                # Small bullish: 0.5% - 3%
+                if body_pct < 0.5 or body_pct > 3.0:
+                    return False
+            
+            # Check if at bottom (current price < 20-day MA or in lower 30% of 20-day range)
+            close_current = hist['收盘'].iloc[-1]
+            high_20 = hist['最高'].max()
+            low_20 = hist['最低'].min()
+            range_20 = high_20 - low_20
+            
+            if range_20 > 0:
+                position = (close_current - low_20) / range_20
+                # At bottom means in lower 40% of range
+                return position < 0.4
+            
+            return False
         except:
             return False
 

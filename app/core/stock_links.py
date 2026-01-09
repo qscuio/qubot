@@ -40,3 +40,19 @@ async def get_chart_url(code: str, name: Optional[str] = None) -> str:
         return telegraph_url
 
     return base_url
+
+
+def get_sector_url(sector_name: str, sector_type: str = "concept") -> str:
+    """Generate EastMoney sector page URL.
+    
+    Args:
+        sector_name: Name of the sector (e.g., "Kimi概念")
+        sector_type: 'industry' or 'concept'
+    
+    Returns:
+        EastMoney sector search URL
+    """
+    import urllib.parse
+    # EastMoney search URL for sectors
+    encoded_name = urllib.parse.quote(sector_name)
+    return f"https://so.eastmoney.com/web/s?keyword={encoded_name}"

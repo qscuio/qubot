@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     # Limit-Up Tracker settings
     ENABLE_LIMIT_UP: bool = True
     ENABLE_SECTOR: bool = True  # Sector analysis tracking
+    ENABLE_MARKET_REPORT: bool = True  # Market analysis reports
     KEYWORDS: Optional[str] = None
     FROM_USERS: Optional[str] = None
     ALLOWED_USERS: Optional[str] = None

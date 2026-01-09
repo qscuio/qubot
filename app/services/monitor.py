@@ -1263,18 +1263,17 @@ class MonitorService:
 
         # Logic to save for all interested users (simplified for now)
         # Using a default user 0 (system) or checking settings.allowed_users_list
-        # Note: DB schema seems to enforce INTEGER for user_id, so we filter for numeric IDs
+        # DB schema: user_id is TEXT type
         users = settings.allowed_users_list or ["0"]
         
         for user_id in users:
             try:
-                # Ensure user_id is numeric if DB requires integer
-                if str(user_id).isdigit() or (isinstance(user_id, str) and user_id.lstrip('-').isdigit()):
-                    uid_val = int(user_id)
-                    await db.pool.execute("""
-                        INSERT INTO monitor_history (user_id, source, source_id, message, created_at)
-                        VALUES ($1, $2, $3, $4, NOW())
-                    """, uid_val, source, str(source_id), message)
+                # monitor_history.user_id is TEXT type, so pass as string
+                uid_str = str(user_id)
+                await db.pool.execute("""
+                    INSERT INTO monitor_history (user_id, source, source_id, message, created_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                """, uid_str, source, str(source_id), message)
             except Exception as e:
                 logger.warn(f"Failed to save history for {user_id}: {e}")
 

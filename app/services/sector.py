@@ -13,6 +13,7 @@ import pytz
 from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
+from app.core.stock_links import get_sector_url
 
 logger = Logger("SectorService")
 
@@ -453,13 +454,15 @@ class SectorService:
             lines.append("📈 领涨:")
             for r in industry[:5]:
                 pct = f"{r['change_pct']:+.2f}%"
-                lines.append(f"  • {r['name']} {pct}")
+                url = get_sector_url(r['name'], 'industry')
+                lines.append(f"  • <a href=\"{url}\">{r['name']}</a> {pct}")
             
             # Bottom 3
             lines.append("\n📉 领跌:")
             for r in industry[-3:]:
                 pct = f"{r['change_pct']:+.2f}%"
-                lines.append(f"  • {r['name']} {pct}")
+                url = get_sector_url(r['name'], 'industry')
+                lines.append(f"  • <a href=\"{url}\">{r['name']}</a> {pct}")
         
         # Concept summary
         if concept:
@@ -472,13 +475,15 @@ class SectorService:
             for r in concept[:5]:
                 pct = f"{r['change_pct']:+.2f}%"
                 leader = f"({r['leading_stock']})" if r['leading_stock'] else ""
-                lines.append(f"  • {r['name']} {pct} {leader}")
+                url = get_sector_url(r['name'], 'concept')
+                lines.append(f"  • <a href=\"{url}\">{r['name']}</a> {pct} {leader}")
             
             # Bottom 3
             lines.append("\n📉 领跌:")
             for r in concept[-3:]:
                 pct = f"{r['change_pct']:+.2f}%"
-                lines.append(f"  • {r['name']} {pct}")
+                url = get_sector_url(r['name'], 'concept')
+                lines.append(f"  • <a href=\"{url}\">{r['name']}</a> {pct}")
         
         report = "\n".join(lines)
         
@@ -518,14 +523,16 @@ class SectorService:
                 type_icon = "🏭" if s['type'] == 'industry' else "💡"
                 pct = f"{s['total_change']:+.2f}%"
                 win_rate = f"{s['up_days']}/{s['total_days']}天上涨"
-                lines.append(f"{i}. {type_icon} {s['name']} {pct} ({win_rate})")
+                url = get_sector_url(s['name'], s['type'])
+                lines.append(f"{i}. {type_icon} <a href=\"{url}\">{s['name']}</a> {pct} ({win_rate})")
         
         if weak:
             lines.append("\n📉 <b>本周弱势板块</b>\n")
             for i, s in enumerate(weak, 1):
                 type_icon = "🏭" if s['type'] == 'industry' else "💡"
                 pct = f"{s['total_change']:+.2f}%"
-                lines.append(f"{i}. {type_icon} {s['name']} {pct}")
+                url = get_sector_url(s['name'], s['type'])
+                lines.append(f"{i}. {type_icon} <a href=\"{url}\">{s['name']}</a> {pct}")
         
         report = "\n".join(lines)
         
@@ -565,14 +572,16 @@ class SectorService:
                 type_icon = "🏭" if s['type'] == 'industry' else "💡"
                 pct = f"{s['total_change']:+.2f}%"
                 avg = f"日均{s['avg_change']:+.2f}%"
-                lines.append(f"{i}. {type_icon} {s['name']} {pct} ({avg})")
+                url = get_sector_url(s['name'], s['type'])
+                lines.append(f"{i}. {type_icon} <a href=\"{url}\">{s['name']}</a> {pct} ({avg})")
         
         if weak:
             lines.append("\n📉 <b>月度弱势板块</b>\n")
             for i, s in enumerate(weak, 1):
                 type_icon = "🏭" if s['type'] == 'industry' else "💡"
                 pct = f"{s['total_change']:+.2f}%"
-                lines.append(f"{i}. {type_icon} {s['name']} {pct}")
+                url = get_sector_url(s['name'], s['type'])
+                lines.append(f"{i}. {type_icon} <a href=\"{url}\">{s['name']}</a> {pct}")
         
         report = "\n".join(lines)
         
