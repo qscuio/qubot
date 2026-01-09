@@ -173,6 +173,16 @@ class TelegramService:
             logger.warn("Cannot send message, no main client connected")
             return
         
+        # Try to resolve the peer entity first
+        resolved_peer = peer
+        try:
+            # For channel IDs (especially with -100 prefix), we need to resolve the entity
+            if isinstance(peer, (str, int)):
+                resolved_peer = await self.main_client.get_entity(peer)
+        except Exception as e:
+            logger.warn(f"Could not resolve peer {peer}: {e}")
+            # Continue with original peer, might still work for some cases
+        
         # Process media types
         sendable_file = None
         enable_link_preview = True  # Default: allow link previews
@@ -198,7 +208,7 @@ class TelegramService:
         if sendable_file:
             try:
                 async with rate_limiter:
-                    await self.main_client.send_message(peer, message, parse_mode=parse_mode, file=sendable_file)
+                    await self.main_client.send_message(resolved_peer, message, parse_mode=parse_mode, file=sendable_file)
                 logger.debug(f"Sent message with media to {peer}")
                 return
             except Exception as e:
@@ -211,7 +221,7 @@ class TelegramService:
         for chunk in chunks:
             try:
                 async with rate_limiter:
-                    await self.main_client.send_message(peer, chunk, parse_mode=parse_mode, link_preview=enable_link_preview)
+                    await self.main_client.send_message(resolved_peer, chunk, parse_mode=parse_mode, link_preview=enable_link_preview)
                 logger.debug(f"Sent message to {peer}")
             except Exception as e:
                 logger.error(f"Failed to send message to {peer}: {e}")
