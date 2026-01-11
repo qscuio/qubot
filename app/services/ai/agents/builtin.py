@@ -1,11 +1,20 @@
 """
-Built-in agents: Chat, Research, Code, and DevOps agents.
+Built-in agents: Chat, Research, Code, DevOps, Build, Plan, Explore, and Summary agents.
+
+Enhanced with professional prompts ported from https://github.com/anomalyco/opencode
 """
 
 import json
 from typing import List, Dict, Any, Optional
 from app.services.ai.agents.base import Agent, AgentResponse
 from app.services.ai.agents.registry import register_agent
+from app.services.ai.agents.prompts import (
+    BUILD_AGENT_PROMPT,
+    PLAN_AGENT_PROMPT,
+    EXPLORE_AGENT_PROMPT,
+    SUMMARY_PROMPT,
+)
+from app.services.ai.agents.permissions import get_allowed_tools, check_permission
 from app.services.ai.tools.base import ToolResult
 from app.services.ai.skills import skill_registry
 from app.core.config import settings
@@ -356,6 +365,103 @@ Guidelines:
 - Deliver clean, publish-ready prose."""
 
 
+class BuildAgent(BaseToolAgent):
+    """Full-access development agent with professional guidelines.
+    
+    This is the primary agent for active development work, ported from opencode's "build" agent.
+    Has full tool access with comprehensive git safety and file editing guidelines.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        # Add all registered tools for maximum capability
+        self.add_all_tools()
+    
+    @property
+    def name(self) -> str:
+        return "build"
+    
+    @property
+    def description(self) -> str:
+        return "Full-access development agent with git safety and file editing guidelines."
+    
+    @property
+    def system_prompt(self) -> str:
+        return BUILD_AGENT_PROMPT
+
+
+class PlanAgent(BaseToolAgent):
+    """Read-only analysis and planning agent.
+    
+    Ported from opencode's "plan" agent. Ideal for exploring unfamiliar codebases
+    or planning changes without risk of modification.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        # Only add read-only tools
+        self.add_tools_by_name(["file_read", "file_list", "file_search", "web_search", "fetch_url", "memory"])
+    
+    @property
+    def name(self) -> str:
+        return "plan"
+    
+    @property
+    def description(self) -> str:
+        return "Read-only analysis agent for exploring codebases and planning changes."
+    
+    @property
+    def system_prompt(self) -> str:
+        return PLAN_AGENT_PROMPT
+
+
+class ExploreAgent(BaseToolAgent):
+    """Fast codebase search specialist subagent.
+    
+    Ported from opencode's "explore" agent. Specialized for rapidly finding
+    files and patterns in codebases.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        self.add_tools_by_name(["file_read", "file_list", "file_search", "web_search", "fetch_url"])
+    
+    @property
+    def name(self) -> str:
+        return "explore"
+    
+    @property
+    def description(self) -> str:
+        return "Fast codebase search specialist for finding files and patterns."
+    
+    @property
+    def system_prompt(self) -> str:
+        return EXPLORE_AGENT_PROMPT
+
+
+class SummaryAgent(BaseToolAgent):
+    """Conversation summarizer utility agent.
+    
+    Generates PR-style summaries of conversations. No tools.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        # No tools - just summarizes
+    
+    @property
+    def name(self) -> str:
+        return "summary"
+    
+    @property
+    def description(self) -> str:
+        return "Generates PR-style summaries of conversations."
+    
+    @property
+    def system_prompt(self) -> str:
+        return SUMMARY_PROMPT
+
+
 def register_builtin_agents():
     """Register all builtin agents with the registry."""
     register_agent(ChatAgent())
@@ -363,4 +469,10 @@ def register_builtin_agents():
     register_agent(CodeAgent())
     register_agent(DevOpsAgent())
     register_agent(WriterAgent())
-    logger.info("Registered builtin agents")
+    # New opencode-style agents
+    register_agent(BuildAgent())
+    register_agent(PlanAgent())
+    register_agent(ExploreAgent())
+    register_agent(SummaryAgent())
+    logger.info("Registered builtin agents (including opencode-style agents)")
+
