@@ -166,6 +166,13 @@ class Settings(BaseSettings):
     GIT_SSH_COMMAND: Optional[str] = None
     GIT_KNOWN_HOSTS: Optional[str] = None
 
+    # Vibe Remote Settings
+    VIBE_BOT_TOKEN: Optional[str] = None
+    ENABLE_VIBE_REMOTE: bool = True
+    VIBE_DEFAULT_AGENT: str = "gemini"  # claude, gemini, or codex
+    VIBE_DEFAULT_CWD: Optional[str] = None
+    VIBE_ALLOWED_USERS: Optional[str] = None  # Comma-separated user IDs
+
     # Feature Flags
     ENABLE_RSS: bool = True
     ENABLE_AI: bool = True

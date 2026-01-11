@@ -20,6 +20,8 @@ jieba==0.42.1
 beautifulsoup4>=4.12.0
 lxml>=5.0.0
 akshare>=1.12.0
+PyGithub>=2.1.0
+pyyaml>=6.0
 
 # Testing
 pytest>=8.0.0

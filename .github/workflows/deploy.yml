@@ -87,6 +87,20 @@ jobs:
               fi
               $SUDO ufw --force enable || true
             fi
+            
+            # Install Node.js 20+ for CLI agents (Vibe Remote)
+            if ! command -v node &> /dev/null || [ "$(node -v | cut -d'v' -f2 | cut -d'.' -f1)" -lt 20 ]; then
+              echo "📦 Installing Node.js 20..."
+              curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash -
+              $SUDO apt-get install -y nodejs
+            fi
+            
+            # Install CLI coding agents for Vibe Remote
+            echo "🤖 Installing CLI agents..."
+            $SUDO npm install -g @google/gemini-cli 2>/dev/null || true
+            $SUDO npm install -g @anthropic-ai/claude-code 2>/dev/null || true
+            $SUDO npm install -g @openai/codex 2>/dev/null || true
+            echo "✅ CLI agents installation complete"
 
       - name: Setup Nginx reverse proxy
         if: steps.check_enabled.outputs.skip != 'true'
@@ -406,6 +420,7 @@ jobs:
             printf 'CRAWLER_BOT_TOKEN=%s\n' '${{ secrets.CRAWLER_BOT_TOKEN }}' >> .env
             printf 'STOCK_ALERT_CHANNEL=%s\n' '${{ secrets.STOCK_ALERT_CHANNEL }}' >> .env
             printf 'ALERT_CHANNEL=%s\n' '${{ secrets.ALERT_CHANNEL }}' >> .env
+            printf 'VIBE_BOT_TOKEN=%s\n' '${{ secrets.VIBE_BOT_TOKEN }}' >> .env
             
             # Deploy (fail if build fails)
             docker compose down || true
