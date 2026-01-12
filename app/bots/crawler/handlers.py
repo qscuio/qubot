@@ -8,7 +8,7 @@ from aiogram import Router, F, types
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest
-from datetime import date
+from datetime import date, datetime
 
 from app.services.crawler import crawler_service
 from app.services.limit_up import limit_up_service
@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.core.database import db
 from app.core.logger import Logger
 from app.core.stock_links import get_chart_url
+from app.core.timezone import china_today
 
 logger = Logger("CrawlerBot")
 router = Router()
@@ -429,7 +430,8 @@ async def get_today_ui():
     if not db.pool:
         return "❌ 数据库未连接", None
     
-    today = date.today()
+    # Use China timezone for date calculation
+    today = china_today()
     rows = await db.pool.fetch("""
         SELECT code, name, close_price, change_pct, limit_times
         FROM limit_up_stocks WHERE date = $1
@@ -480,7 +482,8 @@ async def get_first_ui():
     if not db.pool:
         return "❌ 数据库未连接", None
     
-    today = date.today()
+    # Use China timezone for date calculation
+    today = china_today()
     # First-board: stocks with limit_times = 1 AND is_sealed = true (收盘涨停)
     rows = await db.pool.fetch("""
         SELECT code, name, close_price, change_pct, turnover_rate
@@ -532,7 +535,8 @@ async def get_burst_ui():
     if not db.pool:
         return "❌ 数据库未连接", None
     
-    today = date.today()
+    # Use China timezone for date calculation
+    today = china_today()
     # Burst: stocks with is_sealed = false (曾涨停/炸板)
     rows = await db.pool.fetch("""
         SELECT code, name, close_price, change_pct, turnover_rate

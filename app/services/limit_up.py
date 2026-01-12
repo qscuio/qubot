@@ -8,17 +8,14 @@ and maintains consecutive limit-up (连板) statistics.
 import asyncio
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional
-import pytz
 
 from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
 from app.core.stock_links import get_chart_url
+from app.core.timezone import CHINA_TZ, china_now, china_today
 
 logger = Logger("LimitUpService")
-
-# China timezone
-CHINA_TZ = pytz.timezone("Asia/Shanghai")
 
 
 class LimitUpService:
@@ -83,7 +80,7 @@ class LimitUpService:
         needed = 7 - len(existing_set)
         logger.info(f"Have {len(existing_set)} days, need {needed} more, backfilling...")
         
-        today = date.today()
+        today = china_today()
         days_collected = 0
         days_checked = 0
         
@@ -130,7 +127,7 @@ class LimitUpService:
         if not ak:
             return []
         
-        target_date = target_date or date.today()
+        target_date = target_date or china_today()
         date_str = target_date.strftime("%Y%m%d")
         
         stocks = []
@@ -315,7 +312,7 @@ class LimitUpService:
             return []
         
         # Get yesterday's limit-up stocks
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = china_today() - timedelta(days=1)
         # Skip weekends
         if yesterday.weekday() >= 5:
             yesterday = yesterday - timedelta(days=yesterday.weekday() - 4)
@@ -518,12 +515,12 @@ class LimitUpService:
     
     async def _scheduler_loop(self):
         """Background scheduler for timed tasks."""
-        # Morning report times: every minute from 9:20 to 10:00, skipping 9:25-9:30 (call auction)
+        # Morning report times: every minute from 9:15 to 10:00, skipping 9:25-9:30 (call auction)
         morning_times = []
         for hour in [9, 10]:
             for minute in range(60):
-                if hour == 9 and minute < 20:
-                    continue  # Start from 9:20
+                if hour == 9 and minute < 15:
+                    continue  # Start from 9:15
                 if hour == 9 and 25 <= minute <= 30:
                     continue  # Skip 9:25-9:30 (call auction period)
                 if hour == 10 and minute > 0:

@@ -2,7 +2,6 @@ import re
 import time
 import asyncio
 from datetime import datetime
-import pytz
 from collections import OrderedDict
 from typing import Dict, List, Optional
 from telethon import events
@@ -11,6 +10,7 @@ from app.core.config import settings
 from app.core.logger import Logger
 from app.core.bot import telegram_service
 from app.core.database import db
+from app.core.timezone import CHINA_TZ as SHANGHAI_TZ, china_now
 from app.services.message_dedup import get_deduplicator
 from app.services.forward_filters import (
     create_default_filter_chain, FilterContext, FilterAction, FilterResult
@@ -18,12 +18,9 @@ from app.services.forward_filters import (
 
 logger = Logger("MonitorService")
 
-# Shanghai timezone for report scheduling
-SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
-
 def get_shanghai_time():
     """Get current time in Shanghai timezone."""
-    return datetime.now(SHANGHAI_TZ)
+    return china_now()
 
 
 class MessageBuffer:

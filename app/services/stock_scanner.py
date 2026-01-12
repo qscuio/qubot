@@ -11,16 +11,14 @@ Scans all A-share stocks for startup signals:
 import asyncio
 from datetime import datetime, date
 from typing import List, Dict, Optional
-import pytz
 
 from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
 from app.core.stock_links import get_chart_url
+from app.core.timezone import CHINA_TZ, china_now
 
 logger = Logger("StockScanner")
-
-CHINA_TZ = pytz.timezone("Asia/Shanghai")
 
 
 class StockScanner:
@@ -71,7 +69,7 @@ class StockScanner:
         
         while self.is_running:
             try:
-                now = datetime.now(CHINA_TZ)
+                now = china_now()
                 time_str = now.strftime("%H:%M")
                 date_str = now.strftime("%Y-%m-%d")
                 
@@ -104,7 +102,7 @@ class StockScanner:
             logger.info("No signals found")
             return
         
-        now = datetime.now(CHINA_TZ)
+        now = china_now()
         text = f"🔍 <b>启动信号扫描</b> {now.strftime('%Y-%m-%d %H:%M')}\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         
         for signal_type, stocks in signals.items():

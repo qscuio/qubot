@@ -12,6 +12,7 @@ from typing import List, Dict, Tuple, Optional
 
 from app.core.logger import Logger
 from app.core.database import db
+from app.core.timezone import china_strftime, china_now
 from app.services.market_keywords import MarketKeywords
 
 logger = Logger("HotWordsService")
@@ -97,7 +98,7 @@ class HotWordsService:
         if not text:
             return
         
-        date = date or datetime.now().strftime('%Y-%m-%d')
+        date = date or china_strftime('%Y-%m-%d')
         if date not in self.daily_words:
             self.daily_words[date] = Counter()
         
@@ -106,7 +107,7 @@ class HotWordsService:
     
     def get_hot_words(self, date: str = None, top_n: int = 20) -> List[Tuple[str, int]]:
         """Get hot words for a specific date."""
-        date = date or datetime.now().strftime('%Y-%m-%d')
+        date = date or china_strftime('%Y-%m-%d')
         counter = self.daily_words.get(date, Counter())
         return counter.most_common(top_n)
     
@@ -121,7 +122,7 @@ class HotWordsService:
             logger.warn("Database not available for hot words persistence")
             return
         
-        date = date or datetime.now().strftime('%Y-%m-%d')
+        date = date or china_strftime('%Y-%m-%d')
         counter = self.daily_words.get(date)
         if not counter:
             return
@@ -149,7 +150,7 @@ class HotWordsService:
         if not db.pool:
             return []
         
-        date = date or datetime.now().strftime('%Y-%m-%d')
+        date = date or china_strftime('%Y-%m-%d')
         
         try:
             rows = await db.pool.fetch("""
@@ -168,8 +169,8 @@ class HotWordsService:
         if not db.pool:
             return []
         
-        today = datetime.now().strftime('%Y-%m-%d')
-        week_ago = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        today = china_strftime('%Y-%m-%d')
+        week_ago = (china_now() - timedelta(days=days)).strftime('%Y-%m-%d')
         
         try:
             # Get words that appeared more today than average
@@ -247,7 +248,7 @@ class HotWordsService:
     
     def clear_date(self, date: str = None):
         """Clear hot words for a specific date."""
-        date = date or datetime.now().strftime('%Y-%m-%d')
+        date = date or china_strftime('%Y-%m-%d')
         if date in self.daily_words:
             del self.daily_words[date]
 

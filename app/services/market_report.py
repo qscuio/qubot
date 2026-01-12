@@ -15,16 +15,13 @@ import asyncio
 import json
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional
-import pytz
 
 from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
+from app.core.timezone import CHINA_TZ, china_now, china_today
 
 logger = Logger("MarketReportService")
-
-# China timezone
-CHINA_TZ = pytz.timezone("Asia/Shanghai")
 
 
 class MarketReportService:
@@ -286,7 +283,7 @@ class MarketReportService:
     
     async def generate_weekly_report(self, end_date: date = None) -> str:
         """Generate weekly market report (Friday 8 PM)."""
-        end_date = end_date or date.today()
+        end_date = end_date or china_today()
         start_date = end_date - timedelta(days=6)
         
         # Collect data
@@ -320,7 +317,7 @@ class MarketReportService:
     
     async def generate_monthly_report(self, end_date: date = None) -> str:
         """Generate monthly market report."""
-        end_date = end_date or date.today()
+        end_date = end_date or china_today()
         start_date = end_date.replace(day=1)
         
         # Collect data
@@ -361,7 +358,7 @@ class MarketReportService:
             days: Number of days to analyze (default 7)
         """
         if until_date is None:
-            until_date = datetime.now(CHINA_TZ)
+            until_date = china_now()
         
         end_date = until_date.date()
         start_date = end_date - timedelta(days=days-1)

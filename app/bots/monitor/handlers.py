@@ -718,10 +718,9 @@ async def cmd_test(message: types.Message):
     if not is_allowed(message.from_user.id): return
     
     from app.core.bot import telegram_service
-    from datetime import datetime
-    import pytz
+    from app.core.timezone import china_strftime
     
-    now = datetime.now(pytz.timezone("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
+    now = china_strftime("%Y-%m-%d %H:%M:%S")
     
     # All target channels to test
     channels = {

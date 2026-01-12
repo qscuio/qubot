@@ -8,17 +8,14 @@ and provides strong sector analysis based on different time periods.
 import asyncio
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional
-import pytz
 
 from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
 from app.core.stock_links import get_sector_url
+from app.core.timezone import CHINA_TZ, china_now, china_today
 
 logger = Logger("SectorService")
-
-# China timezone
-CHINA_TZ = pytz.timezone("Asia/Shanghai")
 
 
 class SectorService:
@@ -83,7 +80,7 @@ class SectorService:
         needed = 5 - len(existing_set)
         logger.info(f"Have {len(existing_set)} days, need {needed} more, backfilling...")
         
-        today = date.today()
+        today = china_today()
         days_collected = 0
         days_checked = 0
         
@@ -127,7 +124,7 @@ class SectorService:
         if not ak:
             return []
         
-        target_date = target_date or date.today()
+        target_date = target_date or china_today()
         
         try:
             df = await asyncio.to_thread(ak.stock_board_industry_name_em)
@@ -168,7 +165,7 @@ class SectorService:
         if not ak:
             return []
         
-        target_date = target_date or date.today()
+        target_date = target_date or china_today()
         
         try:
             df = await asyncio.to_thread(ak.stock_board_concept_name_em)
@@ -202,7 +199,7 @@ class SectorService:
     
     async def collect_all_sectors(self, target_date: date = None) -> Dict:
         """Collect all sector data (industry + concept)."""
-        target_date = target_date or date.today()
+        target_date = target_date or china_today()
         
         industry = await self.collect_industry_sectors(target_date)
         concept = await self.collect_concept_sectors(target_date)
@@ -301,7 +298,7 @@ class SectorService:
         if not db.pool:
             return []
         
-        today = date.today()
+        today = china_today()
         type_filter = "AND type = $2" if sector_type != 'all' else ""
         
         query = f"""
@@ -416,7 +413,7 @@ class SectorService:
     
     async def generate_daily_report(self, target_date: date = None) -> str:
         """Generate daily sector report."""
-        target_date = target_date or date.today()
+        target_date = target_date or china_today()
         
         if not db.pool:
             return "❌ 数据库未连接"
@@ -502,7 +499,7 @@ class SectorService:
     
     async def generate_weekly_report(self, week_end: date = None) -> str:
         """Generate weekly sector report."""
-        week_end = week_end or date.today()
+        week_end = week_end or china_today()
         week_start = week_end - timedelta(days=6)
         
         if not db.pool:
@@ -551,7 +548,7 @@ class SectorService:
     
     async def generate_monthly_report(self, month_end: date = None) -> str:
         """Generate monthly sector report."""
-        month_end = month_end or date.today()
+        month_end = month_end or china_today()
         month_start = month_end.replace(day=1)
         
         if not db.pool:

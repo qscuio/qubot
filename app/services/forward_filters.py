@@ -15,14 +15,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Any
-import pytz
 
 from app.core.config import settings
 from app.core.logger import Logger
+from app.core.timezone import CHINA_TZ as SHANGHAI_TZ, china_now
 
 logger = Logger("ForwardFilters")
-
-SHANGHAI_TZ = pytz.timezone('Asia/Shanghai')
 
 
 class FilterAction(Enum):
@@ -234,7 +232,7 @@ class TimeRestrictionFilter(ForwardFilter):
         return 40
     
     def check(self, ctx: FilterContext) -> FilterResult:
-        hour = datetime.now(SHANGHAI_TZ).hour
+        hour = china_now().hour
         # Allow forwarding only between 6 AM and 12 PM (noon)
         if hour < 6:
             return FilterResult(FilterAction.BLOCK, f"before_6am:{hour}:00")

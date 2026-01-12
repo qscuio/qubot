@@ -10,15 +10,13 @@ Manages user's personal stock watchlist with:
 import asyncio
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional
-import pytz
 
 from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
+from app.core.timezone import CHINA_TZ, china_now, china_today
 
 logger = Logger("WatchlistService")
-
-CHINA_TZ = pytz.timezone("Asia/Shanghai")
 
 
 class WatchlistService:
@@ -94,7 +92,7 @@ class WatchlistService:
                 ON CONFLICT (user_id, code) DO UPDATE SET
                     name = COALESCE(EXCLUDED.name, user_watchlist.name),
                     add_price = COALESCE(EXCLUDED.add_price, user_watchlist.add_price)
-            """, user_id, code, stock_name, add_price, date.today())
+            """, user_id, code, stock_name, add_price, china_today())
             
             return {
                 "code": code,
@@ -283,7 +281,7 @@ class WatchlistService:
         
         while self.is_running:
             try:
-                now = datetime.now(CHINA_TZ)
+                now = china_now()
                 time_str = now.strftime("%H:%M")
                 date_str = now.strftime("%Y-%m-%d")
                 
