@@ -914,9 +914,9 @@ async def cmd_chart(message: types.Message, command: CommandObject):
     code = code.strip()
     
     # Build Mini App URL
-    base_url = settings.WEBAPP_URL or settings.WEBHOOK_URL
+    base_url = settings.WEBFRONT_URL
     if not base_url:
-        await message.answer("❌ WEBAPP_URL not configured", parse_mode="HTML")
+        await message.answer("❌ WEBFRONT_URL not configured", parse_mode="HTML")
         return
     
     base_url = base_url.rstrip('/')
