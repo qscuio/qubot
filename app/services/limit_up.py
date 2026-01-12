@@ -116,22 +116,16 @@ class LimitUpService:
     # Data Collection (4PM Daily)
     # ─────────────────────────────────────────────────────────────────────────
     
-    async def collect_limit_ups(self, target_date: date = None) -> List[Dict]:
-        """Collect today's limit-up stocks from AkShare.
-        
-        Fetches both:
-        - Sealed limit-ups (收盘涨停/首板): is_sealed=True
-        - Burst limit-ups (曾涨停/炸板): is_sealed=False
-        """
+    async def get_realtime_limit_ups(self, date_str: str = None) -> List[Dict]:
+        """Fetch real-time limit-up stocks from AkShare without saving to DB."""
         ak = self._get_akshare()
         if not ak:
             return []
         
-        target_date = target_date or china_today()
-        date_str = target_date.strftime("%Y%m%d")
+        if not date_str:
+            date_str = china_today().strftime("%Y%m%d")
         
         stocks = []
-        
         try:
             # 1. Get sealed limit-up pool (收盘涨停/首板)
             df_sealed = await asyncio.to_thread(ak.stock_zt_pool_em, date=date_str)
@@ -145,17 +139,15 @@ class LimitUpService:
                         "change_pct": float(row.get("涨跌幅", 0)),
                         "turnover_rate": float(row.get("换手率", 0)),
                         "limit_times": int(row.get("连板数", 1)),
-                        "is_sealed": True,  # 收盘涨停
+                        "is_sealed": True,
                     }
                     stocks.append(stock)
-                logger.info(f"Found {len(stocks)} sealed limit-up stocks for {date_str}")
             
             # 2. Get burst limit-up pool (曾涨停/炸板)
             try:
                 df_burst = await asyncio.to_thread(ak.stock_zt_pool_zbgc_em, date=date_str)
                 
                 if df_burst is not None and not df_burst.empty:
-                    burst_count = 0
                     for _, row in df_burst.iterrows():
                         stock = {
                             "code": str(row.get("代码", "")),
@@ -163,35 +155,42 @@ class LimitUpService:
                             "close_price": float(row.get("最新价", 0)),
                             "change_pct": float(row.get("涨跌幅", 0)),
                             "turnover_rate": float(row.get("换手率", 0)),
-                            "limit_times": 1,  # 炸板不算连板
-                            "is_sealed": False,  # 曾涨停/炸板
+                            "limit_times": 1,
+                            "is_sealed": False,
                         }
                         stocks.append(stock)
-                        burst_count += 1
-                    logger.info(f"Found {burst_count} burst limit-up stocks for {date_str}")
             except Exception as e:
-                logger.warn(f"Failed to fetch burst limit-ups (may not be available): {e}")
+                logger.warn(f"Failed to fetch burst limit-ups: {e}")
             
-            if not stocks:
-                logger.info(f"No limit-up stocks found for {date_str}")
-                return []
-            
-            # Save to database (only sealed ones for streak tracking)
-            await self._save_limit_ups(target_date, stocks)
-            
-            # Update streak stats (only for sealed limit-ups)
-            sealed_stocks = [s for s in stocks if s.get("is_sealed", True)]
-            await self._update_streaks(target_date, sealed_stocks)
-            
-            # Update startup watchlist (only for sealed limit-ups)
-            await self._update_startup_watchlist(target_date, sealed_stocks)
-            
-            logger.info(f"Collected {len(stocks)} total limit-up stocks for {date_str}")
             return stocks
             
         except Exception as e:
-            logger.error(f"Failed to collect limit-ups: {e}")
+            logger.error(f"Failed to fetch realtime limit-ups: {e}")
             return []
+
+    async def collect_limit_ups(self, target_date: date = None) -> List[Dict]:
+        """Collect today's limit-up stocks and save to database."""
+        target_date = target_date or china_today()
+        date_str = target_date.strftime("%Y%m%d")
+        
+        stocks = await self.get_realtime_limit_ups(date_str)
+        
+        if not stocks:
+            logger.info(f"No limit-up stocks found for {date_str}")
+            return []
+        
+        # Save to database (only sealed ones for streak tracking)
+        await self._save_limit_ups(target_date, stocks)
+        
+        # Update streak stats (only for sealed limit-ups)
+        sealed_stocks = [s for s in stocks if s.get("is_sealed", True)]
+        await self._update_streaks(target_date, sealed_stocks)
+        
+        # Update startup watchlist (only for sealed limit-ups)
+        await self._update_startup_watchlist(target_date, sealed_stocks)
+        
+        logger.info(f"Collected {len(stocks)} total limit-up stocks for {date_str}")
+        return stocks
     
     async def _save_limit_ups(self, target_date: date, stocks: List[Dict]):
         """Save limit-up stocks to database."""

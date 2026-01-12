@@ -432,18 +432,31 @@ async def get_today_ui():
     
     # Use China timezone for date calculation
     today = china_today()
-    rows = await db.pool.fetch("""
-        SELECT code, name, close_price, change_pct, limit_times
-        FROM limit_up_stocks WHERE date = $1
-        ORDER BY limit_times DESC, close_price DESC LIMIT 15
-    """, today)
+    
+    # 🌟 Real-time fetch from AkShare
+    try:
+        stocks = await limit_up_service.get_realtime_limit_ups()
+    except Exception as e:
+        logger.error(f"Real-time fetch failed: {e}")
+        stocks = []
+    
+    # Filter for valid data
+    if stocks:
+        # Sealed only
+        sealed = [s for s in stocks if s.get("is_sealed", True)]
+        # Sort: limit_times desc, price desc
+        sealed.sort(key=lambda x: (-x.get("limit_times", 1), -x.get("close_price", 0)))
+        rows = sealed[:15]
+    else:
+        rows = []
     
     if not rows:
-        text = "📈 <b>今日涨停</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无数据\n\n点击同步获取"
+        text = "📈 <b>今日涨停</b> (实时)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无数据\n\n<i>数据源: 东方财富</i>"
     else:
-        text = f"📈 <b>今日涨停</b> ({len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        text = f"📈 <b>今日涨停</b> (实时: {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, r in enumerate(rows, 1):
-            streak = f" [{r['limit_times']}板]" if r['limit_times'] > 1 else ""
+            lt = r.get('limit_times', 1)
+            streak = f" [{lt}板]" if lt > 1 else ""
             chart_url = await get_chart_url(r['code'], r.get('name'))
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}){streak}\n"
     
@@ -484,20 +497,33 @@ async def get_first_ui():
     
     # Use China timezone for date calculation
     today = china_today()
-    # First-board: stocks with limit_times = 1 AND is_sealed = true (收盘涨停)
-    rows = await db.pool.fetch("""
-        SELECT code, name, close_price, change_pct, turnover_rate
-        FROM limit_up_stocks WHERE date = $1 AND limit_times = 1 AND is_sealed = TRUE
-        ORDER BY turnover_rate DESC LIMIT 15
-    """, today)
+    
+    # 🌟 Real-time fetch
+    try:
+        stocks = await limit_up_service.get_realtime_limit_ups()
+    except Exception:
+        stocks = []
+        
+    if stocks:
+        # Filter: limit_times=1 AND is_sealed=True
+        first_board = [
+            s for s in stocks 
+            if s.get("limit_times", 1) == 1 and s.get("is_sealed", True)
+        ]
+        # Sort by turnover desc
+        first_board.sort(key=lambda x: -x.get("turnover_rate", 0))
+        rows = first_board[:15]
+    else:
+        rows = []
     
     if not rows:
-        text = "🆕 <b>首板</b> (收盘封板)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无首板数据\n\n点击同步获取"
+        text = "🆕 <b>首板</b> (实时)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无首板数据"
     else:
-        text = f"🆕 <b>首板</b> (收盘封板, {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        text = f"🆕 <b>首板</b> (实时: {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, r in enumerate(rows, 1):
             chart_url = await get_chart_url(r['code'], r.get('name'))
-            turnover = f"换手{r['turnover_rate']:.1f}%" if r['turnover_rate'] else ""
+            tr = r.get('turnover_rate', 0)
+            turnover = f"换手{tr:.1f}%" if tr else ""
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {turnover}\n"
     
     builder = InlineKeyboardBuilder()
@@ -537,20 +563,30 @@ async def get_burst_ui():
     
     # Use China timezone for date calculation
     today = china_today()
-    # Burst: stocks with is_sealed = false (曾涨停/炸板)
-    rows = await db.pool.fetch("""
-        SELECT code, name, close_price, change_pct, turnover_rate
-        FROM limit_up_stocks WHERE date = $1 AND is_sealed = FALSE
-        ORDER BY change_pct DESC LIMIT 20
-    """, today)
+    
+    # 🌟 Real-time fetch
+    try:
+        stocks = await limit_up_service.get_realtime_limit_ups()
+    except Exception:
+        stocks = []
+        
+    if stocks:
+        # Filter: is_sealed=False (Burst)
+        burst = [s for s in stocks if not s.get("is_sealed", True)]
+        # Sort by change_pct desc
+        burst.sort(key=lambda x: -x.get("change_pct", 0))
+        rows = burst[:20]
+    else:
+        rows = []
     
     if not rows:
-        text = "💥 <b>曾涨停</b> (炸板)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无炸板数据\n\n点击同步获取"
+        text = "💥 <b>曾涨停</b> (实时)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无炸板数据"
     else:
-        text = f"💥 <b>曾涨停</b> (炸板, {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n<i>日内涨停但收盘未封住</i>\n\n"
+        text = f"💥 <b>曾涨停</b> (实时: {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n<i>日内涨停但未封住</i>\n\n"
         for i, r in enumerate(rows, 1):
             chart_url = await get_chart_url(r['code'], r.get('name'))
-            change = f"{r['change_pct']:.1f}%" if r['change_pct'] else ""
+            cp = r.get('change_pct', 0)
+            change = f"{cp:.1f}%" if cp else ""
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {change}\n"
     
     builder = InlineKeyboardBuilder()
@@ -798,6 +834,60 @@ async def cmd_scan(message: types.Message):
                 name = SIGNAL_NAMES.get(signal_type, signal_type)
                 builder.button(text=f"📋 {name}全部", callback_data=f"scan:list:{signal_type}:0")
         builder.button(text="🔄 重新扫描", callback_data="lu:scan")
+        builder.button(text="◀️ 返回", callback_data="lu:main")
+        builder.adjust(2)
+        
+        await status.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+            
+    except Exception as e:
+        await status.edit_text(f"❌ 扫描失败: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stock History Command
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("history"))
+async def cmd_history(message: types.Message, command: CommandObject):
+    """Check stock history data."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    code = command.args
+    if not code:
+        await message.answer(
+            "📜 <b>Stock History</b>\n\n"
+            "Usage: <code>/history &lt;code&gt;</code>\n"
+            "Example: <code>/history 600519</code>",
+            parse_mode="HTML"
+        )
+        return
+    
+    from app.services.stock_history import stock_history_service
+    
+    code = code.strip()
+    history = await stock_history_service.get_stock_history(code, days=10)
+    
+    if not history:
+        await message.answer(f"❌ No history found for <code>{code}</code>", parse_mode="HTML")
+        return
+    
+    # Format as table
+    text = f"📜 <b>HISTORY: {code}</b>\n━━━━━━━━━━━━━━━━━━━━━\n"
+    text += "<code>Date       Close   Chg%   Vol</code>\n"
+    
+    for h in history:
+        date_str = h['date'].strftime("%m-%d")
+        close = h['close']
+        pct = h['change_pct']
+        vol = h['volume'] / 10000  # 万手
+        
+        # Color for change
+        icon = "🔴" if pct > 0 else "🟢" if pct < 0 else "⚪"
+        
+        text += f"{date_str}  {close:>6.2f}  {pct:>5.2f}%  {vol:>4.0f}万\n"
+    
+    await message.answer(text, parse_mode="HTML")
         builder.button(text="◀️ 返回", callback_data="lu:main")
         builder.adjust(2, 2, 2)
         
