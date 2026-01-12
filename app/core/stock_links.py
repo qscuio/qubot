@@ -6,10 +6,13 @@ def _normalize_code(code: str) -> str:
 
 
 def get_chart_url(code: str, name: Optional[str] = None) -> str:
-    """Return 东方财富 APP deep link URL for a stock code.
+    """Return 东方财富 mobile web URL for a stock code.
     
-    Uses eastmoney:// URL scheme to open directly in the APP.
-    Format: eastmoney://quote?code={market}{code}
+    Uses wap.eastmoney.com which is:
+    - Clickable as a hyperlink in Telegram
+    - Prompts to open in APP on mobile devices
+    
+    Format: https://wap.eastmoney.com/quote/stock/{market}.{code}.html
     Market: 1=Shanghai (6xxxxx), 0=Shenzhen (0xxxxx, 3xxxxx)
     """
     code = _normalize_code(code)
@@ -17,8 +20,8 @@ def get_chart_url(code: str, name: Optional[str] = None) -> str:
     # Determine market: 1=SH, 0=SZ
     market = "1" if code.startswith("6") else "0"
     
-    # 东方财富 APP deep link
-    return f"eastmoney://quote?code={market}.{code}"
+    # 东方财富手机网页版 - Telegram可点击，手机打开会提示用APP打开
+    return f"https://wap.eastmoney.com/quote/stock/{market}.{code}.html"
 
 
 # Async wrapper for backward compatibility
