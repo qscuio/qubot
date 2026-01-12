@@ -114,7 +114,7 @@ class StockScanner:
             
             text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
             for s in stocks[:8]:
-                url = await get_chart_url(s["code"], s.get("name"))
+                url = get_chart_url(s["code"], s.get("name"))
                 text += f"  • <a href=\"{url}\">{s['name']}</a> ({s['code']})\n"
             if len(stocks) > 8:
                 text += f"  ...及其他 {len(stocks) - 8} 只\n"

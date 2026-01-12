@@ -457,7 +457,7 @@ async def get_today_ui():
         for i, r in enumerate(rows, 1):
             lt = r.get('limit_times', 1)
             streak = f" [{lt}板]" if lt > 1 else ""
-            chart_url = await get_chart_url(r['code'], r.get('name'))
+            chart_url = get_chart_url(r['code'], r.get('name'))
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}){streak}\n"
     
     builder = InlineKeyboardBuilder()
@@ -521,7 +521,7 @@ async def get_first_ui():
     else:
         text = f"🆕 <b>首板</b> (实时: {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, r in enumerate(rows, 1):
-            chart_url = await get_chart_url(r['code'], r.get('name'))
+            chart_url = get_chart_url(r['code'], r.get('name'))
             tr = r.get('turnover_rate', 0)
             turnover = f"换手{tr:.1f}%" if tr else ""
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {turnover}\n"
@@ -584,7 +584,7 @@ async def get_burst_ui():
     else:
         text = f"💥 <b>曾涨停</b> (实时: {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n<i>日内涨停但未封住</i>\n\n"
         for i, r in enumerate(rows, 1):
-            chart_url = await get_chart_url(r['code'], r.get('name'))
+            chart_url = get_chart_url(r['code'], r.get('name'))
             cp = r.get('change_pct', 0)
             change = f"{cp:.1f}%" if cp else ""
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {change}\n"
@@ -627,7 +627,7 @@ async def get_streak_ui():
     else:
         text = f"🔥 <b>连板榜</b> ({len(streaks)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, s in enumerate(streaks, 1):
-            chart_url = await get_chart_url(s['code'], s.get('name'))
+            chart_url = get_chart_url(s['code'], s.get('name'))
             text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - <b>{s['streak_count']}连板</b>\n"
     
     builder = InlineKeyboardBuilder()
@@ -668,7 +668,7 @@ async def get_strong_ui():
     else:
         text = f"💪 <b>强势股</b> (7日, {len(strong)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, s in enumerate(strong, 1):
-            chart_url = await get_chart_url(s['code'], s.get('name'))
+            chart_url = get_chart_url(s['code'], s.get('name'))
             text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['limit_count']}次涨停\n"
     
     builder = InlineKeyboardBuilder()
@@ -710,7 +710,7 @@ async def get_watch_ui():
     else:
         text = f"👀 <b>启动追踪</b> ({len(watchlist)})\n━━━━━━━━━━━━━━━━━━━━━\n<i>一个月涨停一次，再次涨停将剔除</i>\n\n"
         for i, w in enumerate(watchlist, 1):
-            chart_url = await get_chart_url(w['code'], w.get('name'))
+            chart_url = get_chart_url(w['code'], w.get('name'))
             limit_date = w['first_limit_date'].strftime('%m/%d') if w['first_limit_date'] else ''
             text += f"{i}. <a href=\"{chart_url}\">{w['name']}</a> ({w['code']}) {limit_date}\n"
     
@@ -821,7 +821,7 @@ async def cmd_scan(message: types.Message):
             
             text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
             for s in stocks[:5]:
-                chart_url = await get_chart_url(s['code'], s.get('name'))
+                chart_url = get_chart_url(s['code'], s.get('name'))
                 text += f"  • <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
             if len(stocks) > 5:
                 text += f"  <i>...及其他 {len(stocks) - 5} 只</i>\n"
@@ -993,7 +993,7 @@ async def cb_scan_list(callback: types.CallbackQuery):
     text += f"<i>第 {page + 1}/{total_pages} 页</i>\n\n"
     
     for i, s in enumerate(page_stocks, start + 1):
-        chart_url = await get_chart_url(s['code'], s.get('name'))
+        chart_url = get_chart_url(s['code'], s.get('name'))
         text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
     
     builder = InlineKeyboardBuilder()
@@ -1037,7 +1037,7 @@ async def cb_scan_back(callback: types.CallbackQuery):
         
         text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
         for s in stocks[:5]:
-            chart_url = await get_chart_url(s['code'], s.get('name'))
+            chart_url = get_chart_url(s['code'], s.get('name'))
             text += f"  • <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
         if len(stocks) > 5:
             text += f"  <i>...及其他 {len(stocks) - 5} 只</i>\n"
@@ -1893,7 +1893,7 @@ async def get_watchlist_ui(user_id: int):
         else:
             icon = "🔴"  # Big loss
         
-        chart_url = await get_chart_url(code, name)
+        chart_url = get_chart_url(code, name)
         date_str = add_date.strftime('%m/%d') if add_date else ""
         
         text += (
