@@ -888,12 +888,54 @@ async def cmd_history(message: types.Message, command: CommandObject):
         text += f"{date_str}  {close:>6.2f}  {pct:>5.2f}%  {vol:>4.0f}万\n"
     
     await message.answer(text, parse_mode="HTML")
-        builder.button(text="◀️ 返回", callback_data="lu:main")
-        builder.adjust(2, 2, 2)
-        
-        await status.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
-    except Exception as e:
-        await status.edit_text(f"❌ 扫描失败: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Interactive Chart (Mini App)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("chart"))
+async def cmd_chart(message: types.Message, command: CommandObject):
+    """Open interactive candlestick chart as Telegram Mini App."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    code = command.args
+    if not code:
+        await message.answer(
+            "📈 <b>Interactive Chart</b>\n\n"
+            "Usage: <code>/chart &lt;code&gt;</code>\n"
+            "Example: <code>/chart 600519</code>\n\n"
+            "<i>Opens an interactive candlestick chart with zoom/pan</i>",
+            parse_mode="HTML"
+        )
+        return
+    
+    code = code.strip()
+    
+    # Build Mini App URL
+    base_url = settings.WEBAPP_URL or settings.WEBHOOK_URL
+    if not base_url:
+        await message.answer("❌ WEBAPP_URL not configured", parse_mode="HTML")
+        return
+    
+    base_url = base_url.rstrip('/')
+    webapp_url = f"{base_url}/miniapp/chart/?code={code}"
+    
+    # Create WebApp button
+    from aiogram.types import WebAppInfo
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📈 Open Chart", web_app=WebAppInfo(url=webapp_url))
+    builder.button(text="📜 History", callback_data=f"history:{code}")
+    builder.adjust(1)
+    
+    await message.answer(
+        f"📈 <b>Chart: {code}</b>\n\n"
+        f"Click below to open interactive chart:",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
 
 
 @router.callback_query(F.data == "lu:scan")

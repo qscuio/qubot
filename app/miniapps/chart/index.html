@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Stock Chart</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a2e;
+            color: #eee;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+        }
+        .header {
+            padding: 12px 16px;
+            background: #16213e;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #0f3460;
+        }
+        .stock-info {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+        }
+        .stock-name {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .stock-code {
+            font-size: 14px;
+            color: #888;
+        }
+        .stock-price {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .stock-change {
+            font-size: 14px;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .up { color: #ef5350; background: rgba(239,83,80,0.15); }
+        .down { color: #26a69a; background: rgba(38,166,154,0.15); }
+        .flat { color: #888; background: rgba(136,136,136,0.15); }
+        #chart-container {
+            width: 100%;
+            height: calc(100vh - 60px);
+        }
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            font-size: 16px;
+            color: #888;
+        }
+        .error {
+            color: #ef5350;
+            text-align: center;
+            padding: 20px;
+        }
+        .legend {
+            position: absolute;
+            top: 70px;
+            left: 16px;
+            font-size: 12px;
+            color: #888;
+            background: rgba(26,26,46,0.9);
+            padding: 8px 12px;
+            border-radius: 4px;
+            z-index: 10;
+        }
+        .legend-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 4px;
+        }
+        .legend-item {
+            display: flex;
+            gap: 4px;
+        }
+        .legend-label { color: #666; }
+        .legend-value { color: #fff; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="stock-info">
+            <span class="stock-name" id="stockName">--</span>
+            <span class="stock-code" id="stockCode">--</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 8px;">
+            <span class="stock-price" id="stockPrice">--</span>
+            <span class="stock-change flat" id="stockChange">--</span>
+        </div>
+    </div>
+    <div id="chart-container">
+        <div class="loading" id="loading">加载中...</div>
+    </div>
+    <div class="legend" id="legend" style="display: none;">
+        <div class="legend-row">
+            <div class="legend-item"><span class="legend-label">O:</span><span class="legend-value" id="legO">--</span></div>
+            <div class="legend-item"><span class="legend-label">H:</span><span class="legend-value" id="legH">--</span></div>
+            <div class="legend-item"><span class="legend-label">L:</span><span class="legend-value" id="legL">--</span></div>
+            <div class="legend-item"><span class="legend-label">C:</span><span class="legend-value" id="legC">--</span></div>
+        </div>
+        <div class="legend-row">
+            <div class="legend-item"><span class="legend-label">Vol:</span><span class="legend-value" id="legVol">--</span></div>
+        </div>
+    </div>
+
+    <script>
+        // Get stock code from URL params
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code') || '600519';
+        const days = parseInt(params.get('days')) || 60;
+
+        // API base URL (same origin)
+        const API_BASE = window.location.origin;
+
+        let chart, candleSeries, volumeSeries;
+
+        async function loadChart() {
+            try {
+                // Fetch data from API
+                const response = await fetch(`${API_BASE}/api/chart/data/${code}?days=${days}`);
+                if (!response.ok) throw new Error('Failed to load data');
+                
+                const result = await response.json();
+                
+                if (!result.data || result.data.length === 0) {
+                    throw new Error('No data available');
+                }
+
+                // Update header
+                document.getElementById('stockName').textContent = result.name || code;
+                document.getElementById('stockCode').textContent = code;
+                
+                // Get latest price info
+                const latest = result.data[result.data.length - 1];
+                const prev = result.data.length > 1 ? result.data[result.data.length - 2] : latest;
+                const change = ((latest.close - prev.close) / prev.close * 100);
+                
+                document.getElementById('stockPrice').textContent = latest.close.toFixed(2);
+                const changeEl = document.getElementById('stockChange');
+                changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+                changeEl.className = `stock-change ${change > 0 ? 'up' : change < 0 ? 'down' : 'flat'}`;
+
+                // Hide loading
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('legend').style.display = 'block';
+
+                // Create chart
+                const container = document.getElementById('chart-container');
+                chart = LightweightCharts.createChart(container, {
+                    width: container.clientWidth,
+                    height: container.clientHeight,
+                    layout: {
+                        background: { color: '#1a1a2e' },
+                        textColor: '#888',
+                    },
+                    grid: {
+                        vertLines: { color: '#2a2a4e' },
+                        horzLines: { color: '#2a2a4e' },
+                    },
+                    crosshair: {
+                        mode: LightweightCharts.CrosshairMode.Normal,
+                    },
+                    rightPriceScale: {
+                        borderColor: '#2a2a4e',
+                    },
+                    timeScale: {
+                        borderColor: '#2a2a4e',
+                        timeVisible: true,
+                    },
+                });
+
+                // Candlestick series (A-share colors: red=up, green=down)
+                candleSeries = chart.addCandlestickSeries({
+                    upColor: '#ef5350',
+                    downColor: '#26a69a',
+                    borderUpColor: '#ef5350',
+                    borderDownColor: '#26a69a',
+                    wickUpColor: '#ef5350',
+                    wickDownColor: '#26a69a',
+                });
+
+                // Volume series
+                volumeSeries = chart.addHistogramSeries({
+                    color: '#26a69a',
+                    priceFormat: { type: 'volume' },
+                    priceScaleId: '',
+                    scaleMargins: { top: 0.8, bottom: 0 },
+                });
+
+                // Prepare data
+                const candleData = result.data.map(d => ({
+                    time: d.time,
+                    open: d.open,
+                    high: d.high,
+                    low: d.low,
+                    close: d.close,
+                }));
+
+                const volumeData = result.data.map(d => ({
+                    time: d.time,
+                    value: d.volume,
+                    color: d.close >= d.open ? 'rgba(239,83,80,0.5)' : 'rgba(38,166,154,0.5)',
+                }));
+
+                candleSeries.setData(candleData);
+                volumeSeries.setData(volumeData);
+
+                // Crosshair move handler for legend
+                chart.subscribeCrosshairMove(param => {
+                    if (!param.time || !param.seriesData) {
+                        return;
+                    }
+                    const candle = param.seriesData.get(candleSeries);
+                    const vol = param.seriesData.get(volumeSeries);
+                    
+                    if (candle) {
+                        document.getElementById('legO').textContent = candle.open?.toFixed(2) || '--';
+                        document.getElementById('legH').textContent = candle.high?.toFixed(2) || '--';
+                        document.getElementById('legL').textContent = candle.low?.toFixed(2) || '--';
+                        document.getElementById('legC').textContent = candle.close?.toFixed(2) || '--';
+                    }
+                    if (vol) {
+                        document.getElementById('legVol').textContent = formatVolume(vol.value);
+                    }
+                });
+
+                // Fit content
+                chart.timeScale().fitContent();
+
+                // Resize handler
+                window.addEventListener('resize', () => {
+                    chart.resize(container.clientWidth, container.clientHeight);
+                });
+
+            } catch (error) {
+                document.getElementById('loading').innerHTML = `<div class="error">❌ ${error.message}</div>`;
+            }
+        }
+
+        function formatVolume(vol) {
+            if (vol >= 100000000) return (vol / 100000000).toFixed(2) + '亿';
+            if (vol >= 10000) return (vol / 10000).toFixed(0) + '万';
+            return vol.toString();
+        }
+
+        // Initialize
+        loadChart();
+
+        // Telegram WebApp integration
+        if (window.Telegram?.WebApp) {
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+        }
+    </script>
+</body>
+</html>

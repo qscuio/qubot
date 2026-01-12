@@ -138,6 +138,11 @@ web_dir = os.path.join(os.path.dirname(__file__), "..", "web")
 if os.path.isdir(web_dir):
     app.mount("/web", StaticFiles(directory=web_dir, html=True), name="web")
 
+# Mini Apps static files (for Telegram Web Apps)
+miniapps_dir = os.path.join(os.path.dirname(__file__), "miniapps")
+if os.path.isdir(miniapps_dir):
+    app.mount("/miniapp", StaticFiles(directory=miniapps_dir, html=True), name="miniapps")
+
 @app.get("/health")
 async def health_check():
     return {

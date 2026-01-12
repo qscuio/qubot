@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     BOT_PORT: int = 10001
     API_PORT: int = 10002
     DOMAIN: Optional[str] = None
+    WEBAPP_URL: Optional[str] = None  # Base URL for Telegram Mini Apps (e.g., https://your-domain.com)
     
     # App Settings
     LOG_LEVEL: str = "INFO"

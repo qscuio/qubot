@@ -124,3 +124,40 @@ async def rss_subscribe(req: SubscribeRequest, user_id: str = Depends(verify_api
 async def rss_unsubscribe(source_id: str, user_id: str = Depends(verify_api_key)):
     result = await rss_service.unsubscribe(user_id, source_id)
     return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Chart Data Endpoint (for Mini App - no auth required)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/chart/data/{code}")
+async def chart_data(code: str, days: int = 60):
+    """Get OHLCV data for stock chart Mini App."""
+    from app.services.stock_history import stock_history_service
+    
+    history = await stock_history_service.get_stock_history(code, days=days)
+    
+    if not history:
+        raise HTTPException(status_code=404, detail=f"No data for {code}")
+    
+    # Get stock name from first record or use code
+    name = code
+    
+    # Format data for Lightweight Charts (expects time as string YYYY-MM-DD)
+    data = []
+    for h in reversed(history):  # Reverse to chronological order
+        data.append({
+            "time": h['date'].strftime("%Y-%m-%d"),
+            "open": float(h['open']),
+            "high": float(h['high']),
+            "low": float(h['low']),
+            "close": float(h['close']),
+            "volume": int(h['volume']),
+        })
+    
+    return {
+        "code": code,
+        "name": name,
+        "data": data,
+    }
+
