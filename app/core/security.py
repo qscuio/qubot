@@ -220,8 +220,8 @@ SUSPICIOUS_USER_AGENTS = [
     'nmap', 'nikto', 'sqlmap', 'gobuster', 'dirbuster', 'dirb',
     'wpscan', 'nuclei', 'masscan', 'zap', 'burp', 'acunetix',
     # Bots and crawlers (non-legit)
-    'scrapy', 'python-requests', 'python-urllib', 'go-http-client',
-    'java/', 'libwww', 'wget', 'curl/', 'httpie',
+    'scrapy',
+    # Note: Removed curl, wget, httpie, python-requests - legitimate for API testing
     # Headless browsers used for scanning
     'headlesschrome', 'phantomjs', 'selenium',
     # Generic bad patterns
