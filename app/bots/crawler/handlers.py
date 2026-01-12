@@ -828,14 +828,18 @@ SIGNAL_NAMES = {
     "breakout": "突破信号",
     "volume": "放量信号", 
     "ma_bullish": "多头排列",
-    "small_bullish_5": "底部5小阳"
+    "small_bullish_5": "底部5小阳",
+    "volume_price": "量价启动",
+    "multi_signal": "多信号共振"
 }
 
 SIGNAL_ICONS = {
     "breakout": "🔺",
     "volume": "📊",
     "ma_bullish": "📈",
-    "small_bullish_5": "🌅"
+    "small_bullish_5": "🌅",
+    "volume_price": "🚀",
+    "multi_signal": "⭐"
 }
 
 

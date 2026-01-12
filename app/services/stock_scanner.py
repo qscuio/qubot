@@ -138,6 +138,8 @@ class StockScanner:
             "volume": [],
             "ma_bullish": [],
             "small_bullish_5": [],  # 底部连续5个小阳线
+            "volume_price": [],  # 量价启动信号
+            "multi_signal": [],  # 多信号共振(满足≥3个信号)
         }
         
         try:
@@ -193,6 +195,25 @@ class StockScanner:
                     
                     if self._check_small_bullish_5(hist, pd):
                         signals["small_bullish_5"].append(stock_info)
+                    
+                    if self._check_volume_price_startup(hist, pd):
+                        signals["volume_price"].append(stock_info)
+                    
+                    # Count how many signals this stock has
+                    signal_count = sum([
+                        stock_info in signals["breakout"],
+                        stock_info in signals["volume"],
+                        stock_info in signals["ma_bullish"],
+                        stock_info in signals["small_bullish_5"],
+                        stock_info in signals["volume_price"],
+                    ])
+                    
+                    # Add to multi-signal list if 3+ signals
+                    if signal_count >= 3:
+                        signals["multi_signal"].append({
+                            **stock_info,
+                            "signal_count": signal_count
+                        })
                     
                     checked += 1
                     
@@ -348,6 +369,66 @@ class StockScanner:
                 return position < 0.4
             
             return False
+        except:
+            return False
+
+    def _check_volume_price_startup(self, hist, pd) -> bool:
+        """检查量价启动信号 (量增价升，即将启动).
+        
+        条件:
+        1. 最近3-5日成交量逐步放大 (量增)
+        2. 同时股价逐步上涨 (价升)
+        3. 今日成交量 > 5日均量 × 1.5
+        4. 收盘价站上10日均线
+        5. 今日收盘在日内高位 (上半部分)
+        """
+        try:
+            if len(hist) < 10:
+                return False
+            
+            # Get recent 5 days
+            last_5 = hist.tail(5)
+            
+            # 1. Check volume increasing trend (at least 3 of last 5 days show higher volume)
+            volumes = last_5['成交量'].values
+            vol_increasing = 0
+            for i in range(1, len(volumes)):
+                if volumes[i] > volumes[i-1]:
+                    vol_increasing += 1
+            if vol_increasing < 2:  # At least 2 increases in last 5 days
+                return False
+            
+            # 2. Check price increasing trend (at least 3 of last 5 days are up)
+            closes = last_5['收盘'].values
+            price_up_days = 0
+            for i in range(1, len(closes)):
+                if closes[i] > closes[i-1]:
+                    price_up_days += 1
+            if price_up_days < 2:  # At least 2 up days
+                return False
+            
+            # 3. Today's volume > 5-day avg × 1.5
+            vol_today = hist['成交量'].iloc[-1]
+            vol_avg5 = hist['成交量'].iloc[-6:-1].mean()
+            if vol_today < vol_avg5 * 1.5:
+                return False
+            
+            # 4. Close above 10-day MA
+            close_today = hist['收盘'].iloc[-1]
+            ma10 = hist['收盘'].rolling(10).mean().iloc[-1]
+            if close_today < ma10:
+                return False
+            
+            # 5. Close in upper half of today's range
+            high_today = hist['最高'].iloc[-1]
+            low_today = hist['最低'].iloc[-1]
+            range_today = high_today - low_today
+            if range_today > 0:
+                position = (close_today - low_today) / range_today
+                if position < 0.5:  # Not closing in upper half
+                    return False
+            
+            return True
         except:
             return False
 
