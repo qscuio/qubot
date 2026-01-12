@@ -101,10 +101,6 @@ class StockHistoryService:
         # Check coverage - if we have less than 90% of stocks, resume backfill
         coverage = db_stock_count / len(all_codes) if all_codes else 1.0
         
-        if coverage >= 0.9:
-            logger.info(f"Stock coverage: {coverage:.1%} ({db_stock_count}/{len(all_codes)}) - sufficient")
-            return
-        
         # Find missing stocks
         existing_codes = set()
         if db_stock_count > 0:
@@ -113,15 +109,39 @@ class StockHistoryService:
         
         missing_codes = [c for c in all_codes if c not in existing_codes]
         
-        if not missing_codes:
-            logger.info("All stocks have history data")
-            return
+        # Check data freshness for existing stocks
+        stale_stocks = []
+        if coverage >= 0.9 and db_stock_count > 0:
+            # Get latest date for each stock
+            today = china_today()
+            rows = await db.pool.fetch("""
+                SELECT code, MAX(date) as latest_date
+                FROM stock_history
+                GROUP BY code
+            """)
+            
+            for row in rows:
+                days_old = (today - row['latest_date']).days
+                # If data is more than 7 days old (accounting for weekends), needs update
+                if days_old > 7:
+                    stale_stocks.append(row['code'])
+            
+            if stale_stocks:
+                logger.info(f"Found {len(stale_stocks)} stocks with stale data (>7 days old)")
+                asyncio.create_task(self._update_stale_stocks(stale_stocks))
         
-        logger.info(
-            f"Stock coverage: {coverage:.1%} ({db_stock_count}/{len(all_codes)}), "
-            f"resuming backfill for {len(missing_codes)} missing stocks..."
-        )
-        asyncio.create_task(self._backfill_stocks(missing_codes))
+        # Handle missing stocks
+        if coverage < 0.9:
+            if missing_codes:
+                logger.info(
+                    f"Stock coverage: {coverage:.1%} ({db_stock_count}/{len(all_codes)}), "
+                    f"resuming backfill for {len(missing_codes)} missing stocks..."
+                )
+                asyncio.create_task(self._backfill_stocks(missing_codes))
+            else:
+                logger.info("All stocks have history data")
+        else:
+            logger.info(f"Stock coverage: {coverage:.1%} ({db_stock_count}/{len(all_codes)}) - sufficient")
     
     async def _backfill_all_stocks(self):
         """Backfill 5 years of history for all A-share stocks."""
@@ -130,6 +150,58 @@ class StockHistoryService:
             logger.error("Failed to get stock codes")
             return
         await self._backfill_stocks(codes)
+    
+    async def _update_stale_stocks(self, codes: List[str]):
+        """Update stocks that have stale data by fetching missing recent days."""
+        ak, pd = self._get_libs()
+        if not ak or not pd:
+            return
+        
+        today = china_today()
+        
+        logger.info(f"Updating {len(codes)} stocks with stale data...")
+        
+        success_count = 0
+        error_count = 0
+        
+        for i, code in enumerate(codes):
+            try:
+                # Get the latest date we have for this stock
+                latest = await db.pool.fetchval(
+                    "SELECT MAX(date) FROM stock_history WHERE code = $1", code
+                )
+                
+                if not latest:
+                    continue
+                
+                # Fetch from day after latest to today
+                start_date = latest + timedelta(days=1)
+                start_str = start_date.strftime("%Y%m%d")
+                end_str = today.strftime("%Y%m%d")
+                
+                records = await self._fetch_and_save_history(code, start_str, end_str)
+                if records > 0:
+                    success_count += 1
+                
+                # Progress logging
+                if (i + 1) % 100 == 0:
+                    logger.info(
+                        f"Update progress: {i + 1}/{len(codes)} stocks "
+                        f"({success_count} success, {error_count} errors)"
+                    )
+                
+                # Rate limiting
+                await asyncio.sleep(0.3)
+                
+            except Exception as e:
+                error_count += 1
+                if error_count <= 10:
+                    logger.warn(f"Failed to update {code}: {e}")
+        
+        logger.info(
+            f"✅ Update complete: {success_count}/{len(codes)} stocks updated, "
+            f"{error_count} errors"
+        )
     
     async def _backfill_stocks(self, codes: List[str]):
         """Backfill 5 years of history for specified stock codes."""
