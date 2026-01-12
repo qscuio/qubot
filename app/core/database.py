@@ -420,6 +420,41 @@ class Database:
                     UNIQUE(provider, model)
                 );
             """)
+
+            # Stock History Table (A股历史数据 - 5年OHLCV)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS stock_history (
+                    id SERIAL PRIMARY KEY,
+                    code TEXT NOT NULL,
+                    date DATE NOT NULL,
+                    open DECIMAL,
+                    high DECIMAL,
+                    low DECIMAL,
+                    close DECIMAL,
+                    volume BIGINT,
+                    turnover DECIMAL,
+                    amplitude DECIMAL,
+                    change_pct DECIMAL,
+                    change_amt DECIMAL,
+                    turnover_rate DECIMAL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(code, date)
+                );
+            """)
+            
+            # Indexes for stock history queries
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_stock_history_code 
+                ON stock_history(code);
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_stock_history_date 
+                ON stock_history(date DESC);
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_stock_history_code_date 
+                ON stock_history(code, date);
+            """)
             
             # Seed allowed users from env if not already in DB
             env_users = settings.allowed_users_list or []

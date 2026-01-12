@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     ENABLE_LIMIT_UP: bool = True
     ENABLE_SECTOR: bool = True  # Sector analysis tracking
     ENABLE_MARKET_REPORT: bool = True  # Market analysis reports
+    ENABLE_STOCK_HISTORY: bool = True  # A-share history database (5-year OHLCV)
     KEYWORDS: Optional[str] = None
     FROM_USERS: Optional[str] = None
     ALLOWED_USERS: Optional[str] = None

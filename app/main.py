@@ -78,6 +78,12 @@ async def lifespan(app: FastAPI):
         await market_report_service.initialize()
         await market_report_service.start()
 
+    # Stock History Service (A股历史数据)
+    if settings.ENABLE_STOCK_HISTORY:
+        from app.services.stock_history import stock_history_service
+        await stock_history_service.initialize()
+        await stock_history_service.start()
+
     # Watchlist Service (用户自选列表)
     await watchlist_service.start()
 
@@ -102,6 +108,9 @@ async def lifespan(app: FastAPI):
         await sector_service.stop()
     if settings.ENABLE_MARKET_REPORT:
         await market_report_service.stop()
+    if settings.ENABLE_STOCK_HISTORY:
+        from app.services.stock_history import stock_history_service
+        await stock_history_service.stop()
     await watchlist_service.stop()
     await db.disconnect()
 
