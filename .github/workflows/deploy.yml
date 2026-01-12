@@ -10,6 +10,14 @@ on:
         description: "Branch to deploy"
         required: true
         default: "main"
+      full_setup:
+        description: "Force full setup (Docker, Nginx, SSL)"
+        type: boolean
+        default: false
+      force_rebuild:
+        description: "Force docker build --no-cache"
+        type: boolean
+        default: false
 
 jobs:
   deploy:
@@ -37,8 +45,43 @@ jobs:
         if: steps.check_enabled.outputs.skip != 'true'
         uses: actions/checkout@v4
 
-      - name: Install Docker if needed
+      - name: Check if incremental deploy
+        id: check_incremental
         if: steps.check_enabled.outputs.skip != 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Check if first-time setup is needed
+            if [ "${{ github.event.inputs.full_setup }}" = "true" ]; then
+              echo "🔄 Force full setup requested"
+              echo "needs_setup=true" >> /tmp/deploy_flags
+            elif [ ! -f /opt/qubot/.deployed ]; then
+              echo "🆕 First-time deployment detected"
+              echo "needs_setup=true" >> /tmp/deploy_flags
+            else
+              echo "⚡ Incremental deployment (skipping setup)"
+              echo "needs_setup=false" >> /tmp/deploy_flags
+            fi
+            
+            # Output the flag
+            cat /tmp/deploy_flags
+
+      - name: Get deploy flags
+        id: flags
+        if: steps.check_enabled.outputs.skip != 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cat /tmp/deploy_flags 2>/dev/null || echo "needs_setup=true"
+
+      - name: Install Docker if needed
+        if: steps.check_enabled.outputs.skip != 'true' && (contains(steps.flags.outputs.stdout, 'needs_setup=true') || github.event.inputs.full_setup == 'true')
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -89,7 +132,7 @@ jobs:
             fi
 
       - name: Setup Nginx reverse proxy
-        if: steps.check_enabled.outputs.skip != 'true'
+        if: steps.check_enabled.outputs.skip != 'true' && (contains(steps.flags.outputs.stdout, 'needs_setup=true') || github.event.inputs.full_setup == 'true')
         uses: appleboy/ssh-action@v1.0.3
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
@@ -240,7 +283,7 @@ jobs:
             $SUDO nginx -t && $SUDO systemctl reload nginx
 
       - name: Setup Nginx for Web Frontend
-        if: steps.check_enabled.outputs.skip != 'true'
+        if: steps.check_enabled.outputs.skip != 'true' && (contains(steps.flags.outputs.stdout, 'needs_setup=true') || github.event.inputs.full_setup == 'true')
         uses: appleboy/ssh-action@v1.0.3
         env:
           WEBFRONT_URL: ${{ secrets.WEBFRONT_URL }}
@@ -441,9 +484,36 @@ jobs:
             printf 'STOCK_ALERT_CHANNEL=%s\n' '${{ secrets.STOCK_ALERT_CHANNEL }}' >> .env
             printf 'ALERT_CHANNEL=%s\n' '${{ secrets.ALERT_CHANNEL }}' >> .env
             
-            # Deploy (secrets passed via environment, not stored on disk)
+            # Deploy with smart rebuild logic
             docker compose down || true
-            docker compose build --no-cache || { echo "❌ Build failed!"; exit 1; }
+            
+            # Check if deps changed (Dockerfile, requirements.txt, docker-compose.yml)
+            NEEDS_REBUILD=false
+            FORCE_REBUILD="${{ github.event.inputs.force_rebuild }}"
+            
+            if [ "$FORCE_REBUILD" = "true" ]; then
+              echo "🔄 Force rebuild requested"
+              NEEDS_REBUILD=true
+            elif [ ! -f .deps_hash ]; then
+              echo "🆕 First build, creating deps hash"
+              NEEDS_REBUILD=true
+            elif ! sha256sum -c .deps_hash --quiet 2>/dev/null; then
+              echo "📦 Dependencies changed, rebuilding"
+              NEEDS_REBUILD=true
+            else
+              echo "⚡ No dependency changes, using cache"
+            fi
+            
+            # Build with or without cache
+            if [ "$NEEDS_REBUILD" = "true" ]; then
+              docker compose build --no-cache || { echo "❌ Build failed!"; exit 1; }
+            else
+              docker compose build || { echo "❌ Build failed!"; exit 1; }
+            fi
+            
+            # Update deps hash
+            sha256sum Dockerfile requirements.txt docker-compose.yml > .deps_hash 2>/dev/null || true
+            
             docker compose up -d
             
             # Wait for userbot to be healthy
@@ -460,6 +530,9 @@ jobs:
               docker compose logs userbot
               exit 1
             fi
+            
+            # Mark as deployed (for incremental deploy detection)
+            touch .deployed
             
             echo "✅ Deployment successful!"
 
