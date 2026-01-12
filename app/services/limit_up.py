@@ -527,7 +527,7 @@ class LimitUpService:
                     continue  # Stop after 10:00
                 morning_times.append(f"{hour:02d}:{minute:02d}")
         
-        afternoon_time = "16:00"
+        afternoon_time = "15:15"
         
         triggered_today = set()
         

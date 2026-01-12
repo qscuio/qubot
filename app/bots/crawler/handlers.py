@@ -383,7 +383,7 @@ async def cb_lu_main(callback: types.CallbackQuery):
         f"🔥 连板股: <b>{len(streaks)}</b>\n"
         f"💪 强势股: <b>{len(strong)}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━\n"
-        "<i>每日16:00自动收集</i>"
+        "<i>每日15:15自动收集</i>"
     )
     
     builder = InlineKeyboardBuilder()
