@@ -250,6 +250,7 @@
         let chart, candleSeries, volumeSeries;
         let ma5Series, ma10Series, ma20Series, ma60Series;
         let bollUpperSeries, bollMidSeries, bollLowerSeries;
+        let macdDifSeries, macdDeaSeries, macdHistSeries;
         let rawData = [];
 
         // State
@@ -298,6 +299,49 @@
                 lower.push({ time: data[i].time, value: avg - multiplier * std });
             }
             return { upper, mid, lower };
+        }
+
+        // Calculate MACD (12, 26, 9)
+        function calculateMACD(data, fast = 12, slow = 26, signal = 9) {
+            const dif = [], dea = [], hist = [];
+            let emaFast = null, emaSlow = null, emaDea = null;
+            const alphaFast = 2 / (fast + 1);
+            const alphaSlow = 2 / (slow + 1);
+            const alphaSignal = 2 / (signal + 1);
+
+            for (let i = 0; i < data.length; i++) {
+                const close = data[i].close;
+
+                // Initialize EMAs
+                if (emaFast === null) {
+                    emaFast = close;
+                    emaSlow = close;
+                } else {
+                    emaFast = close * alphaFast + emaFast * (1 - alphaFast);
+                    emaSlow = close * alphaSlow + emaSlow * (1 - alphaSlow);
+                }
+
+                const difValue = emaFast - emaSlow;
+
+                if (emaDea === null) {
+                    emaDea = difValue;
+                } else {
+                    emaDea = difValue * alphaSignal + emaDea * (1 - alphaSignal);
+                }
+
+                const histValue = (difValue - emaDea) * 2;  // Histogram
+
+                if (i >= slow - 1) {
+                    dif.push({ time: data[i].time, value: difValue });
+                    dea.push({ time: data[i].time, value: emaDea });
+                    hist.push({
+                        time: data[i].time,
+                        value: histValue,
+                        color: histValue >= 0 ? 'rgba(239,83,80,0.8)' : 'rgba(38,166,154,0.8)'
+                    });
+                }
+            }
+            return { dif, dea, hist };
         }
 
         async function loadChart() {
@@ -382,10 +426,26 @@
                 ma20Series = chart.addLineSeries({ color: '#00bfff', lineWidth: 1, priceScaleId: 'right' });
                 ma60Series = chart.addLineSeries({ color: '#9370db', lineWidth: 1, priceScaleId: 'right' });
 
-                // BOLL series
                 bollUpperSeries = chart.addLineSeries({ color: '#ff9800', lineWidth: 1, priceScaleId: 'right', lineStyle: 2 });
                 bollMidSeries = chart.addLineSeries({ color: '#2196f3', lineWidth: 1, priceScaleId: 'right' });
                 bollLowerSeries = chart.addLineSeries({ color: '#4caf50', lineWidth: 1, priceScaleId: 'right', lineStyle: 2 });
+
+                // MACD series (separate scale at bottom)
+                macdHistSeries = chart.addHistogramSeries({
+                    color: '#26a69a',
+                    priceScaleId: 'macd',
+                    scaleMargins: { top: 0.85, bottom: 0.02 },
+                });
+                macdDifSeries = chart.addLineSeries({
+                    color: '#fff176',
+                    lineWidth: 1,
+                    priceScaleId: 'macd',
+                });
+                macdDeaSeries = chart.addLineSeries({
+                    color: '#ba68c8',
+                    lineWidth: 1,
+                    priceScaleId: 'macd',
+                });
 
                 // Set data
                 updateChartData();
@@ -462,6 +522,18 @@
                 document.getElementById('bollLegend').style.display = 'none';
             }
 
+            // MACD
+            if (showMACD) {
+                const macd = calculateMACD(rawData);
+                macdDifSeries.setData(macd.dif.slice(-currentDays));
+                macdDeaSeries.setData(macd.dea.slice(-currentDays));
+                macdHistSeries.setData(macd.hist.slice(-currentDays));
+            } else {
+                macdDifSeries.setData([]);
+                macdDeaSeries.setData([]);
+                macdHistSeries.setData([]);
+            }
+
             chart.timeScale().fitContent();
         }
 
@@ -525,8 +597,7 @@
         function toggleMACD() {
             showMACD = !showMACD;
             document.getElementById('btnMACD').classList.toggle('active', showMACD);
-            // MACD requires separate pane - TODO for future
-            alert('MACD indicator coming soon!');
+            updateChartData();
         }
 
         function setDays(days) {
