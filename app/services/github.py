@@ -54,7 +54,11 @@ class GitHubService:
             raise Exception("GitHubService not initialized")
 
         try:
-            self.repo.remotes.origin.pull()
+            # Fetch and reset to remote (handles force-pushed history)
+            origin = self.repo.remotes.origin
+            origin.fetch()
+            default_branch = self.repo.active_branch.name
+            self.repo.git.reset('--hard', f'origin/{default_branch}')
             
             full_path = os.path.join(self.local_path, filename)
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
