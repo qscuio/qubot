@@ -122,12 +122,6 @@ jobs:
               $SUDO ufw allow ssh
               $SUDO ufw allow 80/tcp
               $SUDO ufw allow 443/tcp
-              # Allow API port if set
-              API_PORT="${{ secrets.API_PORT }}"
-              if [ -n "$API_PORT" ] && [ "$API_PORT" != "" ]; then
-                $SUDO ufw allow $API_PORT/tcp
-                echo "🌐 Opened API port: $API_PORT"
-              fi
               $SUDO ufw --force enable || true
             fi
 
@@ -287,12 +281,12 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           WEBFRONT_URL: ${{ secrets.WEBFRONT_URL }}
-          API_PORT: ${{ secrets.API_PORT || '3001' }}
+          BOT_PORT: ${{ secrets.BOT_PORT || '10001' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: WEBFRONT_URL,API_PORT
+          envs: WEBFRONT_URL,BOT_PORT
           script: |
             SUDO=""
             if [ "$(id -u)" != "0" ]; then
@@ -305,15 +299,15 @@ jobs:
               exit 0
             fi
             
-            # Validate API_PORT
-            API_PORT=${API_PORT:-10002}
-            if ! [[ "$API_PORT" =~ ^[0-9]+$ ]]; then
-              echo "❌ Invalid API_PORT: $API_PORT, using default 10002"
-              API_PORT=10002
+            # Validate BOT_PORT
+            BOT_PORT=${BOT_PORT:-10001}
+            if ! [[ "$BOT_PORT" =~ ^[0-9]+$ ]]; then
+              echo "❌ Invalid BOT_PORT: $BOT_PORT, using default 10001"
+              BOT_PORT=10001
             fi
             
             WEB_DOMAIN=$(echo "$WEBFRONT_URL" | sed 's|https://||' | sed 's|/.*||')
-            echo "🌐 Setting up Nginx for web frontend: $WEB_DOMAIN -> port $API_PORT"
+            echo "🌐 Setting up Nginx for web frontend: $WEB_DOMAIN -> port $BOT_PORT"
             
             # Remove any broken configs before certbot
             $SUDO rm -f /etc/nginx/sites-enabled/qubot-web 2>/dev/null || true
@@ -365,7 +359,7 @@ jobs:
                 ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
                 
                 location / {
-                    proxy_pass http://127.0.0.1:$API_PORT;
+                    proxy_pass http://127.0.0.1:$BOT_PORT;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection 'upgrade';
@@ -377,7 +371,7 @@ jobs:
                 
                 # WebSocket support for /ws paths
                 location /ws {
-                    proxy_pass http://127.0.0.1:$API_PORT;
+                    proxy_pass http://127.0.0.1:$BOT_PORT;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection "upgrade";
@@ -394,13 +388,13 @@ jobs:
                 listen 80;
                 server_name $WEB_DOMAIN;
                 location / {
-                    proxy_pass http://127.0.0.1:$API_PORT;
+                    proxy_pass http://127.0.0.1:$BOT_PORT;
                     proxy_http_version 1.1;
                     proxy_set_header Host \$host;
                     proxy_set_header X-Real-IP \$remote_addr;
                 }
                 location /ws {
-                    proxy_pass http://127.0.0.1:$API_PORT;
+                    proxy_pass http://127.0.0.1:$BOT_PORT;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
                     proxy_set_header Connection "upgrade";
@@ -475,7 +469,6 @@ jobs:
             printf 'GIT_SSH_KEY_PATH=%s\n' '${{ secrets.GIT_SSH_KEY_PATH }}' >> .env
             printf 'GIT_SSH_COMMAND=%s\n' '${{ secrets.GIT_SSH_COMMAND }}' >> .env
             printf 'API_ENABLED=%s\n' '${{ secrets.API_ENABLED }}' >> .env
-            printf 'API_PORT=%s\n' '${{ secrets.API_PORT }}' >> .env
             printf 'WEBFRONT_URL=%s\n' '${{ secrets.WEBFRONT_URL }}' >> .env
             printf 'RATE_LIMIT_MS=%s\n' '${{ secrets.RATE_LIMIT_MS }}' >> .env
             printf 'LOG_LEVEL=%s\n' '${{ secrets.LOG_LEVEL }}' >> .env

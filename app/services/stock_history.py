@@ -31,6 +31,10 @@ class StockHistoryService:
         self._scheduler_task = None
         self._ak = None  # AkShare module (lazy load)
         self._pd = None  # Pandas module (lazy load)
+        # Use single-worker thread pool for background operations
+        # This ensures backfill doesn't block the event loop
+        from concurrent.futures import ThreadPoolExecutor
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="stock_history")
     
     def _get_libs(self):
         """Lazy load akshare and pandas modules."""
@@ -128,7 +132,9 @@ class StockHistoryService:
             
             if stale_stocks:
                 logger.info(f"Found {len(stale_stocks)} stocks with stale data (>7 days old)")
-                asyncio.create_task(self._update_stale_stocks(stale_stocks))
+                # Run in background thread to avoid blocking event loop
+                loop = asyncio.get_event_loop()
+                loop.run_in_executor(self._executor, self._update_stale_stocks_sync, stale_stocks)
         
         # Handle missing stocks
         if coverage < 0.9:
@@ -137,7 +143,9 @@ class StockHistoryService:
                     f"Stock coverage: {coverage:.1%} ({db_stock_count}/{len(all_codes)}), "
                     f"resuming backfill for {len(missing_codes)} missing stocks..."
                 )
-                asyncio.create_task(self._backfill_stocks(missing_codes))
+                # Run in background thread to avoid blocking event loop
+                loop = asyncio.get_event_loop()
+                loop.run_in_executor(self._executor, self._backfill_stocks_sync, missing_codes)
             else:
                 logger.info("All stocks have history data")
         else:
@@ -250,6 +258,176 @@ class StockHistoryService:
             f"✅ Backfill complete: {success_count}/{len(codes)} stocks, "
             f"{error_count} errors"
         )
+    
+    def _update_stale_stocks_sync(self, codes: List[str]):
+        """Synchronous version that runs entirely in background thread."""
+        import time
+        import asyncpg
+        
+        ak, pd = self._get_libs()
+        if not ak or not pd:
+            return
+        
+        today = china_today()
+        logger.info(f"[BG Thread] Updating {len(codes)} stocks with stale data...")
+        
+        success_count = 0
+        error_count = 0
+        
+        # Create sync database connection
+        try:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            conn = loop.run_until_complete(
+                asyncpg.connect(
+                    host=db.db_host, port=db.db_port, user=db.db_user,
+                    password=db.db_password, database=db.db_name
+                )
+            )
+        except Exception as e:
+            logger.error(f"[BG Thread] Failed to connect to DB: {e}")
+            return
+        
+        try:
+            for i, code in enumerate(codes):
+                try:
+                    latest = loop.run_until_complete(
+                        conn.fetchval("SELECT MAX(date) FROM stock_history WHERE code = $1", code)
+                    )
+                    
+                    if not latest:
+                        continue
+                    
+                    start_date = latest + timedelta(days=1)
+                    start_str = start_date.strftime("%Y%m%d")
+                    end_str = today.strftime("%Y%m%d")
+                    
+                    # Fetch data
+                    df = ak.stock_zh_a_hist(
+                        symbol=code, period="daily",
+                        start_date=start_str, end_date=end_str, adjust="qfq"
+                    )
+                    
+                    if df is not None and not df.empty:
+                        records = self._prepare_records(code, df, pd)
+                        if records:
+                            loop.run_until_complete(self._save_records_sync(conn, records))
+                            success_count += 1
+                    
+                    if (i + 1) % 100 == 0:
+                        logger.info(f"[BG Thread] Update: {i+1}/{len(codes)} ({success_count} success)")
+                    
+                    time.sleep(0.5)
+                    
+                except Exception as e:
+                    error_count += 1
+                    if error_count <= 10:
+                        logger.warn(f"[BG Thread] Failed to update {code}: {e}")
+        finally:
+            loop.run_until_complete(conn.close())
+            loop.close()
+        
+        logger.info(f"✅ [BG Thread] Update complete: {success_count}/{len(codes)}, {error_count} errors")
+    
+    def _backfill_stocks_sync(self, codes: List[str]):
+        """Synchronous version that runs entirely in background thread."""
+        import time
+        import asyncpg
+        
+        ak, pd = self._get_libs()
+        if not ak or not pd:
+            return
+        
+        end_date = china_today()
+        start_date = end_date - timedelta(days=5 * 365)
+        start_str = start_date.strftime("%Y%m%d")
+        end_str = end_date.strftime("%Y%m%d")
+        
+        logger.info(f"[BG Thread] Backfilling {len(codes)} stocks from {start_date} to {end_date}")
+        
+        success_count = 0
+        error_count = 0
+        
+        # Create sync database connection
+        try:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            conn = loop.run_until_complete(
+                asyncpg.connect(
+                    host=db.db_host, port=db.db_port, user=db.db_user,
+                    password=db.db_password, database=db.db_name
+                )
+            )
+        except Exception as e:
+            logger.error(f"[BG Thread] Failed to connect to DB: {e}")
+            return
+        
+        try:
+            for i, code in enumerate(codes):
+                try:
+                    df = ak.stock_zh_a_hist(
+                        symbol=code, period="daily",
+                        start_date=start_str, end_date=end_str, adjust="qfq"
+                    )
+                    
+                    if df is not None and not df.empty:
+                        records = self._prepare_records(code, df, pd)
+                        if records:
+                            loop.run_until_complete(self._save_records_sync(conn, records))
+                            success_count += 1
+                    
+                    if (i + 1) % 100 == 0:
+                        logger.info(f"[BG Thread] Backfill: {i+1}/{len(codes)} ({success_count} success)")
+                    
+                    time.sleep(0.5)
+                    
+                except Exception as e:
+                    error_count += 1
+                    if error_count <= 10:
+                        logger.warn(f"[BG Thread] Failed to backfill {code}: {e}")
+        finally:
+            loop.run_until_complete(conn.close())
+            loop.close()
+        
+        logger.info(f"✅ [BG Thread] Backfill complete: {success_count}/{len(codes)}, {error_count} errors")
+    
+    def _prepare_records(self, code: str, df, pd):
+        """Prepare records for database insertion."""
+        records = []
+        for _, row in df.iterrows():
+            try:
+                record = (
+                    code,
+                    pd.to_datetime(row['日期']).date(),
+                    float(row.get('开盘', 0)),
+                    float(row.get('最高', 0)),
+                    float(row.get('最低', 0)),
+                    float(row.get('收盘', 0)),
+                    int(row.get('成交量', 0)),
+                    float(row.get('成交额', 0)),
+                    float(row.get('振幅', 0)),
+                    float(row.get('涨跌幅', 0)),
+                    float(row.get('涨跌额', 0)),
+                    float(row.get('换手率', 0)),
+                )
+                records.append(record)
+            except:
+                continue
+        return records
+    
+    async def _save_records_sync(self, conn, records):
+        """Save records using provided connection."""
+        await conn.executemany("""
+            INSERT INTO stock_history 
+            (code, date, open, high, low, close, volume, turnover, 
+             amplitude, change_pct, change_amt, turnover_rate)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (code, date) DO UPDATE SET
+            open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
+            close = EXCLUDED.close, volume = EXCLUDED.volume, turnover = EXCLUDED.turnover,
+            amplitude = EXCLUDED.amplitude, change_pct = EXCLUDED.change_pct,
+            change_amt = EXCLUDED.change_amt, turnover_rate = EXCLUDED.turnover_rate
+        """, records)
     
     async def get_all_stock_codes(self) -> List[str]:
         """Fetch all A-share stock codes."""

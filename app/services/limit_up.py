@@ -478,7 +478,11 @@ class LimitUpService:
         logger.info("Sent afternoon limit-up report")
     
     async def send_morning_price_update(self):
-        """Send morning price update for yesterday's limit-up stocks."""
+        """Send morning price update for yesterday's limit-up stocks.
+        
+        Shows ALL stocks sorted by real-time change percentage.
+        Splits into multiple messages if content exceeds Telegram limit.
+        """
         from app.core.bot import telegram_service
         
         if not settings.STOCK_ALERT_CHANNEL:
@@ -488,25 +492,48 @@ class LimitUpService:
         if not prices:
             return
         
+        # Sort by real-time change_pct descending
+        prices.sort(key=lambda x: -x.get("change_pct", 0))
+        
         now = datetime.now(CHINA_TZ)
+        total = len(prices)
         
-        lines = [
-            f"📈 <b>昨日涨停股实时</b> {now.strftime('%H:%M')}",
-            "━━━━━━━━━━━━━━━━━━━━━\n",
-        ]
-        
-        for p in prices[:20]:
+        # Build stock lines (one per stock)
+        stock_lines = []
+        for i, p in enumerate(prices, 1):
             change = p["change_pct"]
-            icon = "🔴" if change > 5 else ("🟢" if change > 0 else "🟢" if change == 0 else "⚪")
-            streak = f"[{p['limit_times']}板]" if p['limit_times'] > 1 else ""
-            lines.append(
-                f"{icon} {p['name']} {streak}\n"
-                f"   {p['current_price']:.2f} ({change:+.2f}%)"
+            icon = "🔴" if change > 5 else ("🟢" if change > 0 else "⚪")
+            streak = f"[{p['limit_times']}板]"  # Always show 连板数
+            stock_lines.append(
+                f"{i}. {icon} {p['name']} {streak} {p['current_price']:.2f} ({change:+.2f}%)"
             )
         
-        text = "\n".join(lines)
-        await telegram_service.send_message(settings.STOCK_ALERT_CHANNEL, text, parse_mode="html")
-        logger.info(f"Sent morning price update at {now.strftime('%H:%M')}")
+        # Split into messages (max ~3800 chars to be safe)
+        MAX_CHARS = 3800
+        messages = []
+        current_lines = [
+            f"📈 <b>昨日涨停股实时</b> {now.strftime('%H:%M')} (共{total}只)",
+            "━━━━━━━━━━━━━━━━━━━━━\n",
+        ]
+        current_len = sum(len(l) for l in current_lines)
+        
+        for line in stock_lines:
+            line_len = len(line) + 1  # +1 for newline
+            if current_len + line_len > MAX_CHARS:
+                messages.append("\n".join(current_lines))
+                current_lines = [f"📈 <b>昨日涨停股</b> (续)\n"]
+                current_len = len(current_lines[0])
+            current_lines.append(line)
+            current_len += line_len
+        
+        if current_lines:
+            messages.append("\n".join(current_lines))
+        
+        # Send all messages
+        for msg in messages:
+            await telegram_service.send_message(settings.STOCK_ALERT_CHANNEL, msg, parse_mode="html")
+        
+        logger.info(f"Sent morning price update at {now.strftime('%H:%M')} ({total} stocks, {len(messages)} messages)")
     
     # ─────────────────────────────────────────────────────────────────────────
     # Scheduler

@@ -416,17 +416,22 @@ async def cmd_today(message: types.Message):
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
 
 
-@router.callback_query(F.data == "lu:today")
+@router.callback_query(F.data.startswith("lu:today"))
 async def cb_today(callback: types.CallbackQuery):
     await safe_answer(callback)
-    text, markup = await get_today_ui()
+    # Parse page from callback data (format: lu:today or lu:today:1)
+    parts = callback.data.split(":")
+    page = int(parts[2]) if len(parts) > 2 else 1
+    text, markup = await get_today_ui(page)
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except:
         pass
 
 
-async def get_today_ui():
+async def get_today_ui(page: int = 1):
+    PAGE_SIZE = 30
+    
     if not db.pool:
         return "❌ 数据库未连接", None
     
@@ -446,24 +451,36 @@ async def get_today_ui():
         sealed = [s for s in stocks if s.get("is_sealed", True)]
         # Sort: limit_times desc, price desc
         sealed.sort(key=lambda x: (-x.get("limit_times", 1), -x.get("close_price", 0)))
-        rows = sealed[:15]
     else:
-        rows = []
+        sealed = []
+    
+    total = len(sealed)
+    total_pages = (total + PAGE_SIZE - 1) // PAGE_SIZE if total > 0 else 1
+    page = max(1, min(page, total_pages))
+    
+    start_idx = (page - 1) * PAGE_SIZE
+    end_idx = start_idx + PAGE_SIZE
+    rows = sealed[start_idx:end_idx]
     
     if not rows:
         text = "📈 <b>今日涨停</b> (实时)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无数据\n\n<i>数据源: 东方财富</i>"
     else:
-        text = f"📈 <b>今日涨停</b> (实时: {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-        for i, r in enumerate(rows, 1):
+        text = f"📈 <b>今日涨停</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        for i, r in enumerate(rows, start_idx + 1):
             lt = r.get('limit_times', 1)
             streak = f" [{lt}板]" if lt > 1 else ""
             chart_url = get_chart_url(r['code'], r.get('name'))
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}){streak}\n"
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔄 刷新", callback_data="lu:today")
+    # Pagination buttons
+    if page > 1:
+        builder.button(text="◀️ 上一页", callback_data=f"lu:today:{page-1}")
+    builder.button(text="🔄 刷新", callback_data=f"lu:today:{page}")
+    if page < total_pages:
+        builder.button(text="下一页 ▶️", callback_data=f"lu:today:{page+1}")
     builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(2)
+    builder.adjust(3, 1)
     
     return text, builder.as_markup()
 
@@ -480,18 +497,22 @@ async def cmd_first(message: types.Message):
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
 
 
-@router.callback_query(F.data == "lu:first")
+@router.callback_query(F.data.startswith("lu:first"))
 async def cb_first(callback: types.CallbackQuery):
     await safe_answer(callback)
-    text, markup = await get_first_ui()
+    parts = callback.data.split(":")
+    page = int(parts[2]) if len(parts) > 2 else 1
+    text, markup = await get_first_ui(page)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except:
         pass
 
 
-async def get_first_ui():
+async def get_first_ui(page: int = 1):
     """Get today's first-time limit-up stocks (首板 - 收盘涨停 limit_times=1)."""
+    PAGE_SIZE = 30
+    
     if not db.pool:
         return "❌ 数据库未连接", None
     
@@ -512,24 +533,35 @@ async def get_first_ui():
         ]
         # Sort by turnover desc
         first_board.sort(key=lambda x: -x.get("turnover_rate", 0))
-        rows = first_board[:15]
     else:
-        rows = []
+        first_board = []
+    
+    total = len(first_board)
+    total_pages = (total + PAGE_SIZE - 1) // PAGE_SIZE if total > 0 else 1
+    page = max(1, min(page, total_pages))
+    
+    start_idx = (page - 1) * PAGE_SIZE
+    end_idx = start_idx + PAGE_SIZE
+    rows = first_board[start_idx:end_idx]
     
     if not rows:
         text = "🆕 <b>首板</b> (实时)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无首板数据"
     else:
-        text = f"🆕 <b>首板</b> (实时: {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-        for i, r in enumerate(rows, 1):
+        text = f"🆕 <b>首板</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        for i, r in enumerate(rows, start_idx + 1):
             chart_url = get_chart_url(r['code'], r.get('name'))
             tr = r.get('turnover_rate', 0)
             turnover = f"换手{tr:.1f}%" if tr else ""
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {turnover}\n"
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔄 刷新", callback_data="lu:first")
+    if page > 1:
+        builder.button(text="◀️ 上一页", callback_data=f"lu:first:{page-1}")
+    builder.button(text="🔄 刷新", callback_data=f"lu:first:{page}")
+    if page < total_pages:
+        builder.button(text="下一页 ▶️", callback_data=f"lu:first:{page+1}")
     builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(2)
+    builder.adjust(3, 1)
     
     return text, builder.as_markup()
 
@@ -546,18 +578,22 @@ async def cmd_burst(message: types.Message):
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
 
 
-@router.callback_query(F.data == "lu:burst")
+@router.callback_query(F.data.startswith("lu:burst"))
 async def cb_burst(callback: types.CallbackQuery):
     await safe_answer(callback)
-    text, markup = await get_burst_ui()
+    parts = callback.data.split(":")
+    page = int(parts[2]) if len(parts) > 2 else 1
+    text, markup = await get_burst_ui(page)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except:
         pass
 
 
-async def get_burst_ui():
+async def get_burst_ui(page: int = 1):
     """Get today's burst limit-up stocks (曾涨停/炸板 - 触及涨停但收盘未封住)."""
+    PAGE_SIZE = 30
+    
     if not db.pool:
         return "❌ 数据库未连接", None
     
@@ -575,24 +611,35 @@ async def get_burst_ui():
         burst = [s for s in stocks if not s.get("is_sealed", True)]
         # Sort by change_pct desc
         burst.sort(key=lambda x: -x.get("change_pct", 0))
-        rows = burst[:20]
     else:
-        rows = []
+        burst = []
+    
+    total = len(burst)
+    total_pages = (total + PAGE_SIZE - 1) // PAGE_SIZE if total > 0 else 1
+    page = max(1, min(page, total_pages))
+    
+    start_idx = (page - 1) * PAGE_SIZE
+    end_idx = start_idx + PAGE_SIZE
+    rows = burst[start_idx:end_idx]
     
     if not rows:
         text = "💥 <b>曾涨停</b> (实时)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无炸板数据"
     else:
-        text = f"💥 <b>曾涨停</b> (实时: {len(rows)})\n━━━━━━━━━━━━━━━━━━━━━\n<i>日内涨停但未封住</i>\n\n"
-        for i, r in enumerate(rows, 1):
+        text = f"💥 <b>曾涨停</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n<i>日内涨停但未封住</i>\n\n"
+        for i, r in enumerate(rows, start_idx + 1):
             chart_url = get_chart_url(r['code'], r.get('name'))
             cp = r.get('change_pct', 0)
             change = f"{cp:.1f}%" if cp else ""
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {change}\n"
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔄 刷新", callback_data="lu:burst")
+    if page > 1:
+        builder.button(text="◀️ 上一页", callback_data=f"lu:burst:{page-1}")
+    builder.button(text="🔄 刷新", callback_data=f"lu:burst:{page}")
+    if page < total_pages:
+        builder.button(text="下一页 ▶️", callback_data=f"lu:burst:{page+1}")
     builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(2)
+    builder.adjust(3, 1)
     
     return text, builder.as_markup()
 

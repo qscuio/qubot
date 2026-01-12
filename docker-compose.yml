@@ -4,7 +4,6 @@ services:
     restart: unless-stopped
     ports:
       - "${BOT_PORT:-10001}:${BOT_PORT:-10001}"
-      - "${API_PORT:-10002}:${API_PORT:-10002}"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://qubot:qubot@postgres:5432/qubot
@@ -34,7 +33,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: [ "CMD", "node", "-e", "const http=require('http');const ports=[process.env.BOT_PORT||10001,process.env.API_PORT||10002];let pending=ports.length;let done=false;const check=(port)=>{const req=http.get('http://localhost:'+port+'/health',res=>{res.resume();if(res.statusCode===200&&!done){done=true;process.exit(0);}if(--pending===0&&!done)process.exit(1);});req.on('error',()=>{if(--pending===0&&!done)process.exit(1);});};ports.forEach(check);" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:${BOT_PORT:-10001}/health" ]
       interval: 10s
       timeout: 5s
       start_period: 30s

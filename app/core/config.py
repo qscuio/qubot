@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     WEBHOOK_URL: Optional[str] = None
     BOT_SECRET: Optional[str] = None
     BOT_PORT: int = 10001
-    API_PORT: int = 10002
     DOMAIN: Optional[str] = None
     WEBFRONT_URL: Optional[str] = None  # Base URL for web frontend (Mini Apps)
     
@@ -44,11 +43,11 @@ class Settings(BaseSettings):
     RATE_LIMIT_MS: Optional[int] = 1000
     RSS_POLL_INTERVAL_MS: Optional[int] = 300000
 
-    @field_validator('RATE_LIMIT_MS', 'RSS_POLL_INTERVAL_MS', 'BOT_PORT', 'API_PORT', mode='before')
+    @field_validator('RATE_LIMIT_MS', 'RSS_POLL_INTERVAL_MS', 'BOT_PORT', mode='before')
     @classmethod
     def parse_optional_int(cls, v, info):
         if v is None or v == '':
-            defaults = {'RATE_LIMIT_MS': 1000, 'RSS_POLL_INTERVAL_MS': 300000, 'BOT_PORT': 10001, 'API_PORT': 10002}
+            defaults = {'RATE_LIMIT_MS': 1000, 'RSS_POLL_INTERVAL_MS': 300000, 'BOT_PORT': 10001}
             return defaults.get(info.field_name)
         return int(v)
     
