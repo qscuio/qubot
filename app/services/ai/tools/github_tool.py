@@ -16,7 +16,7 @@ GITHUB_API = "https://api.github.com"
 
 def get_headers() -> Dict[str, str]:
     """Get GitHub API headers with token."""
-    token = getattr(settings, "GITHUB_TOKEN", None)
+    token = getattr(settings, "BOT_GITHUB_TOKEN", None)
     headers = {
         "Accept": "application/vnd.github.v3+json",
         "User-Agent": "QuBot/1.0"
@@ -214,8 +214,8 @@ class GitHubIssuesTool(Tool):
                     
                     if not title:
                         return ToolResult(success=False, output=None, error="title required")
-                    if not getattr(settings, "GITHUB_TOKEN", None):
-                        return ToolResult(success=False, output=None, error="GITHUB_TOKEN required for create")
+                    if not getattr(settings, "BOT_GITHUB_TOKEN", None):
+                        return ToolResult(success=False, output=None, error="BOT_GITHUB_TOKEN required for create")
                     
                     response = await client.post(
                         f"{GITHUB_API}/repos/{owner}/{repo}/issues",

@@ -33,15 +33,30 @@ class CodexAgent(BaseCLIAgent):
         if self._binary_path:
             return self._binary_path
         
+        import glob
+        
         paths = [
             shutil.which("codex"),
             "/usr/local/bin/codex",
+            "/usr/bin/codex",
             os.path.expanduser("~/.local/bin/codex"),
+            os.path.expanduser("~/node_modules/.bin/codex"),
         ]
+        
+        # Add nvm paths (glob pattern)
+        nvm_pattern = os.path.expanduser("~/.nvm/versions/node/*/bin/codex")
+        paths.extend(glob.glob(nvm_pattern))
+        
+        # Add npm global (root installed)
+        paths.extend([
+            "/root/.nvm/versions/node/v20.19.6/bin/codex",
+            "/root/node_modules/.bin/codex",
+        ])
         
         for path in paths:
             if path and os.path.isfile(path) and os.access(path, os.X_OK):
                 self._binary_path = path
+                self.logger.info(f"Found codex binary at: {path}")
                 return path
         
         return None

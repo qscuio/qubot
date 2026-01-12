@@ -12,6 +12,9 @@ from app.core.logger import Logger
 from app.core.bot import telegram_service
 from app.core.database import db
 from app.services.message_dedup import get_deduplicator
+from app.services.forward_filters import (
+    create_default_filter_chain, FilterContext, FilterAction, FilterResult
+)
 
 logger = Logger("MonitorService")
 
@@ -91,6 +94,9 @@ class MonitorService:
         )
         self._flush_task = None
         self._report_task = None  # Daily report scheduler
+        
+        # Forward filter chain
+        self.filter_chain = create_default_filter_chain()
     
     @property
     def source_channels(self) -> List[str]:
@@ -920,111 +926,49 @@ class MonitorService:
             sender_name = sender_username or getattr(sender, 'first_name', 'Unknown')
             sender_id = str(sender.id) if sender else 'Unknown'
             
-            # Skip messages sent by our own accounts (don't forward our own messages)
-            if sender and sender.id in telegram_service.own_user_ids:
-                logger.debug(f"⏭️ Skipping message from our own account: {sender_name} ({sender.id})")
-                return
-            
-            # Message content (truncated)
-            msg_text = (event.message.message or '')[:100]
+            # Message content
+            full_text = event.message.message or ''
+            msg_text = full_text[:100]
             
             # Detailed debug logging
             client_id = getattr(event.client, 'me', None) 
             client_info = f" [via {client_id.id}]" if client_id else ""
             logger.info(f"📨 MSG{client_info} | Chat: {chat_title} (@{chat_username or chat_id}) | From: {sender_name} ({sender_id}) | Text: {msg_text[:50]}...")
             
-            # Skip messages from our own target channels (no need to summarize our own output)
-            if self._is_own_target_channel(chat_id):
-                logger.debug(f"⏭️ Skipping message from own target channel: {chat_title}")
-                return
-            
-            # Filter out ads, 18+ content, bot admission messages
-            from app.services.content_filter import content_filter
-            full_text = event.message.message or ''
-            should_filter, filter_reason = content_filter.check(full_text)
-            if should_filter:
-                logger.info(f"🚫 Filtered message ({filter_reason}): {msg_text[:50]}...")
-                return
-            
-            # Check blacklist - skip channels/groups we don't want to process
-            # BUT: VIP users have higher priority than blacklist
-            is_vip_sender = self.is_vip_user(sender_id, sender_username)
-            is_blacklisted = self.is_blacklisted(chat_username, chat_id)
-            if is_blacklisted and not is_vip_sender:
-                logger.info(f"⛔ Blacklisted channel, skipping: {chat_title}")
-                return
-
-            # 1. Check Source (if configured, otherwise forward all)
-            if self.source_channels:
-                is_monitored = False
-                matching_source = None
-                
-                for source in self.source_channels:
-                    if self.matches_source(source, chat_username, chat_id):
-                        is_monitored = True
-                        matching_source = source
-                        break
-                
-                if not is_monitored:
-                    logger.debug(f"Message not from monitored source: {chat_username or chat_id}")
-                    return
-                
-                if matching_source in self.disabled_sources:
-                    logger.debug(f"Source {matching_source} is disabled")
-                    return
-                
-                logger.info(f"📩 Message from monitored source: {chat_title} ({matching_source})")
-            else:
-                # No source filter - forward all messages
-                logger.debug(f"📩 No source filter configured, forwarding from: {chat_title}")
-
-            # 2. Check From Users (if configured)
-            from_users = settings.from_users_list
-            if from_users:
-                sender = await event.get_sender()
-                sender_username = getattr(sender, 'username', None)
-                sender_id = str(sender.id) if sender else ""
-                
-                is_allowed = False
-                for u in from_users:
-                    if u == sender_username or u == f"@{sender_username}" or u == sender_id:
-                        is_allowed = True
-                        break
-                
-                if not is_allowed:
-                    return
-
-            # 3. Check Keywords
-            keywords = settings.keywords_list
-            if keywords:
-                text = event.message.message or ""
-                lower_text = text.lower()
-                has_keyword = any(k.lower() in lower_text for k in keywords)
-                
-                if not has_keyword:
-                    return
-
-            # Log match
-            logger.info(f"✅ Matched message from {chat_title}")
-
-            # 4. Check for duplicate content (before forwarding)
-            full_text = event.message.message or ''
-            is_content_dup, dup_reason = get_deduplicator().is_duplicate(
-                full_text, 
-                channel_id=chat_id,
-                check_near_duplicates=True
+            # ═══════════════════════════════════════════════════════════════
+            # Run filter chain - returns FilterResult with action and target
+            # ═══════════════════════════════════════════════════════════════
+            filter_ctx = FilterContext(
+                message_text=full_text,
+                message_id=message_id,
+                message_time=event.message.date,
+                sender_id=sender_id,
+                sender_username=sender_username,
+                sender_name=sender_name,
+                chat_id=chat_id,
+                chat_username=chat_username,
+                chat_title=chat_title,
+                default_target=self.target_channel,
+                has_media=bool(event.message.media),
+                monitor_service=self,
+                telegram_service=telegram_service
             )
-            if is_content_dup and not is_vip_sender:
-                # Allow VIP duplicates (important sources may repeat)
-                logger.info(f"🔄 Skipping duplicate content ({dup_reason}): {msg_text[:50]}...")
-                return
-
-            # 5. Check if sender is VIP (for direct forwarding)
-            is_vip = is_vip_sender
             
-            # 5. Forward VIP messages, or any non-blacklisted messages
-            should_forward = is_vip or not is_blacklisted
-            if should_forward and self.target_channel:
+            filter_result = self.filter_chain.run(filter_ctx)
+            
+            # Handle filter result
+            if filter_result.action == FilterAction.BLOCK:
+                logger.info(f"🚫 Blocked by filter: {filter_result.reason}")
+                # Still cache for reports even if blocked
+                await self._cache_message(chat_id, chat_title, sender_name, full_text)
+                await self._save_to_history(chat_title, chat_id, full_text)
+                return
+            
+            # FilterAction.FORWARD - proceed with forwarding
+            target = filter_result.target_channel
+            is_vip = filter_result.reason.startswith("vip:")
+            
+            if target:
                 source_name = chat_title if chat_title != 'Unknown' else (chat_username or chat_id)
                 source_handle = f"@{chat_username}" if chat_username else None
                 message_link = self._build_message_link(chat_username, chat_id, message_id)
@@ -1071,12 +1015,7 @@ class MonitorService:
                 log_prefix = "⭐ VIP " if is_vip else ""
                 logger.info(f"📤 {log_prefix}Forwarding from {sender_name}...")
                 try:
-                    # VIP messages go to VIP channel if configured, else target channel
-                    if is_vip:
-                        target = self.vip_target_channel or self.target_channel
-                    else:
-                        target = self.target_channel
-                    
+                    # Target channel is provided by filter chain
                     if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
                          target = int(target)
                     

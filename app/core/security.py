@@ -200,6 +200,26 @@ SUSPICIOUS_PATTERNS = [
     'niet', 'eval-stdin', 'phpunit',
 ]
 
+# Suspicious User-Agents (scanner tools)
+SUSPICIOUS_USER_AGENTS = [
+    # Security scanners
+    'nmap', 'nikto', 'sqlmap', 'gobuster', 'dirbuster', 'dirb',
+    'wpscan', 'nuclei', 'masscan', 'zap', 'burp', 'acunetix',
+    # Bots and crawlers (non-legit)
+    'scrapy', 'python-requests', 'python-urllib', 'go-http-client',
+    'java/', 'libwww', 'wget', 'curl/', 'httpie',
+    # Headless browsers used for scanning
+    'headlesschrome', 'phantomjs', 'selenium',
+    # Generic bad patterns
+    'bot', 'crawler', 'spider', 'scan', 'attack',
+]
+
+# Allowed HTTP methods
+ALLOWED_METHODS = {'GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'}
+
+# Max request size (10MB)
+MAX_REQUEST_SIZE = 10 * 1024 * 1024
+
 
 class SecurityMiddleware(BaseHTTPMiddleware):
     """
@@ -234,9 +254,33 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         path_lower = path.lower()
         return any(pattern in path_lower for pattern in SUSPICIOUS_PATTERNS)
     
+    def _is_suspicious_user_agent(self, user_agent: str) -> bool:
+        """Check if User-Agent indicates a scanner tool."""
+        if not user_agent:
+            return True  # Missing UA is suspicious
+        ua_lower = user_agent.lower()
+        return any(pattern in ua_lower for pattern in SUSPICIOUS_USER_AGENTS)
+    
+    def _is_blocked_method(self, method: str) -> bool:
+        """Check if HTTP method is not allowed."""
+        return method.upper() not in ALLOWED_METHODS
+    
+    def _is_oversized_request(self, request: Request) -> bool:
+        """Check if request body is too large."""
+        content_length = request.headers.get('content-length')
+        if content_length:
+            try:
+                if int(content_length) > MAX_REQUEST_SIZE:
+                    return True
+            except ValueError:
+                pass
+        return False
+    
     async def dispatch(self, request: Request, call_next):
         client_ip = self._get_client_ip(request)
         path = request.url.path
+        method = request.method
+        user_agent = request.headers.get('user-agent', '')
         
         # Check if IP is blocked
         if self.rate_limiter.is_blocked(client_ip):
@@ -244,6 +288,46 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             return JSONResponse(
                 status_code=429,
                 content={"error": "Too many requests. Please try again later."}
+            )
+        
+        # Check for blocked HTTP methods (TRACE, CONNECT, etc.)
+        if self._is_blocked_method(method):
+            self._scanner_ips[client_ip] += 1
+            logger.warn(f"🚫 Blocked method {method} from {client_ip}")
+            if self._scanner_ips[client_ip] >= 3:
+                self.rate_limiter.block(client_ip, duration=3600)
+            return JSONResponse(
+                status_code=405,
+                content={"error": "Method not allowed."}
+            )
+        
+        # Check for suspicious User-Agent (scanner tools)
+        if self._is_suspicious_user_agent(user_agent):
+            self._scanner_ips[client_ip] += 1
+            logger.warn(f"🔍 Suspicious UA from {client_ip}: {user_agent[:50]} (count: {self._scanner_ips[client_ip]})")
+            if self._scanner_ips[client_ip] >= 3:
+                self.rate_limiter.block(client_ip, duration=3600)
+                asyncio.create_task(send_attack_notification(
+                    ip=client_ip,
+                    reason=f"Suspicious User-Agent: {user_agent[:50]}",
+                    path=path,
+                    count=self._scanner_ips[client_ip]
+                ))
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": "Access denied."}
+                )
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Access denied."}
+            )
+        
+        # Check for oversized requests (DoS protection)
+        if self._is_oversized_request(request):
+            logger.warn(f"🚫 Oversized request from {client_ip}: {request.headers.get('content-length')}")
+            return JSONResponse(
+                status_code=413,
+                content={"error": "Request too large."}
             )
         
         # Check for suspicious paths

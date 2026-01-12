@@ -183,7 +183,7 @@ class Settings(BaseSettings):
     AI_ADVANCED_PROVIDER: Optional[str] = "groq"  # Provider for advanced AI (default: groq)
     AI_EXTENDED_THINKING: bool = False  # Enable Claude extended thinking
     SEARX_URL: Optional[str] = None  # SearXNG URL for web search tool
-    GITHUB_TOKEN: Optional[str] = None  # GitHub token for GitHub tools
+    BOT_GITHUB_TOKEN: Optional[str] = None  # GitHub token for GitHub tools and repo operations
     CLOUDFLARE_API_TOKEN: Optional[str] = None  # Cloudflare API token
     CLOUDFLARE_ACCOUNT_ID: Optional[str] = None  # Cloudflare account ID
     AI_ALLOWED_PATHS: Optional[str] = None  # Comma-separated allowed paths for file tools

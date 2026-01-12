@@ -32,13 +32,46 @@ class ClaudeAgent(BaseCLIAgent):
         super().__init__(service)
         self._clients: Dict[str, Any] = {}
         self._receiver_tasks: Dict[str, asyncio.Task] = {}
+        self._binary_path: Optional[str] = None
+    
+    def _find_binary(self) -> Optional[str]:
+        """Find the claude binary."""
+        if self._binary_path:
+            return self._binary_path
+        
+        import glob
+        
+        paths = [
+            shutil.which("claude"),
+            "/usr/local/bin/claude",
+            "/usr/bin/claude",
+            os.path.expanduser("~/.local/bin/claude"),
+            os.path.expanduser("~/node_modules/.bin/claude"),
+        ]
+        
+        # Add nvm paths (glob pattern)
+        nvm_pattern = os.path.expanduser("~/.nvm/versions/node/*/bin/claude")
+        paths.extend(glob.glob(nvm_pattern))
+        
+        # Add npm global (root installed)
+        paths.extend([
+            "/root/.nvm/versions/node/v20.19.6/bin/claude",
+            "/root/node_modules/.bin/claude",
+        ])
+        
+        for path in paths:
+            if path and os.path.isfile(path) and os.access(path, os.X_OK):
+                self._binary_path = path
+                self.logger.info(f"Found claude binary at: {path}")
+                return path
+        
+        return None
     
     def is_available(self) -> bool:
         """Check if Claude Code CLI is available."""
         if not CLAUDE_SDK_AVAILABLE:
             return False
-        # Check if binary exists
-        return shutil.which("claude") is not None
+        return self._find_binary() is not None
     
     async def handle_message(self, request: AgentRequest) -> None:
         """Process message through Claude Code."""
@@ -49,7 +82,7 @@ class ClaudeAgent(BaseCLIAgent):
             ))
             return
         
-        if not shutil.which("claude"):
+        if not self._find_binary():
             await self.emit_message(request, AgentMessage(
                 text="❌ Claude Code CLI not found. Install with: `npm install -g @anthropic-ai/claude-code`",
                 message_type="error"

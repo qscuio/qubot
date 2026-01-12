@@ -9,10 +9,32 @@ services:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://qubot:qubot@postgres:5432/qubot
       - REDIS_URL=redis://redis:6379
+      # Secrets passed from shell environment (not stored in .env file)
+      - TG_SESSIONS_JSON
+      - RSS_BOT_TOKEN
+      - AI_BOT_TOKEN
+      - AGENT_BOT_TOKEN
+      - MONITOR_BOT_TOKEN
+      - WEBHOOK_URL
+      - BOT_PORT
+      - BOT_SECRET
+      - GROQ_API_KEY
+      - GEMINI_API_KEY
+      - OPENAI_API_KEY
+      - CLAUDE_API_KEY
+      - NVIDIA_API_KEY
+      - GLM_API_KEY
+      - MINIMAX_API_KEY
+      - OPENROUTER_API_KEY
+      - API_KEYS
+      - CRAWLER_BOT_TOKEN
+      - VIBE_BOT_TOKEN
+      - BOT_GITHUB_TOKEN
+      # Non-sensitive config from .env file
     env_file:
       - .env
     healthcheck:
-      test: ["CMD", "node", "-e", "const http=require('http');const ports=[process.env.BOT_PORT||10001,process.env.API_PORT||10002];let pending=ports.length;let done=false;const check=(port)=>{const req=http.get('http://localhost:'+port+'/health',res=>{res.resume();if(res.statusCode===200&&!done){done=true;process.exit(0);}if(--pending===0&&!done)process.exit(1);});req.on('error',()=>{if(--pending===0&&!done)process.exit(1);});};ports.forEach(check);"]
+      test: [ "CMD", "node", "-e", "const http=require('http');const ports=[process.env.BOT_PORT||10001,process.env.API_PORT||10002];let pending=ports.length;let done=false;const check=(port)=>{const req=http.get('http://localhost:'+port+'/health',res=>{res.resume();if(res.statusCode===200&&!done){done=true;process.exit(0);}if(--pending===0&&!done)process.exit(1);});req.on('error',()=>{if(--pending===0&&!done)process.exit(1);});};ports.forEach(check);" ]
       interval: 10s
       timeout: 5s
       start_period: 30s
@@ -23,7 +45,7 @@ services:
       redis:
         condition: service_started
     volumes:
-      - ~/.ssh:/root/.ssh:ro  # Mount SSH keys for GitHub export
+      - ~/.ssh:/root/.ssh:ro # Mount SSH keys for GitHub export
     networks:
       - qubot-network
 
@@ -37,7 +59,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U qubot -d qubot"]
+      test: [ "CMD-SHELL", "pg_isready -U qubot -d qubot" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -56,6 +78,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+
 
 networks:
   qubot-network:

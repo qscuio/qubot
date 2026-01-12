@@ -29,17 +29,31 @@ class GeminiAgent(BaseCLIAgent):
         if self._binary_path:
             return self._binary_path
         
+        import glob
+        
         # Check common locations
         paths = [
             shutil.which("gemini"),
-            os.path.expanduser("~/.nvm/versions/node/*/bin/gemini"),
             "/usr/local/bin/gemini",
+            "/usr/bin/gemini",
+            os.path.expanduser("~/.local/bin/gemini"),
             os.path.expanduser("~/node_modules/.bin/gemini"),
         ]
+        
+        # Add nvm paths (glob pattern)
+        nvm_pattern = os.path.expanduser("~/.nvm/versions/node/*/bin/gemini")
+        paths.extend(glob.glob(nvm_pattern))
+        
+        # Add npm global (root installed)
+        paths.extend([
+            "/root/.nvm/versions/node/v20.19.6/bin/gemini",
+            "/root/node_modules/.bin/gemini",
+        ])
         
         for path in paths:
             if path and os.path.isfile(path) and os.access(path, os.X_OK):
                 self._binary_path = path
+                self.logger.info(f"Found gemini binary at: {path}")
                 return path
         
         return None

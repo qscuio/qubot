@@ -270,7 +270,7 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 | `AI_ADVANCED_PROVIDER` | Provider for advanced AI features | `groq` |
 | `AI_EXTENDED_THINKING` | Enable Claude extended thinking | `false` |
 | `SEARX_URL` | SearXNG URL for web search tool | - |
-| `GITHUB_TOKEN` | GitHub token for GitHub tools | - |
+| `BOT_GITHUB_TOKEN` | GitHub token for GitHub tools and repo operations | - |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare API token | - |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID | - |
 | `AI_ALLOWED_PATHS` | Comma-separated allowed paths for file tools | - |

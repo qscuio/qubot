@@ -23,7 +23,7 @@ class GitHubActionsClient:
     """Client for GitHub Actions API."""
     
     def __init__(self, token: Optional[str] = None):
-        self._token = token or settings.GITHUB_TOKEN
+        self._token = token or settings.BOT_GITHUB_TOKEN
         self._client: Optional["Github"] = None
     
     def _get_client(self) -> Optional["Github"]:

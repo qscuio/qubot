@@ -87,20 +87,6 @@ jobs:
               fi
               $SUDO ufw --force enable || true
             fi
-            
-            # Install Node.js 20+ for CLI agents (Vibe Remote)
-            if ! command -v node &> /dev/null || [ "$(node -v | cut -d'v' -f2 | cut -d'.' -f1)" -lt 20 ]; then
-              echo "📦 Installing Node.js 20..."
-              curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash -
-              $SUDO apt-get install -y nodejs
-            fi
-            
-            # Install CLI coding agents for Vibe Remote
-            echo "🤖 Installing CLI agents..."
-            $SUDO npm install -g @google/gemini-cli 2>/dev/null || true
-            $SUDO npm install -g @anthropic-ai/claude-code 2>/dev/null || true
-            $SUDO npm install -g @openai/codex 2>/dev/null || true
-            echo "✅ CLI agents installation complete"
 
       - name: Setup Nginx reverse proxy
         if: steps.check_enabled.outputs.skip != 'true'
@@ -140,6 +126,12 @@ jobs:
               $SUDO apt-get update
               $SUDO apt-get install -y nginx
               $SUDO systemctl enable nginx
+            fi
+            
+            # Add rate limiting zones to nginx.conf if not present
+            if ! grep -q "limit_req_zone" /etc/nginx/nginx.conf; then
+              echo "📊 Adding rate limiting zones to nginx.conf..."
+              $SUDO sed -i '/http {/a\    # Rate limiting zones\n    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;\n    limit_conn_zone $binary_remote_addr zone=conn_limit:10m;' /etc/nginx/nginx.conf
             fi
             
             # Install Certbot
@@ -195,6 +187,24 @@ jobs:
                 ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
                 include /etc/letsencrypt/options-ssl-nginx.conf;
                 ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+                
+                # Security headers
+                add_header X-XSS-Protection "1; mode=block" always;
+                add_header X-Content-Type-Options "nosniff" always;
+                add_header X-Frame-Options "SAMEORIGIN" always;
+                add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+                
+                # Rate limiting (10 req/sec per IP)
+                limit_req zone=api_limit burst=20 nodelay;
+                limit_conn conn_limit 20;
+                
+                # Block bad User-Agents at Nginx level
+                if (\$http_user_agent ~* (nmap|nikto|sqlmap|gobuster|dirbuster|masscan|nuclei)) {
+                    return 403;
+                }
+                
+                # Max request body size
+                client_max_body_size 10M;
                 
                 location / {
                     proxy_pass http://127.0.0.1:$BOT_PORT;
@@ -382,23 +392,35 @@ jobs:
             git checkout -B "$DEPLOY_BRANCH" "origin/$DEPLOY_BRANCH"
             git reset --hard "origin/$DEPLOY_BRANCH"
             
-            # Create .env file - use printf to preserve special characters in secrets
-            printf 'TG_SESSIONS_JSON=%s\n' '${{ secrets.TG_SESSIONS_JSON }}' > .env
-            printf 'RSS_BOT_TOKEN=%s\n' '${{ secrets.RSS_BOT_TOKEN }}' >> .env
-            printf 'AI_BOT_TOKEN=%s\n' '${{ secrets.AI_BOT_TOKEN }}' >> .env
-            printf 'AGENT_BOT_TOKEN=%s\n' '${{ secrets.AGENT_BOT_TOKEN }}' >> .env
-            printf 'MONITOR_BOT_TOKEN=%s\n' '${{ secrets.MONITOR_BOT_TOKEN }}' >> .env
-            printf 'WEBHOOK_URL=%s\n' '${{ secrets.WEBHOOK_URL }}' >> .env
-            printf 'BOT_PORT=%s\n' '${{ secrets.BOT_PORT }}' >> .env
-            printf 'BOT_SECRET=%s\n' '${{ secrets.BOT_SECRET }}' >> .env
-            printf 'GROQ_API_KEY=%s\n' '${{ secrets.GROQ_API_KEY }}' >> .env
-            printf 'GEMINI_API_KEY=%s\n' '${{ secrets.GEMINI_API_KEY }}' >> .env
-            printf 'OPENAI_API_KEY=%s\n' '${{ secrets.OPENAI_API_KEY }}' >> .env
-            printf 'CLAUDE_API_KEY=%s\n' '${{ secrets.CLAUDE_API_KEY }}' >> .env
-            printf 'NVIDIA_API_KEY=%s\n' '${{ secrets.NVIDIA_API_KEY }}' >> .env
-            printf 'GLM_API_KEY=%s\n' '${{ secrets.GLM_API_KEY }}' >> .env
-            printf 'MINIMAX_API_KEY=%s\n' '${{ secrets.MINIMAX_API_KEY }}' >> .env
-            printf 'OPENROUTER_API_KEY=%s\n' '${{ secrets.OPENROUTER_API_KEY }}' >> .env
+            # Export sensitive secrets as environment variables (NOT written to disk)
+            export TG_SESSIONS_JSON='${{ secrets.TG_SESSIONS_JSON }}'
+            export RSS_BOT_TOKEN='${{ secrets.RSS_BOT_TOKEN }}'
+            export AI_BOT_TOKEN='${{ secrets.AI_BOT_TOKEN }}'
+            export AGENT_BOT_TOKEN='${{ secrets.AGENT_BOT_TOKEN }}'
+            export MONITOR_BOT_TOKEN='${{ secrets.MONITOR_BOT_TOKEN }}'
+            export WEBHOOK_URL='${{ secrets.WEBHOOK_URL }}'
+            export BOT_PORT='${{ secrets.BOT_PORT }}'
+            export BOT_SECRET='${{ secrets.BOT_SECRET }}'
+            export GROQ_API_KEY='${{ secrets.GROQ_API_KEY }}'
+            export GEMINI_API_KEY='${{ secrets.GEMINI_API_KEY }}'
+            export OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}'
+            export CLAUDE_API_KEY='${{ secrets.CLAUDE_API_KEY }}'
+            export NVIDIA_API_KEY='${{ secrets.NVIDIA_API_KEY }}'
+            export GLM_API_KEY='${{ secrets.GLM_API_KEY }}'
+            export MINIMAX_API_KEY='${{ secrets.MINIMAX_API_KEY }}'
+            export OPENROUTER_API_KEY='${{ secrets.OPENROUTER_API_KEY }}'
+            export API_KEYS='${{ secrets.API_KEYS }}'
+            export CRAWLER_BOT_TOKEN='${{ secrets.CRAWLER_BOT_TOKEN }}'
+            export VIBE_BOT_TOKEN='${{ secrets.VIBE_BOT_TOKEN }}'
+            export BOT_GITHUB_TOKEN='${{ secrets.BOT_GITHUB_TOKEN }}'
+            
+            # Create .env file for NON-SENSITIVE config only (with restrictive permissions)
+            cat > .env << 'EOF'
+            # Non-sensitive configuration (secrets are passed via environment variables)
+            EOF
+            chmod 600 .env
+            
+            # Add non-sensitive config to .env
             printf 'SOURCE_CHANNELS=%s\n' '${{ secrets.SOURCE_CHANNELS }}' >> .env
             printf 'TARGET_CHANNEL=%s\n' '${{ secrets.TARGET_CHANNEL }}' >> .env
             printf 'VIP_TARGET_CHANNEL=%s\n' '${{ secrets.VIP_TARGET_CHANNEL }}' >> .env
@@ -411,18 +433,15 @@ jobs:
             printf 'GIT_SSH_COMMAND=%s\n' '${{ secrets.GIT_SSH_COMMAND }}' >> .env
             printf 'API_ENABLED=%s\n' '${{ secrets.API_ENABLED }}' >> .env
             printf 'API_PORT=%s\n' '${{ secrets.API_PORT }}' >> .env
-            printf 'API_KEYS=%s\n' '${{ secrets.API_KEYS }}' >> .env
             printf 'WEBFRONT_URL=%s\n' '${{ secrets.WEBFRONT_URL }}' >> .env
             printf 'RATE_LIMIT_MS=%s\n' '${{ secrets.RATE_LIMIT_MS }}' >> .env
             printf 'LOG_LEVEL=%s\n' '${{ secrets.LOG_LEVEL }}' >> .env
             printf 'TWITTER_ACCOUNTS=%s\n' '${{ secrets.TWITTER_ACCOUNTS }}' >> .env
             printf 'BLACKLIST_CHANNELS=%s\n' '${{ secrets.BLACKLIST_CHANNELS }}' >> .env
-            printf 'CRAWLER_BOT_TOKEN=%s\n' '${{ secrets.CRAWLER_BOT_TOKEN }}' >> .env
             printf 'STOCK_ALERT_CHANNEL=%s\n' '${{ secrets.STOCK_ALERT_CHANNEL }}' >> .env
             printf 'ALERT_CHANNEL=%s\n' '${{ secrets.ALERT_CHANNEL }}' >> .env
-            printf 'VIBE_BOT_TOKEN=%s\n' '${{ secrets.VIBE_BOT_TOKEN }}' >> .env
             
-            # Deploy (fail if build fails)
+            # Deploy (secrets passed via environment, not stored on disk)
             docker compose down || true
             docker compose build --no-cache || { echo "❌ Build failed!"; exit 1; }
             docker compose up -d
