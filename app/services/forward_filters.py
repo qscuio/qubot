@@ -218,7 +218,7 @@ class TargetChannelFilter(ForwardFilter):
 
 
 class TimeRestrictionFilter(ForwardFilter):
-    """Priority 40: Block after 12 PM."""
+    """Priority 40: Only forward between 6 AM and 12 PM."""
     
     @property
     def name(self) -> str:
@@ -230,6 +230,9 @@ class TimeRestrictionFilter(ForwardFilter):
     
     def check(self, ctx: FilterContext) -> FilterResult:
         hour = datetime.now(SHANGHAI_TZ).hour
+        # Allow forwarding only between 6 AM and 12 PM (noon)
+        if hour < 6:
+            return FilterResult(FilterAction.BLOCK, f"before_6am:{hour}:00")
         if hour >= 12:
             return FilterResult(FilterAction.BLOCK, f"after_noon:{hour}:00")
         return FilterResult(FilterAction.CONTINUE)
