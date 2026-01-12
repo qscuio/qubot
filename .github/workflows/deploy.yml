@@ -130,7 +130,7 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
-          BOT_PORT: ${{ secrets.BOT_PORT || '3000' }}
+          BOT_PORT: ${{ secrets.BOT_PORT || '6887' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
@@ -281,7 +281,7 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           WEBFRONT_URL: ${{ secrets.WEBFRONT_URL }}
-          BOT_PORT: ${{ secrets.BOT_PORT || '10001' }}
+          BOT_PORT: ${{ secrets.BOT_PORT || '6887' }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}

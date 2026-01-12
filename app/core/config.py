@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     # Webhook
     WEBHOOK_URL: Optional[str] = None
     BOT_SECRET: Optional[str] = None
-    BOT_PORT: int = 10001
+    BOT_PORT: int = 6887
     DOMAIN: Optional[str] = None
     WEBFRONT_URL: Optional[str] = None  # Base URL for web frontend (Mini Apps)
     
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     @classmethod
     def parse_optional_int(cls, v, info):
         if v is None or v == '':
-            defaults = {'RATE_LIMIT_MS': 1000, 'RSS_POLL_INTERVAL_MS': 300000, 'BOT_PORT': 10001}
+            defaults = {'RATE_LIMIT_MS': 1000, 'RSS_POLL_INTERVAL_MS': 300000, 'BOT_PORT': 6887}
             return defaults.get(info.field_name)
         return int(v)
     

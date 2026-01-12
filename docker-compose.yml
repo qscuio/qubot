@@ -3,7 +3,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "${BOT_PORT:-10001}:${BOT_PORT:-10001}"
+      - "${BOT_PORT:-6887}:${BOT_PORT:-6887}"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://qubot:qubot@postgres:5432/qubot
@@ -33,7 +33,7 @@ services:
     env_file:
       - .env
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:${BOT_PORT:-10001}/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:${BOT_PORT:-6887}/health" ]
       interval: 10s
       timeout: 5s
       start_period: 30s
