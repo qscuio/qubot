@@ -66,33 +66,73 @@ class StockHistoryService:
         logger.info("Stock History Service stopped")
     
     async def initialize(self):
-        """Initialize service - backfill 5 years of history if needed."""
+        """Initialize service - backfill 5 years of history if needed.
+        
+        Smart resume: If backfill was interrupted, resumes from where it left off
+        by checking which stocks are missing from the database.
+        """
         if not db.pool:
             logger.warn("Database not connected, skipping initialization")
             return
         
-        # Check if we have any data
-        count = await db.pool.fetchval("SELECT COUNT(*) FROM stock_history")
+        # Get current stock count in DB
+        result = await db.pool.fetchrow("""
+            SELECT COUNT(*) as total_records,
+                   COUNT(DISTINCT code) as stock_count,
+                   MIN(date) as min_date, 
+                   MAX(date) as max_date
+            FROM stock_history
+        """)
         
-        if count > 0:
-            # Get date range
-            result = await db.pool.fetchrow("""
-                SELECT MIN(date) as min_date, MAX(date) as max_date, 
-                       COUNT(DISTINCT code) as stock_count
-                FROM stock_history
-            """)
+        db_stock_count = result['stock_count'] or 0
+        
+        if db_stock_count > 0:
             logger.info(
-                f"Found {count:,} records: {result['stock_count']} stocks, "
+                f"Found {result['total_records']:,} records: {db_stock_count} stocks, "
                 f"from {result['min_date']} to {result['max_date']}"
             )
+        
+        # Get all current A-share stock codes
+        all_codes = await self.get_all_stock_codes()
+        if not all_codes:
+            logger.warn("Could not fetch stock list, skipping backfill check")
             return
         
-        # No data - run initial backfill in background
-        logger.info("No history data found, starting 5-year backfill in background...")
-        asyncio.create_task(self._backfill_all_stocks())
+        # Check coverage - if we have less than 90% of stocks, resume backfill
+        coverage = db_stock_count / len(all_codes) if all_codes else 1.0
+        
+        if coverage >= 0.9:
+            logger.info(f"Stock coverage: {coverage:.1%} ({db_stock_count}/{len(all_codes)}) - sufficient")
+            return
+        
+        # Find missing stocks
+        existing_codes = set()
+        if db_stock_count > 0:
+            rows = await db.pool.fetch("SELECT DISTINCT code FROM stock_history")
+            existing_codes = {row['code'] for row in rows}
+        
+        missing_codes = [c for c in all_codes if c not in existing_codes]
+        
+        if not missing_codes:
+            logger.info("All stocks have history data")
+            return
+        
+        logger.info(
+            f"Stock coverage: {coverage:.1%} ({db_stock_count}/{len(all_codes)}), "
+            f"resuming backfill for {len(missing_codes)} missing stocks..."
+        )
+        asyncio.create_task(self._backfill_stocks(missing_codes))
     
     async def _backfill_all_stocks(self):
         """Backfill 5 years of history for all A-share stocks."""
+        codes = await self.get_all_stock_codes()
+        if not codes:
+            logger.error("Failed to get stock codes")
+            return
+        await self._backfill_stocks(codes)
+    
+    async def _backfill_stocks(self, codes: List[str]):
+        """Backfill 5 years of history for specified stock codes."""
         ak, pd = self._get_libs()
         if not ak or not pd:
             return
@@ -104,15 +144,7 @@ class StockHistoryService:
         start_str = start_date.strftime("%Y%m%d")
         end_str = end_date.strftime("%Y%m%d")
         
-        logger.info(f"Backfilling history from {start_date} to {end_date}")
-        
-        # Get all A-share stock codes
-        codes = await self.get_all_stock_codes()
-        if not codes:
-            logger.error("Failed to get stock codes")
-            return
-        
-        logger.info(f"Starting backfill for {len(codes)} stocks...")
+        logger.info(f"Backfilling {len(codes)} stocks from {start_date} to {end_date}")
         
         success_count = 0
         error_count = 0
