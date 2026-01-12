@@ -372,13 +372,12 @@ class LimitUpService:
             SELECT code, name, first_limit_date, first_limit_price
             FROM startup_watchlist
             ORDER BY first_limit_date DESC
-            LIMIT 30
         """)
         
         return [dict(r) for r in rows]
     
     async def get_strong_stocks(self, days: int = 7) -> List[Dict]:
-        """Get strong stocks (multiple limit-ups in recent days)."""
+        """Get strong stocks (3+ limit-ups in recent days)."""
         if not db.pool:
             return []
         
@@ -388,9 +387,8 @@ class LimitUpService:
             FROM limit_up_stocks
             WHERE date >= CURRENT_DATE - INTERVAL '%s days'
             GROUP BY code, name
-            HAVING COUNT(*) >= 2
+            HAVING COUNT(*) >= 3
             ORDER BY limit_count DESC, max_streak DESC
-            LIMIT 20
         """ % days)
         
         return [dict(r) for r in rows]
@@ -406,13 +404,16 @@ class LimitUpService:
             WHERE streak_count >= 2
               AND last_limit_date >= CURRENT_DATE - INTERVAL '3 days'
             ORDER BY streak_count DESC
-            LIMIT 20
         """)
         
         return [dict(r) for r in rows]
     
     async def send_afternoon_report(self):
-        """Send 4PM report with limit-ups, strong stocks, and streak leaders."""
+        """Send 4PM report with limit-ups, strong stocks, and streak leaders.
+        
+        Sends complete lists split into multiple messages if needed.
+        No truncation - all stocks are included.
+        """
         from app.core.bot import telegram_service
         
         if not settings.STOCK_ALERT_CHANNEL:
@@ -429,53 +430,97 @@ class LimitUpService:
         
         now = datetime.now(CHINA_TZ)
         
-        # Build report
-        lines = [
-            f"📊 <b>涨停股日报</b> {now.strftime('%Y-%m-%d %H:%M')}",
-            "━━━━━━━━━━━━━━━━━━━━━",
-        ]
+        # Helper to split long lists into multiple messages
+        async def send_stock_list(title: str, items: List[Dict], formatter):
+            """Send a stock list, splitting into multiple messages if needed."""
+            if not items:
+                return
+            
+            MAX_CHARS = 3800
+            messages = []
+            current_lines = [title, ""]
+            current_len = len(title) + 1
+            
+            for i, item in enumerate(items, 1):
+                line = formatter(i, item)
+                line_len = len(line) + 1
+                
+                if current_len + line_len > MAX_CHARS:
+                    messages.append("\n".join(current_lines))
+                    page_num = len(messages) + 1
+                    current_lines = [f"{title} (续{page_num})", ""]
+                    current_len = len(current_lines[0]) + 1
+                
+                current_lines.append(line)
+                current_len += line_len
+            
+            if len(current_lines) > 2:  # Has content beyond header
+                messages.append("\n".join(current_lines))
+            
+            # Send all messages
+            for msg in messages:
+                await telegram_service.send_message(
+                    settings.STOCK_ALERT_CHANNEL, msg, 
+                    parse_mode="html", link_preview=False
+                )
         
-        # Sealed limit-ups (收盘涨停)
-        lines.append(f"\n🔴 <b>收盘涨停</b> ({len(sealed_stocks)}只)\n")
-        for i, s in enumerate(sealed_stocks[:15], 1):
+        # 1. Send header
+        header = (
+            f"📊 <b>涨停股日报</b> {now.strftime('%Y-%m-%d %H:%M')}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔴 收盘涨停: {len(sealed_stocks)}只\n"
+            f"💥 曾涨停: {len(burst_stocks)}只\n"
+            f"🔥 连板股: {len(streaks)}只\n"
+            f"💪 强势股: {len(strong)}只"
+        )
+        await telegram_service.send_message(
+            settings.STOCK_ALERT_CHANNEL, header, 
+            parse_mode="html", link_preview=False
+        )
+        
+        # 2. Send sealed limit-ups (收盘涨停) - complete list
+        def format_sealed(i, s):
             streak = f"[{s['limit_times']}板]" if s['limit_times'] > 1 else ""
             chart_url = get_chart_url(s['code'], s.get('name'))
-            lines.append(f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) {streak}")
+            return f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) {streak}"
         
-        if len(sealed_stocks) > 15:
-            lines.append(f"...及其他 {len(sealed_stocks)-15} 只")
-        
-        # Burst limit-ups (曾涨停/炸板)
-        if burst_stocks:
-            lines.append(f"\n💥 <b>曾涨停</b> (炸板, {len(burst_stocks)}只)\n")
-            for i, s in enumerate(burst_stocks[:10], 1):
-                chart_url = get_chart_url(s['code'], s.get('name'))
-                change = f"{s['change_pct']:.1f}%" if s.get('change_pct') else ""
-                lines.append(f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) {change}")
-            if len(burst_stocks) > 10:
-                lines.append(f"...及其他 {len(burst_stocks)-10} 只")
-        
-        # Streak leaders
-        if streaks:
-            lines.append(f"\n🔥 <b>连板榜</b>\n")
-            for s in streaks[:10]:
-                chart_url = get_chart_url(s['code'], s.get('name'))
-                lines.append(f"• <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['streak_count']}连板")
-        
-        # Strong stocks
-        if strong:
-            lines.append(f"\n💪 <b>近期强势股</b> (7日多次涨停)\n")
-            for s in strong[:10]:
-                chart_url = get_chart_url(s['code'], s.get('name'))
-                lines.append(f"• <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['limit_count']}次涨停")
-        
-        text = "\n".join(lines)
-        await telegram_service.send_message(
-            settings.STOCK_ALERT_CHANNEL, text, 
-            parse_mode="html", 
-            link_preview=False
+        await send_stock_list(
+            f"🔴 <b>收盘涨停</b> ({len(sealed_stocks)}只)",
+            sealed_stocks, format_sealed
         )
-        logger.info("Sent afternoon limit-up report")
+        
+        # 3. Send burst limit-ups (炸板) - complete list  
+        def format_burst(i, s):
+            chart_url = get_chart_url(s['code'], s.get('name'))
+            change = f"{s['change_pct']:.1f}%" if s.get('change_pct') else ""
+            return f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) {change}"
+        
+        await send_stock_list(
+            f"💥 <b>曾涨停</b> (炸板, {len(burst_stocks)}只)",
+            burst_stocks, format_burst
+        )
+        
+        # 4. Send streak leaders (连板榜) - complete list
+        def format_streak(i, s):
+            chart_url = get_chart_url(s['code'], s.get('name'))
+            return f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - <b>{s['streak_count']}连板</b>"
+        
+        await send_stock_list(
+            f"🔥 <b>连板榜</b> ({len(streaks)}只)",
+            streaks, format_streak
+        )
+        
+        # 5. Send strong stocks (强势股) - complete list
+        def format_strong(i, s):
+            chart_url = get_chart_url(s['code'], s.get('name'))
+            return f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['limit_count']}次涨停"
+        
+        await send_stock_list(
+            f"💪 <b>近期强势股</b> (7日, {len(strong)}只)",
+            strong, format_strong
+        )
+        
+        logger.info(f"Sent afternoon report: {len(sealed_stocks)} sealed, {len(burst_stocks)} burst, {len(streaks)} streaks, {len(strong)} strong")
     
     async def send_morning_price_update(self):
         """Send morning price update for yesterday's limit-up stocks.

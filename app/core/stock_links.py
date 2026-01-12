@@ -1,5 +1,4 @@
-from typing import Dict, Optional
-from app.core.config import settings
+from typing import Optional
 
 
 def _normalize_code(code: str) -> str:
@@ -7,21 +6,19 @@ def _normalize_code(code: str) -> str:
 
 
 def get_chart_url(code: str, name: Optional[str] = None) -> str:
-    """Return our Mini App chart URL for a stock code.
+    """Return 东方财富 APP deep link URL for a stock code.
     
-    Uses WEBFRONT_URL to construct the URL to our interactive chart.
-    Falls back to EastMoney if WEBFRONT_URL is not configured.
+    Uses eastmoney:// URL scheme to open directly in the APP.
+    Format: eastmoney://quote?code={market}{code}
+    Market: 1=Shanghai (6xxxxx), 0=Shenzhen (0xxxxx, 3xxxxx)
     """
     code = _normalize_code(code)
     
-    # Use our Mini App chart if WEBFRONT_URL is configured
-    base_url = settings.WEBFRONT_URL
-    if base_url:
-        return f"{base_url.rstrip('/')}/miniapp/chart/?code={code}"
+    # Determine market: 1=SH, 0=SZ
+    market = "1" if code.startswith("6") else "0"
     
-    # Fallback to EastMoney
-    market = "sh" if code.startswith("6") else "sz"
-    return f"https://quote.eastmoney.com/{market}{code}.html"
+    # 东方财富 APP deep link
+    return f"eastmoney://quote?code={market}.{code}"
 
 
 # Async wrapper for backward compatibility

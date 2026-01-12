@@ -857,34 +857,54 @@ async def cmd_scan(message: types.Message):
         user_id = message.from_user.id if hasattr(message, 'from_user') else 0
         _scan_results_cache[user_id] = signals
         
-        text = "🔍 <b>启动信号扫描</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-        
-        for signal_type, stocks in signals.items():
+        # Helper to send complete stock list in multiple messages if needed
+        async def send_signal_list(title: str, stocks: list, max_chars: int = 3800):
+            """Send complete list, splitting into multiple messages if needed."""
             if not stocks:
-                continue
+                return
             
-            icon = SIGNAL_ICONS.get(signal_type, "•")
-            name = SIGNAL_NAMES.get(signal_type, signal_type)
+            messages = []
+            current_lines = [title, ""]
+            current_len = len(title) + 1
             
-            text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
-            for s in stocks[:5]:
+            for i, s in enumerate(stocks, 1):
                 chart_url = get_chart_url(s['code'], s.get('name'))
-                text += f"  • <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
-            if len(stocks) > 5:
-                text += f"  <i>...及其他 {len(stocks) - 5} 只</i>\n"
-            text += "\n"
+                line = f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})"
+                line_len = len(line) + 1
+                
+                if current_len + line_len > max_chars:
+                    messages.append("\n".join(current_lines))
+                    page_num = len(messages) + 1
+                    current_lines = [f"{title} (续{page_num})", ""]
+                    current_len = len(current_lines[0]) + 1
+                
+                current_lines.append(line)
+                current_len += line_len
+            
+            if len(current_lines) > 2:
+                messages.append("\n".join(current_lines))
+            
+            for msg in messages:
+                await message.answer(msg, parse_mode="HTML", disable_web_page_preview=True)
         
-        builder = InlineKeyboardBuilder()
-        # Add buttons to view full list for each signal type
+        # Send summary header
+        total_signals = sum(len(v) for v in signals.values())
+        summary = "🔍 <b>启动信号扫描完成</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for signal_type, stocks in signals.items():
             if stocks:
+                icon = SIGNAL_ICONS.get(signal_type, "•")
                 name = SIGNAL_NAMES.get(signal_type, signal_type)
-                builder.button(text=f"📋 {name}全部", callback_data=f"scan:list:{signal_type}:0")
-        builder.button(text="🔄 重新扫描", callback_data="lu:scan")
-        builder.button(text="◀️ 返回", callback_data="lu:main")
-        builder.adjust(2)
+                summary += f"{icon} {name}: <b>{len(stocks)}只</b>\n"
+        summary += f"\n共 <b>{total_signals}</b> 个信号"
         
-        await status.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+        await status.edit_text(summary, parse_mode="HTML")
+        
+        # Send complete list for each signal type
+        for signal_type, stocks in signals.items():
+            if stocks:
+                icon = SIGNAL_ICONS.get(signal_type, "•")
+                name = SIGNAL_NAMES.get(signal_type, signal_type)
+                await send_signal_list(f"{icon} <b>{name}</b> ({len(stocks)}只)", stocks)
             
     except Exception as e:
         await status.edit_text(f"❌ 扫描失败: {e}")

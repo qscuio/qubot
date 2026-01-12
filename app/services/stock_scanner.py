@@ -124,7 +124,11 @@ class StockScanner:
         logger.info(f"Sent scan report with {sum(len(v) for v in signals.values())} signals")
     
     async def scan_all_stocks(self, limit: int = 500) -> Dict[str, List[Dict]]:
-        """Scan stocks for all signal types."""
+        """Scan stocks for all signal types.
+        
+        Uses local stock_history database first for much faster scanning.
+        Falls back to AkShare API only if local data is missing/stale.
+        """
         ak, pd = self._get_libs()
         if not ak or not pd:
             return {}
@@ -148,24 +152,32 @@ class StockScanner:
                 (stock_list['代码'].str.match(r'^[036]'))
             ].head(limit)
             
+            codes = stocks['代码'].tolist()
+            names = stocks['名称'].tolist()
+            code_name_map = dict(zip(codes, names))
+            
+            # Try to fetch history from local database
+            local_data = await self._get_local_history_batch(codes)
+            
             checked = 0
-            for _, row in stocks.iterrows():
-                code = str(row['代码'])
-                name = str(row['名称'])
+            for code in codes:
+                name = code_name_map.get(code, code)
                 
                 try:
-                    # Get 30-day history
-                    hist = await asyncio.to_thread(
-                        ak.stock_zh_a_hist, 
-                        symbol=code, 
-                        period="daily",
-                        adjust="qfq"
-                    )
-                    
-                    if hist is None or len(hist) < 21:
-                        continue
-                    
-                    hist = hist.tail(21)  # Last 21 days
+                    # Use local data if available
+                    if code in local_data and len(local_data[code]) >= 21:
+                        hist = local_data[code]
+                    else:
+                        # Fallback to API for missing data
+                        hist = await asyncio.to_thread(
+                            ak.stock_zh_a_hist, 
+                            symbol=code, 
+                            period="daily",
+                            adjust="qfq"
+                        )
+                        if hist is None or len(hist) < 21:
+                            continue
+                        hist = hist.tail(21)
                     
                     stock_info = {"code": code, "name": name}
                     
@@ -184,9 +196,9 @@ class StockScanner:
                     
                     checked += 1
                     
-                    # Rate limit
-                    if checked % 50 == 0:
-                        logger.info(f"Scanned {checked} stocks...")
+                    # Rate limit only for API calls
+                    if code not in local_data and checked % 50 == 0:
+                        logger.info(f"Scanned {checked} stocks (API fallback)...")
                         await asyncio.sleep(1)
                         
                 except Exception as e:
@@ -198,6 +210,62 @@ class StockScanner:
         except Exception as e:
             logger.error(f"Scan failed: {e}")
             return signals
+    
+    async def _get_local_history_batch(self, codes: List[str]) -> Dict[str, any]:
+        """Fetch recent history for multiple stocks from local database.
+        
+        Returns a dict mapping code -> DataFrame-like object with columns:
+        收盘, 开盘, 最高, 最低, 成交量
+        """
+        if not db.pool:
+            return {}
+        
+        _, pd = self._get_libs()
+        if not pd:
+            return {}
+        
+        result = {}
+        
+        try:
+            # Fetch last 25 days of data for all codes
+            rows = await db.pool.fetch("""
+                SELECT code, date, open, high, low, close, volume
+                FROM stock_history
+                WHERE code = ANY($1)
+                  AND date >= CURRENT_DATE - INTERVAL '30 days'
+                ORDER BY code, date DESC
+            """, codes)
+            
+            if not rows:
+                return {}
+            
+            # Group by code and convert to DataFrame-like structure
+            from collections import defaultdict
+            by_code = defaultdict(list)
+            for row in rows:
+                by_code[row['code']].append(row)
+            
+            for code, code_rows in by_code.items():
+                if len(code_rows) >= 21:
+                    # Convert to DataFrame with Chinese column names (for compatibility)
+                    df = pd.DataFrame([{
+                        '日期': r['date'],
+                        '开盘': float(r['open']),
+                        '收盘': float(r['close']),
+                        '最高': float(r['high']),
+                        '最低': float(r['low']),
+                        '成交量': float(r['volume']),
+                    } for r in code_rows])
+                    # Sort by date ascending
+                    df = df.sort_values('日期').reset_index(drop=True)
+                    result[code] = df.tail(21)
+            
+            logger.info(f"Loaded {len(result)} stocks from local DB")
+            return result
+            
+        except Exception as e:
+            logger.warn(f"Failed to load local history: {e}")
+            return {}
     
     def _check_breakout(self, hist, pd) -> bool:
         """Check if close > 20-day high (breakout)."""
