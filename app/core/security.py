@@ -30,6 +30,20 @@ _firewall_blocked_ips: Set[str] = set()
 # Keep track of IPs already notified to avoid spam
 _notified_ips: Set[str] = set()
 
+# Trusted IP prefixes (skip security checks for these)
+# Includes: localhost, Docker networks, Telegram servers
+TRUSTED_IP_PREFIXES = (
+    '127.',          # Localhost
+    '10.',           # Docker internal
+    '172.16.', '172.17.', '172.18.', '172.19.',  # Docker bridge networks
+    '172.20.', '172.21.', '172.22.', '172.23.',
+    '172.24.', '172.25.', '172.26.', '172.27.',
+    '172.28.', '172.29.', '172.30.', '172.31.',
+    '192.168.',      # Private networks
+    '91.108.',       # Telegram servers
+    '149.154.',      # Telegram servers
+)
+
 
 def _get_alert_channel():
     """Get ALERT_CHANNEL from settings (lazy load to avoid circular import)."""
@@ -69,8 +83,8 @@ async def send_attack_notification(ip: str, reason: str, path: str = None, count
         else:
             message += " (app level)"
         
-        await telegram_service.send_message(ALERT_CHANNEL, message, parse_mode="html")
-        logger.info(f"📨 Sent attack notification for {ip} to {ALERT_CHANNEL}")
+        await telegram_service.send_message(alert_channel, message, parse_mode="html")
+        logger.info(f"📨 Sent attack notification for {ip} to {alert_channel}")
         
     except Exception as e:
         logger.error(f"Failed to send attack notification: {e}")
@@ -254,10 +268,17 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         path_lower = path.lower()
         return any(pattern in path_lower for pattern in SUSPICIOUS_PATTERNS)
     
-    def _is_suspicious_user_agent(self, user_agent: str) -> bool:
+    def _is_trusted_ip(self, ip: str) -> bool:
+        """Check if IP is in trusted list (localhost, Docker, Telegram)."""
+        return ip.startswith(TRUSTED_IP_PREFIXES)
+    
+    def _is_suspicious_user_agent(self, user_agent: str, client_ip: str = None) -> bool:
         """Check if User-Agent indicates a scanner tool."""
+        # Allow missing UA from trusted IPs (Docker health checks, Telegram webhooks)
         if not user_agent:
-            return True  # Missing UA is suspicious
+            if client_ip and self._is_trusted_ip(client_ip):
+                return False
+            return True  # Missing UA from unknown IP is suspicious
         ua_lower = user_agent.lower()
         return any(pattern in ua_lower for pattern in SUSPICIOUS_USER_AGENTS)
     
@@ -302,7 +323,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             )
         
         # Check for suspicious User-Agent (scanner tools)
-        if self._is_suspicious_user_agent(user_agent):
+        if self._is_suspicious_user_agent(user_agent, client_ip):
             self._scanner_ips[client_ip] += 1
             logger.warn(f"🔍 Suspicious UA from {client_ip}: {user_agent[:50]} (count: {self._scanner_ips[client_ip]})")
             if self._scanner_ips[client_ip] >= 3:
