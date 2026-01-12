@@ -167,18 +167,9 @@ class BaseToolAgent(Agent):
         message: str,
         skill_names: List[str] = None
     ) -> str:
-        """Build system prompt with matching skills injected."""
-        base_prompt = self.system_prompt
-        
-        # Get skill context based on message or explicit skill names
-        skill_context = skill_registry.build_skill_context(
-            query=message if not skill_names else None,
-            skill_names=skill_names
-        )
-        
-        if skill_context:
-            return f"{base_prompt}\n\n{skill_context}"
-        return base_prompt
+        """Build system prompt. Skills are now loaded on-demand via skill tool."""
+        # No longer auto-inject skills - agent uses skill tool when needed
+        return self.system_prompt
 
 
 class ChatAgent(BaseToolAgent):
@@ -215,25 +206,6 @@ Operating principles:
 Response style:
 - Lead with the shortest complete answer.
 - Use lists or steps when it improves clarity."""
-    
-    def _build_system_prompt_with_skills(
-        self,
-        message: str,
-        skill_names: List[str] = None
-    ) -> str:
-        """Build system prompt with smart skill matching (up to 5 most relevant)."""
-        base_prompt = self.system_prompt
-        
-        # Use score-based matching with higher limit for chat agent
-        skill_context = skill_registry.build_skill_context(
-            query=message if not skill_names else None,
-            skill_names=skill_names,
-            max_skills=5  # Allow more skills for general chat
-        )
-        
-        if skill_context:
-            return f"{base_prompt}\n\n{skill_context}"
-        return base_prompt
 
 
 class ResearchAgent(BaseToolAgent):

@@ -121,6 +121,10 @@ class AdvancedAiService:
         register_github_tools()
         register_cloudflare_tools()
         
+        # Register skill tool (on-demand skill loading)
+        from app.services.ai.tools.skill_tool import register_skill_tool
+        register_skill_tool()
+        
         # Register agents
         register_builtin_agents()
         
