@@ -178,7 +178,7 @@ class VIPFilter(ForwardFilter):
 
 
 class OwnAccountFilter(ForwardFilter):
-    """Priority 20: Block own accounts (except in private bot chats)."""
+    """Priority 20: Block own accounts and private bot chats."""
     
     @property
     def name(self) -> str:
@@ -189,11 +189,11 @@ class OwnAccountFilter(ForwardFilter):
         return 20
     
     def check(self, ctx: FilterContext) -> FilterResult:
-        if not ctx.telegram_service:
-            return FilterResult(FilterAction.CONTINUE)
-        
-        # Skip check for private bot chats - these are user commands, not forwards
+        # Block private bot chats - user commands should not be forwarded
         if ctx.chat_username and ctx.chat_username.lower().endswith('bot'):
+            return FilterResult(FilterAction.BLOCK, "private_bot_chat")
+        
+        if not ctx.telegram_service:
             return FilterResult(FilterAction.CONTINUE)
         
         try:
