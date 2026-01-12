@@ -129,9 +129,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API router
+# Include API router (if enabled)
 if settings.API_ENABLED:
     app.include_router(api_router)
+
+# Always include chart router for Mini App (public endpoint)
+from app.api.routes import chart_router
+app.include_router(chart_router)
 
 # Static files (serve web/ directory if exists)
 web_dir = os.path.join(os.path.dirname(__file__), "..", "web")

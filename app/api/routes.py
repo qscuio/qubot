@@ -128,32 +128,79 @@ async def rss_unsubscribe(source_id: str, user_id: str = Depends(verify_api_key)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Chart Data Endpoint (for Mini App - no auth required)
+# Separate router that's always included, regardless of API_ENABLED
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.get("/chart/data/{code}")
+chart_router = APIRouter(prefix="/api", tags=["Chart"])
+
+@chart_router.get("/chart/data/{code}")
 async def chart_data(code: str, days: int = 60):
     """Get OHLCV data for stock chart Mini App."""
+    import asyncio
     from app.services.stock_history import stock_history_service
     
-    history = await stock_history_service.get_stock_history(code, days=days)
-    
-    if not history:
-        raise HTTPException(status_code=404, detail=f"No data for {code}")
-    
-    # Get stock name from first record or use code
+    data = []
     name = code
     
-    # Format data for Lightweight Charts (expects time as string YYYY-MM-DD)
-    data = []
-    for h in reversed(history):  # Reverse to chronological order
-        data.append({
-            "time": h['date'].strftime("%Y-%m-%d"),
-            "open": float(h['open']),
-            "high": float(h['high']),
-            "low": float(h['low']),
-            "close": float(h['close']),
-            "volume": int(h['volume']),
-        })
+    try:
+        # Try to get from database first
+        history = await stock_history_service.get_stock_history(code, days=days)
+        
+        if history:
+            # Format data for Lightweight Charts (expects time as string YYYY-MM-DD)
+            for h in reversed(history):  # Reverse to chronological order
+                data.append({
+                    "time": h['date'].strftime("%Y-%m-%d"),
+                    "open": float(h['open']),
+                    "high": float(h['high']),
+                    "low": float(h['low']),
+                    "close": float(h['close']),
+                    "volume": int(h['volume']),
+                })
+    except Exception as e:
+        # Database error - will try fallback below
+        pass
+    
+    # Fallback: fetch directly from AkShare if DB empty or failed
+    if not data:
+        try:
+            import akshare as ak
+            from datetime import datetime, timedelta
+            
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=days + 30)).strftime("%Y%m%d")
+            
+            df = await asyncio.to_thread(
+                ak.stock_zh_a_hist,
+                symbol=code,
+                period="daily",
+                start_date=start_date,
+                end_date=end_date,
+                adjust="qfq"
+            )
+            
+            if df is not None and not df.empty:
+                # Get stock name if available
+                if '名称' in df.columns:
+                    name = str(df['名称'].iloc[0]) if not df['名称'].isna().all() else code
+                
+                for _, row in df.tail(days).iterrows():
+                    try:
+                        data.append({
+                            "time": str(row['日期'])[:10],
+                            "open": float(row.get('开盘', 0)),
+                            "high": float(row.get('最高', 0)),
+                            "low": float(row.get('最低', 0)),
+                            "close": float(row.get('收盘', 0)),
+                            "volume": int(row.get('成交量', 0)),
+                        })
+                    except:
+                        continue
+        except Exception as e:
+            pass
+    
+    if not data:
+        raise HTTPException(status_code=404, detail=f"No data for {code}")
     
     return {
         "code": code,
