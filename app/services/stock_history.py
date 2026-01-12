@@ -190,8 +190,10 @@ class StockHistoryService:
                         f"({success_count} success, {error_count} errors)"
                     )
                 
-                # Rate limiting
-                await asyncio.sleep(0.3)
+                # Rate limiting - 0.5s between requests, longer pause every 50 stocks
+                await asyncio.sleep(0.5)
+                if (i + 1) % 50 == 0:
+                    await asyncio.sleep(2)  # Yield more time to other tasks
                 
             except Exception as e:
                 error_count += 1
@@ -234,8 +236,10 @@ class StockHistoryService:
                         f"({success_count} success, {error_count} errors)"
                     )
                 
-                # Rate limiting - 0.3s delay between requests
-                await asyncio.sleep(0.3)
+                # Rate limiting - 0.5s between requests, longer pause every 50 stocks
+                await asyncio.sleep(0.5)
+                if (i + 1) % 50 == 0:
+                    await asyncio.sleep(2)  # Yield more time to other tasks
                 
             except Exception as e:
                 error_count += 1
