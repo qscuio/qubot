@@ -1,27 +1,55 @@
-from typing import Optional
+from typing import Optional, Literal
+from app.core.config import settings
 
 
 def _normalize_code(code: str) -> str:
     return str(code).zfill(6)
 
 
-def get_chart_url(code: str, name: Optional[str] = None) -> str:
-    """Return 东方财富 mobile web URL for a stock code.
+def get_chart_url(
+    code: str, 
+    name: Optional[str] = None,
+    source: Literal["miniapp", "eastmoney"] = "miniapp"
+) -> str:
+    """Return chart URL for a stock code.
     
-    Uses wap.eastmoney.com which is:
-    - Clickable as a hyperlink in Telegram
-    - Prompts to open in APP on mobile devices
+    Args:
+        code: Stock code (e.g., "600519")
+        name: Stock name (optional, for display)
+        source: Link source - "miniapp" (our chart) or "eastmoney"
     
-    Format: https://wap.eastmoney.com/quote/stock/{market}.{code}.html
-    Market: 1=Shanghai (6xxxxx), 0=Shenzhen (0xxxxx, 3xxxxx)
+    Returns:
+        URL to stock chart page
     """
     code = _normalize_code(code)
     
-    # Determine market: 1=SH, 0=SZ
-    market = "1" if code.startswith("6") else "0"
+    if source == "miniapp":
+        # Use our Mini App chart
+        base_url = settings.WEBFRONT_URL
+        if base_url:
+            return f"{base_url.rstrip('/')}/miniapp/chart/?code={code}"
+        # Fallback to EastMoney if WEBFRONT_URL not configured
+        source = "eastmoney"
     
-    # 东方财富手机网页版 - Telegram可点击，手机打开会提示用APP打开
+    # EastMoney mobile web
+    market = "1" if code.startswith("6") else "0"
     return f"https://wap.eastmoney.com/quote/stock/{market}.{code}.html"
+
+
+def get_eastmoney_url(code: str) -> str:
+    """Direct shortcut for EastMoney URL."""
+    code = _normalize_code(code)
+    market = "1" if code.startswith("6") else "0"
+    return f"https://wap.eastmoney.com/quote/stock/{market}.{code}.html"
+
+
+def get_miniapp_url(code: str) -> str:
+    """Direct shortcut for our miniapp chart URL."""
+    code = _normalize_code(code)
+    base_url = settings.WEBFRONT_URL
+    if base_url:
+        return f"{base_url.rstrip('/')}/miniapp/chart/?code={code}"
+    return get_eastmoney_url(code)  # Fallback
 
 
 # Async wrapper for backward compatibility
