@@ -115,6 +115,29 @@ async def lifespan(app: FastAPI):
         trading_simulator.set_notify_callback(sim_notify_callback)
         await trading_simulator.start()
 
+    # 打板 Service & Simulator
+    from app.services.daban_service import daban_service
+    from app.services.daban_simulator import daban_simulator
+    
+    await daban_service.start()
+    
+    # Set up notification callback for daban simulator
+    async def daban_notify_callback(message: str):
+        from app.bots.registry import get_bot
+        bot = get_bot("crawler")
+        if bot and settings.REPORT_TARGET_CHANNEL:
+            try:
+                await bot.send_message(
+                    int(settings.REPORT_TARGET_CHANNEL),
+                    f"🎯 <b>打板模拟</b>\n{message}",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.warn(f"Failed to send daban notification: {e}")
+    
+    daban_simulator.set_notify_callback(daban_notify_callback)
+    await daban_simulator.start()
+
 
     # AI Service doesn't need explicit start but is ready
     if ai_service.is_available():
@@ -143,6 +166,8 @@ async def lifespan(app: FastAPI):
     await watchlist_service.stop()
     if settings.ENABLE_TRADING_SIM:
         await trading_simulator.stop()
+    await daban_service.stop()
+    await daban_simulator.stop()
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")

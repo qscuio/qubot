@@ -17,6 +17,8 @@ from app.services.sector import sector_service
 from app.services.market_report import market_report_service
 from app.services.watchlist import watchlist_service
 from app.services.trading_simulator import trading_simulator, MAX_POSITIONS
+from app.services.daban_service import daban_service
+from app.services.daban_simulator import daban_simulator, MAX_POSITIONS as DABAN_MAX_POSITIONS
 from app.core.config import settings
 from app.core.database import db
 from app.core.logger import Logger
@@ -2390,4 +2392,163 @@ async def cmd_limitup(message: types.Message, command: CommandObject):
             "<code>/limitup afternoon</code> - 发送今日涨停日报",
             parse_mode="HTML"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 打板 Trading (打板模拟)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.message(Command("daban"))
+async def cmd_daban(message: types.Message, command: CommandObject):
+    """打板 service commands.
+    
+    /daban - Show today's 打板 recommendations
+    /daban portfolio - Show 打板 portfolio
+    /daban stats - Show 打板 statistics
+    /daban scan - Manual scan and buy
+    """
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    args = command.args or ""
+    
+    if args == "portfolio":
+        report = await daban_simulator.generate_portfolio_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📊 统计", callback_data="daban:stats")
+        builder.button(text="🔄 刷新", callback_data="daban:portfolio")
+        builder.button(text="◀️ 返回", callback_data="daban:main")
+        builder.adjust(2, 1)
+        
+        await message.answer(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        return
+    
+    if args == "stats":
+        report = await daban_simulator.generate_stats_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📦 持仓", callback_data="daban:portfolio")
+        builder.button(text="🔄 刷新", callback_data="daban:stats")
+        builder.button(text="◀️ 返回", callback_data="daban:main")
+        builder.adjust(2, 1)
+        
+        await message.answer(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        return
+    
+    if args == "scan":
+        status_msg = await message.answer("⏳ 扫描打板标的...")
+        try:
+            await daban_simulator.afternoon_scan_buy()
+            stats = await daban_simulator.get_statistics()
+            
+            await status_msg.edit_text(
+                f"✅ 打板扫描完成\n\n"
+                f"📦 当前持仓: {stats.get('current_positions', 0)}/{DABAN_MAX_POSITIONS}\n"
+                f"💵 可用资金: ¥{stats.get('current_cash', 0):,.0f}\n"
+                f"📈 总收益: {stats.get('total_return_pct', 0):+.2f}%"
+            )
+        except Exception as e:
+            await status_msg.edit_text(f"❌ 扫描失败: {e}")
+        return
+    
+    # Default: show 打板 analysis
+    status_msg = await message.answer("⏳ 分析打板标的...")
+    
+    try:
+        report = await daban_service.generate_daban_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📦 持仓", callback_data="daban:portfolio")
+        builder.button(text="📊 统计", callback_data="daban:stats")
+        builder.button(text="🔍 扫描买入", callback_data="daban:scan")
+        builder.button(text="🔄 刷新", callback_data="daban:main")
+        builder.adjust(2, 2)
+        
+        await status_msg.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await status_msg.edit_text(f"❌ 分析失败: {e}")
+
+
+@router.callback_query(F.data == "daban:main")
+async def cb_daban_main(callback: types.CallbackQuery):
+    """打板 main menu."""
+    await safe_answer(callback)
+    
+    try:
+        await callback.message.edit_text("⏳ 分析打板标的...", parse_mode="HTML")
+        report = await daban_service.generate_daban_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📦 持仓", callback_data="daban:portfolio")
+        builder.button(text="📊 统计", callback_data="daban:stats")
+        builder.button(text="🔍 扫描买入", callback_data="daban:scan")
+        builder.button(text="🔄 刷新", callback_data="daban:main")
+        builder.button(text="◀️ 返回", callback_data="main")
+        builder.adjust(2, 2, 1)
+        
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 失败: {e}")
+
+
+@router.callback_query(F.data == "daban:portfolio")
+async def cb_daban_portfolio(callback: types.CallbackQuery):
+    await safe_answer(callback)
+    
+    report = await daban_simulator.generate_portfolio_report()
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 统计", callback_data="daban:stats")
+    builder.button(text="🔄 刷新", callback_data="daban:portfolio")
+    builder.button(text="◀️ 返回", callback_data="daban:main")
+    builder.adjust(2, 1)
+    
+    try:
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
+@router.callback_query(F.data == "daban:stats")
+async def cb_daban_stats(callback: types.CallbackQuery):
+    await safe_answer(callback)
+    
+    report = await daban_simulator.generate_stats_report()
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📦 持仓", callback_data="daban:portfolio")
+    builder.button(text="🔄 刷新", callback_data="daban:stats")
+    builder.button(text="◀️ 返回", callback_data="daban:main")
+    builder.adjust(2, 1)
+    
+    try:
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
+@router.callback_query(F.data == "daban:scan")
+async def cb_daban_scan(callback: types.CallbackQuery):
+    await safe_answer(callback, "⏳ 扫描打板...")
+    
+    try:
+        await daban_simulator.afternoon_scan_buy()
+        stats = await daban_simulator.get_statistics()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📦 查看持仓", callback_data="daban:portfolio")
+        builder.button(text="◀️ 返回", callback_data="daban:main")
+        builder.adjust(1, 1)
+        
+        await callback.message.edit_text(
+            f"✅ 打板扫描完成\n\n"
+            f"📦 当前持仓: {stats.get('current_positions', 0)}/{DABAN_MAX_POSITIONS}\n"
+            f"💵 可用资金: ¥{stats.get('current_cash', 0):,.0f}\n"
+            f"📈 总收益: {stats.get('total_return_pct', 0):+.2f}%",
+            parse_mode="HTML",
+            reply_markup=builder.as_markup()
+        )
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 扫描失败: {e}")
 
