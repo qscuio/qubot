@@ -151,9 +151,11 @@ class StockScanner:
             "volume_price": [],  # 量价启动信号
             "small_bullish_4": [],  # 底部四连阳
             "small_bullish_4_1_bearish": [],  # 四阳一阴
+            "small_bullish_5_1_bearish": [],  # 五阳一阴
             "pullback_ma5": [],  # 5日线回踩
             "pullback_ma20": [],  # 20日线回踩
             "pullback_ma30": [],  # 30日线回踩
+            "pullback_ma5_weekly": [],  # 5周线回踩
             "multi_signal": [],  # 多信号共振(满足≥3个信号)
         }
         
@@ -290,6 +292,9 @@ class StockScanner:
                     if self._check_small_bullish_4_1_bearish(hist, pd):
                         signals["small_bullish_4_1_bearish"].append(stock_info)
 
+                    if self._check_small_bullish_5_1_bearish(hist, pd):
+                        signals["small_bullish_5_1_bearish"].append(stock_info)
+
                     if self._check_ma_pullback(hist, pd, 5):
                         signals["pullback_ma5"].append(stock_info)
 
@@ -298,6 +303,9 @@ class StockScanner:
 
                     if self._check_ma_pullback(hist, pd, 30):
                         signals["pullback_ma30"].append(stock_info)
+
+                    if self._check_ma_pullback_weekly(hist, pd, 5):
+                        signals["pullback_ma5_weekly"].append(stock_info)
                     
                     # Count how many signals this stock has
                     signal_count = sum([
@@ -308,9 +316,11 @@ class StockScanner:
                         stock_info in signals["volume_price"],
                         stock_info in signals["small_bullish_4"],
                         stock_info in signals["small_bullish_4_1_bearish"],
+                        stock_info in signals["small_bullish_5_1_bearish"],
                         stock_info in signals["pullback_ma5"],
                         stock_info in signals["pullback_ma20"],
                         stock_info in signals["pullback_ma30"],
+                        stock_info in signals["pullback_ma5_weekly"],
                     ])
                     
                     # Add to multi-signal list if 3+ signals
@@ -711,14 +721,64 @@ class StockScanner:
         except:
             return False
 
+    def _check_small_bullish_5_1_bearish(self, hist, pd) -> bool:
+        """检查五阳一阴信号.
+        
+        条件:
+        1. 前5日(T-5到T-1)都是小阳线 (实体0.5%-3%)
+        2. 今日(T)是阴线
+        3. 股价在近60日低位
+        """
+        try:
+            # Get last 6 days
+            last_6 = hist.tail(6)
+            
+            if len(last_6) < 6:
+                return False
+            
+            # Check first 5 days are small bullish
+            for i in range(5):
+                row = last_6.iloc[i]
+                open_price = row['开盘']
+                close = row['收盘']
+                
+                # Must be bullish
+                if close <= open_price:
+                    return False
+                    
+                # Calculate body percentage
+                body_pct = (close - open_price) / open_price * 100
+                
+                # Small bullish: 0.5% - 3%
+                if body_pct < 0.5 or body_pct > 3.0:
+                    return False
+            
+            # Check today is bearish
+            today = last_6.iloc[-1]
+            if today['收盘'] >= today['开盘']:
+                return False
+            
+            # Check if at bottom
+            close_current = hist['收盘'].iloc[-1]
+            high_60 = hist['最高'].max()
+            low_60 = hist['最低'].min()
+            range_60 = high_60 - low_60
+            
+            if range_60 > 0:
+                position = (close_current - low_60) / range_60
+                return position < 0.4
+            
+            return False
+        except:
+            return False
+
     def _check_ma_pullback(self, hist, pd, window: int) -> bool:
         """检查均线回踩确认信号.
         
         条件:
         1. 均线趋势向上 (当前MA > 5日前MA)
-        2. 回踩: 最低价 <= MA * 1.01 (触及或接近均线)
-        3. 支撑: 收盘价 > MA (未有效跌破)
-        4. 确认: 收盘价 > 开盘价 (阳线确认)
+        2. 昨日(T-1): 阴线回踩 (收盘 < 开盘, 最低 <= MA*1.01, 收盘 > MA)
+        3. 今日(T): 阳线确认 (收盘 > 开盘)
         """
         try:
             if len(hist) < window + 5:
@@ -734,22 +794,63 @@ class StockScanner:
             if ma_curr <= ma_prev_5:
                 return False
                 
-            # 2. Pullback (Low touches MA or within 1%)
-            low_curr = hist['最低'].iloc[-1]
-            if low_curr > ma_curr * 1.01:
+            # Get Yesterday (T-1) and Today (T)
+            today = hist.iloc[-1]
+            yesterday = hist.iloc[-2]
+            ma_yesterday = ma.iloc[-2]
+            
+            # 2. Yesterday: Bearish Pullback
+            # Bearish
+            if yesterday['收盘'] >= yesterday['开盘']:
+                return False
+            # Pullback (Low touches MA or within 1%)
+            if yesterday['最低'] > ma_yesterday * 1.01:
+                return False
+            # Support (Close above MA)
+            if yesterday['收盘'] <= ma_yesterday:
                 return False
                 
-            # 3. Support (Close above MA)
-            close_curr = close.iloc[-1]
-            if close_curr <= ma_curr:
-                return False
-                
-            # 4. Confirmation (Bullish candle)
-            open_curr = hist['开盘'].iloc[-1]
-            if close_curr <= open_curr:
+            # 3. Today: Bullish Confirmation
+            if today['收盘'] <= today['开盘']:
                 return False
                 
             return True
+        except:
+            return False
+
+    def _resample_weekly(self, hist, pd):
+        """Resample daily data to weekly."""
+        try:
+            # Ensure index is datetime
+            if not isinstance(hist.index, pd.DatetimeIndex):
+                hist = hist.copy()
+                hist.index = pd.to_datetime(hist['日期'])
+            
+            # Resample logic
+            weekly = hist.resample('W').agg({
+                '开盘': 'first',
+                '最高': 'max',
+                '最低': 'min',
+                '收盘': 'last',
+                '成交量': 'sum',
+                '成交额': 'sum'
+            })
+            # Drop incomplete weeks if needed, or keep current week
+            return weekly.dropna()
+        except:
+            return None
+
+    def _check_ma_pullback_weekly(self, hist, pd, window: int) -> bool:
+        """检查周线均线回踩确认信号.
+        
+        逻辑同日线回踩，但基于周线数据.
+        """
+        try:
+            weekly = self._resample_weekly(hist, pd)
+            if weekly is None or len(weekly) < window + 5:
+                return False
+                
+            return self._check_ma_pullback(weekly, pd, window)
         except:
             return False
 
