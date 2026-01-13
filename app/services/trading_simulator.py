@@ -210,22 +210,30 @@ class TradingSimulator:
                 name = pos.get('name', code)
                 
                 try:
-                    # Get intraday data
+                    # Get intraday data for this specific stock
                     df = await asyncio.to_thread(
-                        ak.stock_zh_a_spot_em
+                        ak.stock_intraday_em, symbol=code
                     )
                     
                     if df is None or df.empty:
-                        continue
-                    
-                    row = df[df['代码'] == code]
-                    if row.empty:
-                        continue
-                    
-                    current_price = float(row.iloc[0]['最新价'])
-                    high_price = float(row.iloc[0]['最高'])
-                    low_price = float(row.iloc[0]['最低'])
-                    open_price = float(row.iloc[0]['今开'])
+                        # Fallback to individual info
+                        df = await asyncio.to_thread(
+                            ak.stock_individual_info_em, symbol=code
+                        )
+                        if df is None or df.empty:
+                            continue
+                        
+                        info = dict(zip(df['item'], df['value']))
+                        current_price = float(info.get('最新价', 0) or 0)
+                        high_price = float(info.get('最高', current_price) or current_price)
+                        low_price = float(info.get('最低', current_price) or current_price)
+                        open_price = float(info.get('今开', current_price) or current_price)
+                    else:
+                        # Use intraday data
+                        current_price = float(df['价格'].iloc[-1])
+                        high_price = float(df['价格'].max())
+                        low_price = float(df['价格'].min())
+                        open_price = float(df['价格'].iloc[0])
                     
                     # Calculate intraday swing
                     if low_price <= 0:
@@ -263,6 +271,7 @@ class TradingSimulator:
                 except Exception as e:
                     logger.error(f"T trade check failed for {code}: {e}")
                     continue
+
                     
         except Exception as e:
             logger.error(f"T trade opportunity check failed: {e}")
