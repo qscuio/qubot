@@ -308,6 +308,7 @@ class LimitUpService:
         """Get real-time prices of yesterday's limit-up stocks."""
         ak = self._get_akshare()
         if not ak or not db.pool:
+            logger.warn("get_previous_limit_prices: akshare or db not available")
             return []
         
         # Get yesterday's limit-up stocks
@@ -315,6 +316,8 @@ class LimitUpService:
         # Skip weekends
         if yesterday.weekday() >= 5:
             yesterday = yesterday - timedelta(days=yesterday.weekday() - 4)
+        
+        logger.info(f"Fetching limit-up stocks for {yesterday}")
         
         stocks = await db.pool.fetch("""
             SELECT code, name, close_price, limit_times
@@ -324,6 +327,7 @@ class LimitUpService:
         """, yesterday)
         
         if not stocks:
+            logger.warn(f"No limit-up stocks found for {yesterday}")
             return []
         
         try:
@@ -530,12 +534,18 @@ class LimitUpService:
         """
         from app.core.bot import telegram_service
         
+        logger.info("send_morning_price_update called")
+        
         if not settings.STOCK_ALERT_CHANNEL:
+            logger.warn("STOCK_ALERT_CHANNEL not configured")
             return
         
         prices = await self.get_previous_limit_prices()
         if not prices:
+            logger.warn("No prices available for morning update")
             return
+        
+        logger.info(f"Sending morning update with {len(prices)} stocks")
         
         # Sort by real-time change_pct descending
         prices.sort(key=lambda x: -x.get("change_pct", 0))
