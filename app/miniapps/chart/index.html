@@ -640,6 +640,7 @@
         </div>
 
         <button class="t-btn xs active" onclick="toggleSignals()" id="btn-signals">Signals</button>
+        <button class="t-btn xs active" onclick="togglePriceLines()" id="btn-lines" data-action="lines">Lines</button>
 
         <div class="spacer"></div>
         <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
@@ -733,6 +734,10 @@
         let activeOverlay = 'MA'; // 'MA', 'BOLL', 'NONE'
         let activeSub = 'VOL';    // 'VOL', 'MACD', 'KDJ', 'RSI'
         let showSignals = true;  // Enabled by default
+        let showPriceLines = true; // Support/Resistance/Trend lines
+
+        // Price lines (support, resistance, trend)
+        let priceLines = [];  // Store created price lines for cleanup
 
         // Debounce for chip distribution updates
         let chipDebounceTimer = null;
@@ -744,6 +749,117 @@
             chipDebounceTimer = setTimeout(() => {
                 renderChipDistribution(idx);
             }, 50);  // 50ms debounce
+        }
+
+        // --- Support/Resistance/Trend Line Functions ---
+        function clearPriceLines() {
+            priceLines.forEach(line => {
+                try { sCandle.removePriceLine(line); } catch (e) { }
+            });
+            priceLines = [];
+        }
+
+        function calculateAndDrawPriceLines() {
+            if (!sCandle || !rawData || rawData.length < 20) return;
+            clearPriceLines();
+
+            if (!showPriceLines) return;
+
+            const data = rawData;
+            const len = data.length;
+            const lookback = Math.min(60, len);  // Use last 60 bars
+            const recentData = data.slice(-lookback);
+
+            // --- Find Support (recent lows) ---
+            const lows = recentData.map(d => d.low).sort((a, b) => a - b);
+            const support1 = lows[0];  // Lowest
+            const support2 = lows[Math.floor(lows.length * 0.1)];  // 10th percentile
+
+            // --- Find Resistance (recent highs) ---
+            const highs = recentData.map(d => d.high).sort((a, b) => b - a);
+            const resistance1 = highs[0];  // Highest
+            const resistance2 = highs[Math.floor(highs.length * 0.1)];  // 90th percentile
+
+            // --- Calculate Trend Line (linear regression) ---
+            const closes = recentData.map(d => d.close);
+            const n = closes.length;
+            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+            for (let i = 0; i < n; i++) {
+                sumX += i;
+                sumY += closes[i];
+                sumXY += i * closes[i];
+                sumX2 += i * i;
+            }
+            const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+            const trendStart = intercept;
+            const trendEnd = intercept + slope * (n - 1);
+            const trendMid = (trendStart + trendEnd) / 2;
+
+            // Current price for comparison
+            const currentPrice = data[len - 1].close;
+
+            // --- Draw Support Lines ---
+            if (support1 < currentPrice * 0.98) {  // Only if meaningful
+                priceLines.push(sCandle.createPriceLine({
+                    price: support1,
+                    color: '#22c55e',
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed,
+                    axisLabelVisible: true,
+                    title: 'S1',
+                }));
+            }
+            if (support2 < currentPrice * 0.99 && Math.abs(support2 - support1) > currentPrice * 0.01) {
+                priceLines.push(sCandle.createPriceLine({
+                    price: support2,
+                    color: '#22c55e',
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dotted,
+                    axisLabelVisible: false,
+                    title: 'S2',
+                }));
+            }
+
+            // --- Draw Resistance Lines ---
+            if (resistance1 > currentPrice * 1.02) {
+                priceLines.push(sCandle.createPriceLine({
+                    price: resistance1,
+                    color: '#ef4444',
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed,
+                    axisLabelVisible: true,
+                    title: 'R1',
+                }));
+            }
+            if (resistance2 > currentPrice * 1.01 && Math.abs(resistance2 - resistance1) > currentPrice * 0.01) {
+                priceLines.push(sCandle.createPriceLine({
+                    price: resistance2,
+                    color: '#ef4444',
+                    lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dotted,
+                    axisLabelVisible: false,
+                    title: 'R2',
+                }));
+            }
+
+            // --- Draw Trend Line (as horizontal at current trend level) ---
+            priceLines.push(sCandle.createPriceLine({
+                price: trendEnd,
+                color: '#6b7280',
+                lineWidth: 1,
+                lineStyle: LightweightCharts.LineStyle.Solid,
+                axisLabelVisible: true,
+                title: slope > 0 ? '↗趋势' : slope < 0 ? '↘趋势' : '→趋势',
+            }));
+        }
+
+        function togglePriceLines() {
+            showPriceLines = !showPriceLines;
+            calculateAndDrawPriceLines();
+            // Update button state
+            const btn = document.querySelector('[data-action="lines"]');
+            if (btn) btn.classList.toggle('active', showPriceLines);
         }
 
         // --- Initialization ---
@@ -1087,6 +1203,9 @@
             } else {
                 sCandle.setMarkers([]);
             }
+
+            // Draw support/resistance/trend lines
+            calculateAndDrawPriceLines();
         }
 
         function updateActionBanner(ma5, ma10) {
@@ -1392,29 +1511,40 @@
         }
 
         // Adapted from original code
-        function calculateChipDistribution(data, upToIndex) {
-            if (!data || data.length === 0) return { distribution: [], avgCost: 0, profitRatio: 0, concentration: 0 };
+        // priceRange: optional {min, max} to sync with K-line chart Y-axis
+        function calculateChipDistribution(data, upToIndex, priceRange = null) {
+            if (!data || data.length === 0) return { distribution: [], avgCost: 0, profitRatio: 0, concentration: 0, priceRange: null };
             // Use same logic as before but concise
             const endIndex = upToIndex >= 0 ? upToIndex : data.length - 1;
             const currentPrice = data[endIndex].close;
             const lookback = Math.min(60, endIndex + 1);
             const startIndex = endIndex - lookback + 1;
 
-            let minPrice = Infinity, maxPrice = -Infinity, totalVol = 0;
+            // Calculate chip distribution data
+            let chipMinPrice = Infinity, chipMaxPrice = -Infinity, totalVol = 0;
             for (let i = startIndex; i <= endIndex; i++) {
-                if (data[i].low < minPrice) minPrice = data[i].low;
-                if (data[i].high > maxPrice) maxPrice = data[i].high;
+                if (data[i].low < chipMinPrice) chipMinPrice = data[i].low;
+                if (data[i].high > chipMaxPrice) chipMaxPrice = data[i].high;
                 totalVol += data[i].volume;
             }
-            const padding = (maxPrice - minPrice) * 0.1;
-            minPrice = Math.max(0, minPrice - padding); maxPrice += padding;
+
+            // Use K-line price range if provided, otherwise use chip data range
+            let minPrice, maxPrice;
+            if (priceRange && priceRange.min !== undefined && priceRange.max !== undefined) {
+                minPrice = priceRange.min;
+                maxPrice = priceRange.max;
+            } else {
+                const padding = (chipMaxPrice - chipMinPrice) * 0.1;
+                minPrice = Math.max(0, chipMinPrice - padding);
+                maxPrice = chipMaxPrice + padding;
+            }
+
             const numBuckets = 30; // More detail
             const bucketSize = (maxPrice - minPrice) / numBuckets;
             const buckets = new Array(numBuckets).fill(0);
 
             for (let i = startIndex; i <= endIndex; i++) {
                 const d = data[i];
-                const avg = (d.high + d.low + d.close) / 3;
                 const decay = 1 - (endIndex - i) * 0.02; // Faster decay
                 const vol = d.volume * Math.max(0.1, decay);
                 const lowB = Math.floor((d.low - minPrice) / bucketSize);
@@ -1446,7 +1576,46 @@
             const topSum = sorted.reduce((a, b) => a + b, 0);
             const conc = tVol > 0 ? (topSum / tVol) * 100 : 0;
 
-            return { distribution: dist.reverse(), avgCost, profitRatio, concentration: conc, currentPrice };
+            return {
+                distribution: dist.reverse(),
+                avgCost,
+                profitRatio,
+                concentration: conc,
+                currentPrice,
+                priceRange: { min: minPrice, max: maxPrice }
+            };
+        }
+
+        // Get K-line chart visible price range
+        function getKlinePriceRange() {
+            if (!chartMain || !sCandle) return null;
+            try {
+                // Get the auto-scale price range from the candle series
+                const priceScale = chartMain.priceScale('right');
+                // Try to get visible range from chart
+                const visibleRange = chartMain.timeScale().getVisibleLogicalRange();
+                if (!visibleRange || !rawData.length) return null;
+
+                // Calculate min/max from visible data
+                const startIdx = Math.max(0, Math.floor(visibleRange.from));
+                const endIdx = Math.min(rawData.length - 1, Math.ceil(visibleRange.to));
+
+                let min = Infinity, max = -Infinity;
+                for (let i = startIdx; i <= endIdx; i++) {
+                    if (rawData[i]) {
+                        if (rawData[i].low < min) min = rawData[i].low;
+                        if (rawData[i].high > max) max = rawData[i].high;
+                    }
+                }
+
+                if (min === Infinity || max === -Infinity) return null;
+
+                // Add some padding (5%)
+                const padding = (max - min) * 0.05;
+                return { min: min - padding, max: max + padding };
+            } catch (e) {
+                return null;
+            }
         }
 
         async function renderChipDistribution(dayIndex) {
@@ -1456,8 +1625,11 @@
 
             document.getElementById('chip-date').textContent = target.time;
 
-            // Calculate chip distribution
-            const chips = calculateChipDistribution(rawData, idx);
+            // Get K-line chart price range for Y-axis sync
+            const klinePriceRange = getKlinePriceRange();
+
+            // Calculate chip distribution with synced price range
+            const chips = calculateChipDistribution(rawData, idx, klinePriceRange);
 
             const cont = document.getElementById('chip-chart-area');
             cont.innerHTML = '';

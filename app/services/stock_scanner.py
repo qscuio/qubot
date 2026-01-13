@@ -202,7 +202,7 @@ class StockScanner:
                 return signals
             
             codes = [r['code'] for r in rows]
-            code_name_map = {r['code']: r['name'] or r['code'] for r in rows}
+            code_name_map = {code: code for code in codes}  # Use code as name (no name in query)
             
             logger.info(f"✅ Found {len(codes)} stocks in local DB, starting scan...")
             
