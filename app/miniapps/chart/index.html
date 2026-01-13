@@ -624,10 +624,14 @@
     <script>
         // --- State ---
         const params = new URLSearchParams(window.location.search);
-        // Check for Telegram Mini App startapp parameter first (for direct t.me links)
-        // Then fall back to URL query parameter
-        const tgStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
-        const code = tgStartParam || params.get('code') || '600519';
+        // Check for Telegram Mini App startapp parameter in multiple places:
+        // 1. Telegram WebApp SDK (initDataUnsafe.start_param)
+        // 2. URL query param (tgWebAppStartParam - set by Telegram when opening via t.me link)
+        // 3. Direct URL query param (code - for direct web access)
+        const tgStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
+            || params.get('tgWebAppStartParam')
+            || params.get('code');
+        const code = tgStartParam || '600519';
         const API_BASE = window.location.origin;
 
         let chartData = [];
