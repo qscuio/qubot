@@ -3,78 +3,82 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Stock Chart</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pro Stock Chart</title>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
-            --bg-primary: #f5f7fa;
-            --bg-secondary: #ffffff;
-            --bg-tertiary: #e8ecf1;
-            --text-primary: #1a1a2e;
-            --text-secondary: #666;
-            --text-muted: #888;
-            --border-color: #d1d5db;
-            --btn-bg: #e5e7eb;
-            --btn-border: #d1d5db;
-            --btn-text: #555;
-            --btn-hover-bg: #d1d5db;
-            --btn-active-bg: #3b82f6;
-            --btn-active-border: #2563eb;
-            --btn-active-text: #fff;
-            --chart-bg: #ffffff;
-            --chart-grid: #e5e7eb;
-            --legend-bg: rgba(255, 255, 255, 0.95);
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-tertiary: #f1f5f9;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --text-muted: #94a3b8;
+            --border-color: #e2e8f0;
+            --grid-color: #f1f5f9;
             --up-color: #ef4444;
+            /* Rise = Red */
             --down-color: #22c55e;
+            /* Fall = Green */
+            --accent-color: #2962ff;
+            --btn-active-bg: #eff6ff;
+            --btn-active-text: #2962ff;
+            --hover-bg: #f1f5f9;
         }
 
         [data-theme="dark"] {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --bg-tertiary: #334155;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --border-color: #475569;
-            --btn-bg: #334155;
-            --btn-border: #475569;
-            --btn-text: #94a3b8;
-            --btn-hover-bg: #475569;
-            --btn-active-bg: #3b82f6;
-            --btn-active-border: #60a5fa;
-            --btn-active-text: #fff;
-            --chart-bg: #0f172a;
-            --chart-grid: #1e293b;
-            --legend-bg: rgba(15, 23, 42, 0.95);
-            --up-color: #ef4444;
-            --down-color: #22c55e;
+            --bg-primary: #101014;
+            --bg-secondary: #161a25;
+            --bg-tertiary: #1e222d;
+            --text-primary: #d1d4dc;
+            --text-secondary: #868993;
+            --text-muted: #50535e;
+            --border-color: #2a2e39;
+            --grid-color: #1e222d;
+            --up-color: #f23645;
+            --down-color: #089981;
+            --accent-color: #2962ff;
+            --btn-active-bg: #1e222d;
+            --btn-active-text: #2962ff;
+            --hover-bg: #2a2e39;
         }
 
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
             background: var(--bg-primary);
             color: var(--text-primary);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
             overflow: hidden;
-            transition: background-color 0.3s, color 0.3s;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
+        /* --- Header --- */
         .header {
-            padding: 8px 12px;
+            padding: 12px 16px;
             background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid var(--border-color);
+            height: 60px;
+            flex-shrink: 0;
         }
 
-        .stock-info {
+        .stock-main {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .stock-title-row {
             display: flex;
             align-items: baseline;
             gap: 8px;
@@ -82,839 +86,1175 @@
 
         .stock-name {
             font-size: 16px;
-            font-weight: 600;
+            font-weight: 700;
+            color: var(--text-primary);
         }
 
         .stock-code {
             font-size: 12px;
-            color: var(--text-muted);
+            color: var(--text-secondary);
+            font-family: monospace;
         }
 
-        .stock-price {
-            font-size: 18px;
+        .stock-price-row {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+        }
+
+        .price-curr {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .price-change {
+            font-size: 13px;
             font-weight: 600;
-        }
-
-        .stock-change {
-            font-size: 12px;
             padding: 2px 6px;
             border-radius: 4px;
         }
 
-        .up {
+        .price-change.up {
             color: var(--up-color);
-            background: rgba(239, 68, 68, 0.15);
+            background: rgba(242, 54, 69, 0.1);
         }
 
-        .down {
+        .price-change.down {
             color: var(--down-color);
-            background: rgba(34, 197, 94, 0.15);
+            background: rgba(8, 153, 129, 0.1);
         }
 
-        .flat {
-            color: var(--text-muted);
-            background: rgba(136, 136, 136, 0.15);
+        .price-change.flat {
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
         }
 
-        .toolbar {
-            padding: 4px 12px;
-            background: var(--bg-secondary);
+        .stat-grid {
             display: flex;
-            gap: 6px;
-            border-bottom: 1px solid var(--border-color);
-            flex-wrap: wrap;
-            align-items: center;
+            gap: 16px;
+            font-size: 11px;
+            display: none;
         }
 
-        .toolbar-btn {
-            padding: 3px 8px;
-            font-size: 11px;
-            background: var(--btn-bg);
-            border: 1px solid var(--btn-border);
-            color: var(--btn-text);
-            border-radius: 4px;
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+        }
+
+        .stat-val {
+            font-weight: 500;
+            font-family: monospace;
+        }
+
+        @media(min-width: 600px) {
+            .stat-grid {
+                display: flex;
+            }
+        }
+
+        /* --- Toolbar --- */
+        .toolbar {
+            height: 48px;
+            display: flex;
+            align-items: center;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 8px;
+            gap: 4px;
+            overflow-x: auto;
+            flex-shrink: 0;
+        }
+
+        .toolbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .group {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            padding: 0 4px;
+            border-right: 1px solid var(--border-color);
+            height: 24px;
+        }
+
+        .group:last-child {
+            border-right: none;
+        }
+
+        .t-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 6px 10px;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 6px;
             cursor: pointer;
+            white-space: nowrap;
             transition: all 0.2s;
         }
 
-        .toolbar-btn:hover {
-            background: var(--btn-hover-bg);
+        .t-btn:hover {
+            background: var(--hover-bg);
+            color: var(--text-primary);
         }
 
-        .toolbar-btn.active {
-            background: var(--btn-active-bg);
-            border-color: var(--btn-active-border);
+        .t-btn.active {
             color: var(--btn-active-text);
+            background: var(--btn-active-bg);
+            font-weight: 600;
         }
 
-        .toolbar-divider {
-            width: 1px;
-            height: 16px;
-            background: var(--border-color);
-            margin: 0 2px;
+        .t-btn.xs {
+            font-size: 11px;
+            padding: 4px 6px;
         }
 
-        .theme-btn {
-            padding: 3px 6px;
-            font-size: 12px;
-            background: var(--btn-bg);
-            border: 1px solid var(--btn-border);
-            color: var(--btn-text);
-            border-radius: 4px;
+        .spacer {
+            flex: 1;
+        }
+
+        .theme-toggle {
+            padding: 6px;
+            font-size: 16px;
+            background: transparent;
+            border: none;
             cursor: pointer;
-            margin-left: auto;
         }
 
-        .main-container {
+        /* --- Main Layout --- */
+        .content-area {
+            flex: 1;
             display: flex;
-            height: calc(100vh - 80px);
+            overflow: hidden;
+            position: relative;
         }
 
-        .charts-container {
+        /* Chart Section */
+        .chart-section {
             flex: 1;
             display: flex;
             flex-direction: column;
             min-width: 0;
-        }
-
-        #kline-container {
-            flex: 3;
-            min-height: 0;
             position: relative;
         }
 
-        #volume-container {
-            flex: 1;
-            min-height: 60px;
-            border-top: 1px solid var(--border-color);
+        #main-chart {
+            flex: 3;
+            min-height: 200px;
+            position: relative;
         }
 
-        .chip-panel {
-            width: 120px;
-            background: var(--bg-secondary);
-            border-left: 1px solid var(--border-color);
+        #sub-chart {
+            flex: 1.2;
+            min-height: 80px;
+            border-top: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .legend-floating {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 20;
+            font-size: 11px;
+            font-family: monospace;
+            pointer-events: none;
             display: flex;
             flex-direction: column;
+            gap: 4px;
         }
 
-        .chip-header {
-            padding: 6px 8px;
-            font-size: 11px;
-            font-weight: 600;
-            border-bottom: 1px solid var(--border-color);
-            text-align: center;
+        .leg-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            background: rgba(0, 0, 0, 0.0);
+            border-radius: 4px;
+            padding: 2px;
         }
 
-        .chip-date {
-            font-size: 10px;
+        .leg-item {
+            display: flex;
+            gap: 4px;
+        }
+
+        .leg-lbl {
             color: var(--text-muted);
-            margin-top: 2px;
         }
 
-        #chip-chart {
+        .leg-val {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* Indicators Colors */
+        .c-ma5 {
+            color: #f59e0b;
+        }
+
+        .c-ma10 {
+            color: #3b82f6;
+        }
+
+        .c-ma20 {
+            color: #a855f7;
+        }
+
+        .c-ma60 {
+            color: #22c55e;
+        }
+
+        .c-macd-diff {
+            color: #f23645;
+        }
+
+        .c-macd-dea {
+            color: #3b82f6;
+        }
+
+        .c-k {
+            color: #f59e0b;
+        }
+
+        .c-d {
+            color: #3b82f6;
+        }
+
+        .c-j {
+            color: #a855f7;
+        }
+
+        .c-rsi {
+            color: #a855f7;
+        }
+
+        /* --- Chip Panel --- */
+        .side-panel {
+            width: 240px;
+            border-left: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 30;
+        }
+
+        @media (max-width: 768px) {
+            .side-panel {
+                position: absolute;
+                right: 0;
+                top: 0;
+                bottom: 0;
+                transform: translateX(100%);
+                box-shadow: -4px 0 16px rgba(0, 0, 0, 0.2);
+            }
+
+            .side-panel.open {
+                transform: translateX(0);
+            }
+        }
+
+        .panel-header {
+            padding: 12px;
+            font-weight: 600;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .close-btn {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 18px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .close-btn {
+                display: block;
+            }
+        }
+
+        #chip-chart-area {
             flex: 1;
-            padding: 4px;
+            padding: 8px;
             overflow: hidden;
         }
 
-        .chip-bar-container {
-            height: 100%;
+        .chip-stats {
+            padding: 12px;
+            border-top: 1px solid var(--border-color);
+            font-size: 12px;
             display: flex;
             flex-direction: column;
-            gap: 1px;
+            gap: 8px;
+        }
+
+        .chip-row {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .chip-val {
+            font-weight: 600;
+            font-family: monospace;
         }
 
         .chip-bar-row {
             display: flex;
             align-items: center;
-            font-size: 9px;
-            height: 14px;
+            height: 12px;
+            margin-bottom: 1px;
         }
 
         .chip-price {
-            width: 40px;
+            width: 45px;
+            font-size: 9px;
+            color: var(--text-muted);
             text-align: right;
             padding-right: 4px;
-            color: var(--text-muted);
-            font-size: 8px;
         }
 
-        .chip-bar-wrapper {
+        .chip-track {
             flex: 1;
-            height: 10px;
             background: var(--bg-tertiary);
-            position: relative;
+            height: 8px;
             border-radius: 2px;
             overflow: hidden;
         }
 
-        .chip-bar {
+        .chip-fill {
             height: 100%;
-            border-radius: 2px;
-            transition: width 0.3s ease;
+            transition: width 0.3s;
         }
 
-        .chip-bar.profit {
+        .chip-fill.p {
             background: var(--up-color);
+            opacity: 0.8;
         }
 
-        .chip-bar.loss {
+        .chip-fill.l {
             background: var(--down-color);
+            opacity: 0.8;
         }
 
-        .legend {
+        /* Loading & Error */
+        .overlay {
             position: absolute;
-            top: 4px;
-            left: 8px;
-            font-size: 10px;
-            color: var(--text-muted);
-            background: var(--legend-bg);
-            padding: 4px 8px;
-            border-radius: 4px;
-            z-index: 10;
-            border: 1px solid var(--border-color);
-        }
-
-        .legend-row {
+            inset: 0;
+            background: var(--bg-primary);
             display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .legend-item {
-            display: flex;
-            gap: 2px;
-        }
-
-        .legend-label {
-            color: var(--text-muted);
-        }
-
-        .legend-value {
-            color: var(--text-primary);
-            font-weight: 500;
-        }
-
-        .ma5 {
-            color: #fbbf24;
-        }
-
-        .ma10 {
-            color: #ec4899;
-        }
-
-        .ma20 {
-            color: #3b82f6;
-        }
-
-        .ma60 {
-            color: #a855f7;
-        }
-
-        .loading {
-            display: flex;
-            justify-content: center;
             align-items: center;
-            height: 100%;
-            font-size: 14px;
-            color: var(--text-muted);
+            justify-content: center;
+            z-index: 50;
+        }
+
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
         }
 
         .error {
             color: var(--up-color);
+            font-size: 14px;
             text-align: center;
             padding: 20px;
         }
 
-        .chip-stats {
-            padding: 4px 8px;
-            font-size: 9px;
-            border-top: 1px solid var(--border-color);
+        /* Mobile Overlay Backdrop */
+        .backdrop {
+            display: none;
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 25;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
 
-        .chip-stat-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 2px;
-        }
-
-        .chip-stat-label {
-            color: var(--text-muted);
-        }
-
-        .chip-stat-value {
-            font-weight: 500;
-        }
-
-        .chip-stat-value.profit {
-            color: var(--up-color);
-        }
-
-        .chip-stat-value.loss {
-            color: var(--down-color);
+        .backdrop.open {
+            display: block;
+            opacity: 1;
         }
     </style>
 </head>
 
 <body>
+    <!-- Header -->
     <div class="header">
-        <div class="stock-info">
-            <span class="stock-name" id="stockName">--</span>
-            <span class="stock-code" id="stockCode">--</span>
+        <div>
+            <div class="stock-title-row">
+                <span class="stock-name" id="name">--</span>
+                <span class="stock-code" id="code">--</span>
+            </div>
+            <div class="stock-price-row" style="margin-top: 4px;">
+                <span class="price-curr" id="price">--</span>
+                <div class="price-change flat" id="change">--%</div>
+            </div>
         </div>
-        <div style="display: flex; align-items: baseline; gap: 6px;">
-            <span class="stock-price" id="stockPrice">--</span>
-            <span class="stock-change flat" id="stockChange">--</span>
+
+        <div class="stat-grid">
+            <div class="stat-item">
+                <span class="stat-label">Amplitude</span>
+                <span class="stat-val" id="amplitude">--%</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Turnover</span>
+                <span class="stat-val" id="turnover">--%</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Volume</span>
+                <span class="stat-val" id="vol-stat">--</span>
+            </div>
         </div>
-    </div>
-    <div class="toolbar">
-        <button class="toolbar-btn active" id="btnDaily" onclick="setPeriod('daily')">日K</button>
-        <button class="toolbar-btn" id="btnWeekly" onclick="setPeriod('weekly')">周K</button>
-        <div class="toolbar-divider"></div>
-        <button class="toolbar-btn active" id="btnMA" onclick="toggleMA()">MA</button>
-        <button class="toolbar-btn" id="btnBOLL" onclick="toggleBOLL()">BOLL</button>
-        <div class="toolbar-divider"></div>
-        <button class="toolbar-btn active" id="btnSignals" onclick="toggleSignals()">信号</button>
-        <div class="toolbar-divider"></div>
-        <button class="toolbar-btn" onclick="setDays(30)">30</button>
-        <button class="toolbar-btn active" onclick="setDays(60)">60</button>
-        <button class="toolbar-btn" onclick="setDays(120)">120</button>
-        <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="切换主题">🌙</button>
+
+        <button class="t-btn" id="chips-toggle" onclick="toggleChipsPanel()" style="display: none;">Chips</button>
     </div>
 
-    <div class="main-container">
-        <div class="charts-container">
-            <div id="kline-container">
-                <div class="loading" id="loading">加载中...</div>
-                <div class="legend" id="legend" style="display: none;">
-                    <div class="legend-row">
-                        <div class="legend-item"><span class="legend-label">O:</span><span class="legend-value"
-                                id="legO">--</span></div>
-                        <div class="legend-item"><span class="legend-label">H:</span><span class="legend-value"
-                                id="legH">--</span></div>
-                        <div class="legend-item"><span class="legend-label">L:</span><span class="legend-value"
-                                id="legL">--</span></div>
-                        <div class="legend-item"><span class="legend-label">C:</span><span class="legend-value"
-                                id="legC">--</span></div>
-                    </div>
-                    <div class="legend-row" id="maLegend">
-                        <div class="legend-item"><span class="legend-label ma5">MA5:</span><span
-                                class="legend-value ma5" id="legMA5">--</span></div>
-                        <div class="legend-item"><span class="legend-label ma10">MA10:</span><span
-                                class="legend-value ma10" id="legMA10">--</span></div>
-                        <div class="legend-item"><span class="legend-label ma20">MA20:</span><span
-                                class="legend-value ma20" id="legMA20">--</span></div>
-                    </div>
-                </div>
-            </div>
-            <div id="volume-container"></div>
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <div class="group">
+            <button class="t-btn active" onclick="setPeriod('daily', this)">Day</button>
+            <button class="t-btn" onclick="setPeriod('weekly', this)">Week</button>
         </div>
-        <div class="chip-panel">
-            <div class="chip-header">
-                筹码分布
-                <div class="chip-date" id="chipDate">--</div>
+
+        <div class="group">
+            <button class="t-btn active" id="btn-ma" onclick="toggleOverlays('MA')">MA</button>
+            <button class="t-btn" id="btn-boll" onclick="toggleOverlays('BOLL')">BOLL</button>
+        </div>
+
+        <div class="group">
+            <button class="t-btn active" onclick="setSubChart('VOL', this)">VOL</button>
+            <button class="t-btn" onclick="setSubChart('MACD', this)">MACD</button>
+            <button class="t-btn" onclick="setSubChart('KDJ', this)">KDJ</button>
+            <button class="t-btn" onclick="setSubChart('RSI', this)">RSI</button>
+        </div>
+
+        <button class="t-btn xs" onclick="toggleSignals()" id="btn-signals">Signals</button>
+
+        <div class="spacer"></div>
+        <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content-area">
+        <div class="chart-section">
+            <div id="loading" class="overlay">
+                <div class="spinner"></div>
             </div>
-            <div id="chip-chart"></div>
+
+            <div id="main-chart">
+                <div class="legend-floating" id="main-legend">
+                    <div class="leg-row">
+                        <span class="leg-item"><span class="leg-lbl">O</span><span class="leg-val"
+                                id="l-o">--</span></span>
+                        <span class="leg-item"><span class="leg-lbl">H</span><span class="leg-val"
+                                id="l-h">--</span></span>
+                        <span class="leg-item"><span class="leg-lbl">L</span><span class="leg-val"
+                                id="l-l">--</span></span>
+                        <span class="leg-item"><span class="leg-lbl">C</span><span class="leg-val"
+                                id="l-c">--</span></span>
+                    </div>
+                    <!-- MA Legend -->
+                    <div class="leg-row" id="ma-legend">
+                        <span class="leg-item c-ma5">MA5:<span class="leg-val c-ma5" id="l-ma5">--</span></span>
+                        <span class="leg-item c-ma10">MA10:<span class="leg-val c-ma10" id="l-ma10">--</span></span>
+                        <span class="leg-item c-ma20">MA20:<span class="leg-val c-ma20" id="l-ma20">--</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="sub-chart">
+                <div class="legend-floating">
+                    <div class="leg-row" id="sub-legend">
+                        <!-- Dynamic Subchart Legend -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="backdrop" id="backdrop" onclick="toggleChipsPanel()"></div>
+
+        <div class="side-panel" id="side-panel">
+            <div class="panel-header">
+                <span>Chip Distribution</span>
+                <span id="chip-date" style="font-weight: 400; color: var(--text-muted);">--</span>
+                <button class="close-btn" onclick="toggleChipsPanel()">×</button>
+            </div>
+            <div id="chip-chart-area"></div>
             <div class="chip-stats">
-                <div class="chip-stat-row">
-                    <span class="chip-stat-label">获利比例</span>
-                    <span class="chip-stat-value profit" id="profitRatio">--%</span>
+                <div class="chip-row">
+                    <span style="color:var(--text-muted)">Profit Ratio</span>
+                    <span class="chip-val" id="p-ratio" style="color:var(--up-color)">--%</span>
                 </div>
-                <div class="chip-stat-row">
-                    <span class="chip-stat-label">平均成本</span>
-                    <span class="chip-stat-value" id="avgCost">--</span>
+                <div class="chip-row">
+                    <span style="color:var(--text-muted)">Avg Cost</span>
+                    <span class="chip-val" id="avg-cost">--</span>
                 </div>
-                <div class="chip-stat-row">
-                    <span class="chip-stat-label">集中度</span>
-                    <span class="chip-stat-value" id="concentration">--%</span>
+                <div class="chip-row">
+                    <span style="color:var(--text-muted)">Concentration</span>
+                    <span class="chip-val" id="conc">--%</span>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
+        // --- State ---
         const params = new URLSearchParams(window.location.search);
-        const code = params.get('code') || '600519';
-        let currentDays = parseInt(params.get('days')) || 60;
-        let currentPeriod = params.get('period') || 'daily';
+        // Check for Telegram Mini App startapp parameter first (for direct t.me links)
+        // Then fall back to URL query parameter
+        const tgStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+        const code = tgStartParam || params.get('code') || '600519';
         const API_BASE = window.location.origin;
 
-        let klineChart, volumeChart, candleSeries, volumeSeries;
-        let ma5Series, ma10Series, ma20Series, ma60Series;
-        let bollUpperSeries, bollMidSeries, bollLowerSeries;
-        let rawData = [];
-        let selectedDayIndex = -1;
+        let chartData = [];
+        let timeFrame = 'daily';
 
-        let showMA = true;
-        let showBOLL = false;
-        let showSignals = true;
+        // Chart Instances
+        let chartMain, chartSub;
+        let sCandle, sMa5, sMa10, sMa20, sBollUp, sBollMid, sBollLow;
+        let sVol, sMacdHist, sMacdSig, sMacdLine, sK, sD, sJ, sRsi;
 
-        // Theme
-        function getSystemTheme() {
-            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
+        // Display Options
+        let activeOverlay = 'MA'; // 'MA', 'BOLL', 'NONE'
+        let activeSub = 'VOL';    // 'VOL', 'MACD', 'KDJ', 'RSI'
+        let showSignals = false;
 
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            initCharts();
+            loadData();
+
+            // Mobile check for Chips button
+            if (window.innerWidth < 768) {
+                document.getElementById('chips-toggle').style.display = 'block';
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            if (chartMain) chartMain.resize(0, 0); // Auto-resize check
+            if (chartSub) chartSub.resize(0, 0);
+        });
+
+        // --- Theme Logic ---
         function initTheme() {
-            const stored = localStorage.getItem('chart-theme');
-            applyTheme(stored || getSystemTheme());
-        }
-
-        function applyTheme(theme) {
+            const theme = localStorage.getItem('pro-chart-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
             document.documentElement.setAttribute('data-theme', theme);
-            document.getElementById('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
-            if (klineChart) updateChartTheme();
+            updateThemeIcon(theme);
         }
 
         function toggleTheme() {
-            const current = document.documentElement.getAttribute('data-theme') || 'light';
-            const newTheme = current === 'dark' ? 'light' : 'dark';
-            localStorage.setItem('chart-theme', newTheme);
-            applyTheme(newTheme);
+            const cur = document.documentElement.getAttribute('data-theme');
+            const next = cur === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            localStorage.setItem('pro-chart-theme', next);
+            updateThemeIcon(next);
+            if (chartMain) applyChartTheme();
         }
 
-        function getChartColors() {
+        function updateThemeIcon(t) {
+            document.getElementById('theme-btn').textContent = t === 'dark' ? '☀️' : '🌙';
+        }
+
+        function getColors() {
+            const style = getComputedStyle(document.body);
             const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
             return {
-                background: isDark ? '#0f172a' : '#ffffff',
-                textColor: isDark ? '#64748b' : '#888888',
-                gridColor: isDark ? '#1e293b' : '#e5e7eb',
+                bg: style.getPropertyValue('--bg-primary').trim(),
+                grid: style.getPropertyValue('--grid-color').trim(),
+                text: style.getPropertyValue('--text-secondary').trim(),
+                up: style.getPropertyValue('--up-color').trim(),
+                down: style.getPropertyValue('--down-color').trim(),
             };
         }
 
-        function updateChartTheme() {
-            const colors = getChartColors();
-            const opts = {
-                layout: { background: { color: colors.background }, textColor: colors.textColor },
-                grid: { vertLines: { color: colors.gridColor }, horzLines: { color: colors.gridColor } },
-            };
-            klineChart.applyOptions(opts);
-            volumeChart.applyOptions(opts);
-        }
+        // --- Chart Setup ---
+        function initCharts() {
+            const mainCont = document.getElementById('main-chart');
+            const subCont = document.getElementById('sub-chart');
+            const c = getColors();
 
-        // Calculations
-        function calculateMA(data, period) {
-            const result = [];
-            for (let i = 0; i < data.length; i++) {
-                if (i < period - 1) continue;
-                let sum = 0;
-                for (let j = 0; j < period; j++) sum += data[i - j].close;
-                result.push({ time: data[i].time, value: sum / period });
-            }
-            return result;
-        }
-
-        function calculateBOLL(data, period = 20, multiplier = 2) {
-            const upper = [], mid = [], lower = [];
-            for (let i = period - 1; i < data.length; i++) {
-                let sum = 0;
-                for (let j = 0; j < period; j++) sum += data[i - j].close;
-                const avg = sum / period;
-                let variance = 0;
-                for (let j = 0; j < period; j++) variance += Math.pow(data[i - j].close - avg, 2);
-                const std = Math.sqrt(variance / period);
-                mid.push({ time: data[i].time, value: avg });
-                upper.push({ time: data[i].time, value: avg + multiplier * std });
-                lower.push({ time: data[i].time, value: avg - multiplier * std });
-            }
-            return { upper, mid, lower };
-        }
-
-        function detectSignals(data) {
-            const signals = [];
-            const ma5 = calculateMA(data, 5);
-            const ma10 = calculateMA(data, 10);
-
-            for (let i = 1; i < data.length; i++) {
-                const time = data[i].time;
-                const prevTime = data[i - 1].time;
-                const ma5Curr = ma5.find(m => m.time === time)?.value;
-                const ma10Curr = ma10.find(m => m.time === time)?.value;
-                const ma5Prev = ma5.find(m => m.time === prevTime)?.value;
-                const ma10Prev = ma10.find(m => m.time === prevTime)?.value;
-
-                if (ma5Curr && ma10Curr && ma5Prev && ma10Prev) {
-                    if (ma5Prev <= ma10Prev && ma5Curr > ma10Curr) {
-                        signals.push({ time, position: 'belowBar', color: '#ef4444', shape: 'arrowUp', text: '金叉' });
-                    }
-                    if (ma5Prev >= ma10Prev && ma5Curr < ma10Curr) {
-                        signals.push({ time, position: 'aboveBar', color: '#22c55e', shape: 'arrowDown', text: '死叉' });
-                    }
-                }
-            }
-            return signals;
-        }
-
-        // Chip Distribution Calculation (based on volume-weighted price distribution)
-        function calculateChipDistribution(data, upToIndex) {
-            if (!data || data.length === 0) return { distribution: [], avgCost: 0, profitRatio: 0, concentration: 0 };
-
-            const endIndex = upToIndex >= 0 ? upToIndex : data.length - 1;
-            const currentPrice = data[endIndex].close;
-
-            // Use last 60 days of data for chip calculation
-            const lookback = Math.min(60, endIndex + 1);
-            const startIndex = endIndex - lookback + 1;
-
-            // Find price range
-            let minPrice = Infinity, maxPrice = -Infinity;
-            let totalVolume = 0;
-
-            for (let i = startIndex; i <= endIndex; i++) {
-                if (data[i].low < minPrice) minPrice = data[i].low;
-                if (data[i].high > maxPrice) maxPrice = data[i].high;
-                totalVolume += data[i].volume;
-            }
-
-            // Add padding
-            const padding = (maxPrice - minPrice) * 0.1;
-            minPrice = Math.max(0, minPrice - padding);
-            maxPrice = maxPrice + padding;
-
-            // Create price buckets
-            const numBuckets = 20;
-            const bucketSize = (maxPrice - minPrice) / numBuckets;
-            const buckets = new Array(numBuckets).fill(0);
-
-            // Distribute volume into buckets based on price range
-            for (let i = startIndex; i <= endIndex; i++) {
-                const d = data[i];
-                const avgPrice = (d.high + d.low + d.close) / 3;
-                const decayFactor = 1 - (endIndex - i) * 0.01; // Recent days have more weight
-                const adjustedVolume = d.volume * Math.max(0.3, decayFactor);
-
-                // Distribute across touched price range
-                const lowBucket = Math.floor((d.low - minPrice) / bucketSize);
-                const highBucket = Math.floor((d.high - minPrice) / bucketSize);
-
-                for (let b = lowBucket; b <= highBucket && b < numBuckets; b++) {
-                    if (b >= 0) buckets[b] += adjustedVolume / (highBucket - lowBucket + 1);
-                }
-            }
-
-            // Normalize and create distribution
-            const maxBucket = Math.max(...buckets);
-            const distribution = [];
-            let profitVolume = 0, lossVolume = 0;
-            let weightedSum = 0, totalBucketVolume = 0;
-
-            for (let i = 0; i < numBuckets; i++) {
-                const price = minPrice + (i + 0.5) * bucketSize;
-                const percentage = maxBucket > 0 ? (buckets[i] / maxBucket) * 100 : 0;
-                const isProfit = price <= currentPrice;
-
-                distribution.push({ price, percentage, isProfit });
-
-                if (buckets[i] > 0) {
-                    if (isProfit) profitVolume += buckets[i];
-                    else lossVolume += buckets[i];
-                    weightedSum += price * buckets[i];
-                    totalBucketVolume += buckets[i];
-                }
-            }
-
-            const avgCost = totalBucketVolume > 0 ? weightedSum / totalBucketVolume : currentPrice;
-            const profitRatio = (profitVolume + lossVolume) > 0
-                ? (profitVolume / (profitVolume + lossVolume)) * 100 : 0;
-
-            // Concentration: measure how spread out the chips are
-            const topBuckets = buckets.slice().sort((a, b) => b - a).slice(0, 5);
-            const topSum = topBuckets.reduce((a, b) => a + b, 0);
-            const totalSum = buckets.reduce((a, b) => a + b, 0);
-            const concentration = totalSum > 0 ? (topSum / totalSum) * 100 : 0;
-
-            return { distribution: distribution.reverse(), avgCost, profitRatio, concentration, currentPrice };
-        }
-
-        async function fetchChipDistribution(targetDate) {
-            try {
-                const dateParam = targetDate ? `?date=${targetDate}` : '';
-                const response = await fetch(`${API_BASE}/api/chart/chips/${code}${dateParam}`);
-                if (!response.ok) return null;
-                return await response.json();
-            } catch (e) {
-                console.warn('Failed to fetch chips from API:', e);
-                return null;
-            }
-        }
-
-        async function renderChipDistribution(dayIndex) {
-            const displayData = rawData.slice(-currentDays);
-            const actualIndex = dayIndex >= 0 ? dayIndex : displayData.length - 1;
-            const targetDate = displayData[actualIndex]?.time;
-
-            const container = document.getElementById('chip-chart');
-            container.innerHTML = '<div class="loading" style="font-size:10px;padding:10px;">加载中...</div>';
-
-            // Try to fetch from backend API first
-            let chips = await fetchChipDistribution(targetDate);
-
-            // Fallback to local calculation if API fails
-            if (!chips || !chips.distribution) {
-                chips = calculateChipDistribution(displayData, actualIndex);
-            }
-
-            container.innerHTML = '';
-
-            const dateStr = targetDate || '--';
-            document.getElementById('chipDate').textContent = dateStr;
-            document.getElementById('profitRatio').textContent = (chips.profitRatio || 0).toFixed(1) + '%';
-            document.getElementById('avgCost').textContent = (chips.avgCost || 0).toFixed(2);
-            document.getElementById('concentration').textContent = (chips.concentration || 0).toFixed(1) + '%';
-
-            const wrapper = document.createElement('div');
-            wrapper.className = 'chip-bar-container';
-
-            (chips.distribution || []).forEach(item => {
-                const row = document.createElement('div');
-                row.className = 'chip-bar-row';
-
-                const priceLabel = document.createElement('span');
-                priceLabel.className = 'chip-price';
-                priceLabel.textContent = item.price.toFixed(1);
-
-                const barWrapper = document.createElement('div');
-                barWrapper.className = 'chip-bar-wrapper';
-
-                const bar = document.createElement('div');
-                bar.className = 'chip-bar ' + (item.isProfit ? 'profit' : 'loss');
-                bar.style.width = item.percentage + '%';
-
-                barWrapper.appendChild(bar);
-                row.appendChild(priceLabel);
-                row.appendChild(barWrapper);
-                wrapper.appendChild(row);
-            });
-
-            container.appendChild(wrapper);
-        }
-
-        async function loadChart() {
-            try {
-                const response = await fetch(`${API_BASE}/api/chart/data/${code}?days=${currentDays + 60}&period=${currentPeriod}`);
-                if (!response.ok) throw new Error('Failed to load data');
-
-                const result = await response.json();
-                if (!result.data || result.data.length === 0) throw new Error('No data available');
-
-                rawData = result.data;
-
-                // Update header
-                document.getElementById('stockName').textContent = result.name || code;
-                document.getElementById('stockCode').textContent = code;
-
-                const latest = rawData[rawData.length - 1];
-                const prev = rawData.length > 1 ? rawData[rawData.length - 2] : latest;
-                const change = ((latest.close - prev.close) / prev.close * 100);
-
-                document.getElementById('stockPrice').textContent = latest.close.toFixed(2);
-                const changeEl = document.getElementById('stockChange');
-                changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
-                changeEl.className = `stock-change ${change > 0 ? 'up' : change < 0 ? 'down' : 'flat'}`;
-
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('legend').style.display = 'block';
-
-                createCharts();
-                updateChartData();
-                await renderChipDistribution(-1);
-
-
-            } catch (error) {
-                document.getElementById('loading').innerHTML = `<div class="error">❌ ${error.message}</div>`;
-            }
-        }
-
-        function createCharts() {
-            const klineContainer = document.getElementById('kline-container');
-            const volumeContainer = document.getElementById('volume-container');
-
-            if (klineChart) klineChart.remove();
-            if (volumeChart) volumeChart.remove();
-
-            const colors = getChartColors();
             const chartOpts = {
-                layout: { background: { color: colors.background }, textColor: colors.textColor },
-                grid: { vertLines: { color: colors.gridColor }, horzLines: { color: colors.gridColor } },
+                layout: { background: { type: 'solid', color: 'transparent' }, textColor: c.text, fontFamily: "'Inter', sans-serif" },
+                grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-                rightPriceScale: { borderColor: colors.gridColor },
-                timeScale: { borderColor: colors.gridColor, timeVisible: true },
+                timeScale: { borderColor: c.grid, timeVisible: true },
+                rightPriceScale: { borderColor: c.grid },
+                autoSize: true
             };
 
-            klineChart = LightweightCharts.createChart(klineContainer, {
-                ...chartOpts,
-                width: klineContainer.clientWidth,
-                height: klineContainer.clientHeight,
+            chartMain = LightweightCharts.createChart(mainCont, chartOpts);
+            chartSub = LightweightCharts.createChart(subCont, chartOpts);
+
+            // -- Main Series --
+            sCandle = chartMain.addCandlestickSeries({
+                upColor: c.up, downColor: c.down, borderUpColor: c.up, borderDownColor: c.down, wickUpColor: c.up, wickDownColor: c.down
             });
 
-            volumeChart = LightweightCharts.createChart(volumeContainer, {
-                ...chartOpts,
-                width: volumeContainer.clientWidth,
-                height: volumeContainer.clientHeight,
-            });
+            sMa5 = chartMain.addLineSeries({ color: '#f59e0b', lineWidth: 1, visible: false });
+            sMa10 = chartMain.addLineSeries({ color: '#3b82f6', lineWidth: 1, visible: false });
+            sMa20 = chartMain.addLineSeries({ color: '#a855f7', lineWidth: 1, visible: false });
 
-            candleSeries = klineChart.addCandlestickSeries({
-                upColor: '#ef4444', downColor: '#22c55e',
-                borderUpColor: '#ef4444', borderDownColor: '#22c55e',
-                wickUpColor: '#ef4444', wickDownColor: '#22c55e',
-            });
+            sBollUp = chartMain.addLineSeries({ color: '#f97316', lineWidth: 1, lineStyle: 2, visible: false });
+            sBollMid = chartMain.addLineSeries({ color: '#3b82f6', lineWidth: 1, visible: false });
+            sBollLow = chartMain.addLineSeries({ color: '#22c55e', lineWidth: 1, lineStyle: 2, visible: false });
 
-            volumeSeries = volumeChart.addHistogramSeries({
-                color: '#22c55e',
-                priceFormat: { type: 'volume' },
-            });
+            // -- Sub Series (Lazy init others, start with Vol) --
+            // We use different series types on the same chart, managing visibility
+            sVol = chartSub.addHistogramSeries({ priceFormat: { type: 'volume' } });
 
-            ma5Series = klineChart.addLineSeries({ color: '#fbbf24', lineWidth: 1 });
-            ma10Series = klineChart.addLineSeries({ color: '#ec4899', lineWidth: 1 });
-            ma20Series = klineChart.addLineSeries({ color: '#3b82f6', lineWidth: 1 });
+            // Sync
+            chartMain.timeScale().subscribeVisibleLogicalRangeChange(r => chartSub.timeScale().setVisibleLogicalRange(r));
+            chartSub.timeScale().subscribeVisibleLogicalRangeChange(r => chartMain.timeScale().setVisibleLogicalRange(r));
 
-            bollUpperSeries = klineChart.addLineSeries({ color: '#f97316', lineWidth: 1, lineStyle: 2 });
-            bollMidSeries = klineChart.addLineSeries({ color: '#3b82f6', lineWidth: 1 });
-            bollLowerSeries = klineChart.addLineSeries({ color: '#22c55e', lineWidth: 1, lineStyle: 2 });
-
-            // Sync time scales
-            klineChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-                if (range) volumeChart.timeScale().setVisibleLogicalRange(range);
-            });
-            volumeChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-                if (range) klineChart.timeScale().setVisibleLogicalRange(range);
-            });
-
-            // Crosshair sync and click handler
-            klineChart.subscribeCrosshairMove(param => {
-                handleCrosshair(param);
-                if (param.time) {
-                    volumeChart.setCrosshairPosition(param.point?.y || 0, param.time, volumeSeries);
+            // Legend Sync
+            chartMain.subscribeCrosshairMove(param => {
+                updateMainLegend(param);
+                if (param.time) chartSub.setCrosshairPosition(0, param.time, sVol);
+                if (param.time && rawData.length) {
+                    // Update Chip on Click? No, let's do click for chips
                 }
             });
 
-            // Click to select day for chip distribution
-            klineChart.subscribeClick(param => {
+            chartSub.subscribeCrosshairMove(param => {
+                updateSubLegend(param);
+                if (param.time) chartMain.setCrosshairPosition(0, param.time, sCandle);
+            });
+
+            chartMain.subscribeClick(param => {
                 if (param.time) {
-                    const displayData = rawData.slice(-currentDays);
-                    const idx = displayData.findIndex(d => d.time === param.time);
-                    if (idx >= 0) {
-                        selectedDayIndex = idx;
-                        renderChipDistribution(idx);
+                    const idx = rawData.findIndex(d => d.time === param.time);
+                    if (idx !== -1) renderChipDistribution(idx);
+                }
+            });
+
+            applyChartTheme();
+        }
+
+        function applyChartTheme() {
+            const c = getColors();
+            const opts = {
+                layout: { textColor: c.text },
+                grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
+                timeScale: { borderColor: c.grid },
+                rightPriceScale: { borderColor: c.grid }
+            };
+            chartMain.applyOptions(opts);
+            chartSub.applyOptions(opts);
+
+            sCandle.applyOptions({ upColor: c.up, downColor: c.down, borderUpColor: c.up, borderDownColor: c.down, wickUpColor: c.up, wickDownColor: c.down });
+        }
+
+        // --- Data Loading ---
+        let rawData = [];
+        async function loadData() {
+            try {
+                const days = 250;
+                const res = await fetch(`${API_BASE}/api/chart/data/${code}?days=${days}&period=${timeFrame}`);
+                if (!res.ok) throw new Error('Network error');
+                const json = await res.json();
+
+                if (!json.data || !json.data.length) throw new Error('No Data');
+
+                rawData = json.data;
+                updateStockHeader(json);
+                processData();
+                document.getElementById('loading').style.display = 'none';
+
+                // Initial Chip Render (latest)
+                renderChipDistribution(-1);
+
+            } catch (e) {
+                document.getElementById('loading').innerHTML = `<div class="error">${e.message}</div>`;
+            }
+        }
+
+        function updateStockHeader(data) {
+            document.getElementById('name').textContent = data.name || code;
+            document.getElementById('code').textContent = code;
+
+            const last = rawData[rawData.length - 1];
+            const prev = rawData[rawData.length > 1 ? rawData[rawData.length - 2] : rawData[0]];
+
+            document.getElementById('price').textContent = last.close.toFixed(2);
+
+            const pct = ((last.close - prev.close) / prev.close) * 100;
+            const chgEl = document.getElementById('change');
+            chgEl.textContent = (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+            chgEl.className = `price-change ${pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat'}`;
+
+            // Stats
+            const amp = ((last.high - last.low) / prev.close) * 100;
+            document.getElementById('amplitude').textContent = amp.toFixed(2) + '%';
+            document.getElementById('vol-stat').textContent = (last.volume / 100).toFixed(0); // Hands
+            // Turnover rate if available? approximate
+            // document.getElementById('turnover').textContent = '--';
+        }
+
+        // --- Indicator Calculations ---
+        function calculateMA(n) {
+            return rawData.map((d, i, arr) => {
+                if (i < n - 1) return { time: d.time, value: NaN };
+                const sum = arr.slice(i - n + 1, i + 1).reduce((a, b) => a + b.close, 0);
+                return { time: d.time, value: sum / n };
+            }).filter(d => !isNaN(d.value));
+        }
+
+        function calculateBOLL(n = 20, k = 2) {
+            // Need Standard Deviation
+            return rawData.map((d, i, arr) => {
+                if (i < n - 1) return null;
+                const slice = arr.slice(i - n + 1, i + 1);
+                const avg = slice.reduce((a, b) => a + b.close, 0) / n;
+                const variance = slice.reduce((a, b) => a + Math.pow(b.close - avg, 2), 0) / n;
+                const std = Math.sqrt(variance);
+                return {
+                    time: d.time,
+                    mid: avg,
+                    upper: avg + k * std,
+                    lower: avg - k * std
+                };
+            }).filter(Boolean);
+        }
+
+        function calculateMACD(short = 12, long = 26, sig = 9) {
+            let emaShort = 0, emaLong = 0, emaSig = 0;
+            const res = [];
+            rawData.forEach((d, i) => {
+                if (i === 0) { emaShort = d.close; emaLong = d.close; }
+                else {
+                    emaShort = (2 * d.close + (short - 1) * emaShort) / (short + 1);
+                    emaLong = (2 * d.close + (long - 1) * emaLong) / (long + 1);
+                }
+                const diff = emaShort - emaLong;
+                if (i === 0) emaSig = diff;
+                else emaSig = (2 * diff + (sig - 1) * emaSig) / (sig + 1);
+
+                res.push({ time: d.time, diff, dea: emaSig, hist: 2 * (diff - emaSig) });
+            });
+            return res;
+        }
+
+        function calculateKDJ(n = 9, m1 = 3, m2 = 3) {
+            let k = 50, d = 50;
+            return rawData.map((item, i) => {
+                let low = item.low, high = item.high;
+                for (let j = 0; j < n; j++) {
+                    if (i - j >= 0) {
+                        low = Math.min(low, rawData[i - j].low);
+                        high = Math.max(high, rawData[i - j].high);
                     }
                 }
-            });
-
-            window.addEventListener('resize', () => {
-                klineChart.resize(klineContainer.clientWidth, klineContainer.clientHeight);
-                volumeChart.resize(volumeContainer.clientWidth, volumeContainer.clientHeight);
+                const rsv = (high === low) ? 50 : (item.close - low) / (high - low) * 100;
+                k = (1 * rsv + (m1 - 1) * k) / m1;
+                d = (1 * k + (m2 - 1) * d) / m2;
+                const jVal = 3 * k - 2 * d;
+                return { time: item.time, k, d, j: jVal };
             });
         }
 
-        function updateChartData() {
-            const displayData = rawData.slice(-currentDays);
-
-            const candleData = displayData.map(d => ({
-                time: d.time, open: d.open, high: d.high, low: d.low, close: d.close,
-            }));
-
-            const volumeData = displayData.map(d => ({
-                time: d.time,
-                value: d.volume,
-                color: d.close >= d.open ? 'rgba(239,68,68,0.5)' : 'rgba(34,197,94,0.5)',
-            }));
-
-            candleSeries.setData(candleData);
-            volumeSeries.setData(volumeData);
-
-            if (showMA) {
-                ma5Series.setData(calculateMA(rawData, 5).slice(-currentDays));
-                ma10Series.setData(calculateMA(rawData, 10).slice(-currentDays));
-                ma20Series.setData(calculateMA(rawData, 20).slice(-currentDays));
-                document.getElementById('maLegend').style.display = 'flex';
-            } else {
-                ma5Series.setData([]);
-                ma10Series.setData([]);
-                ma20Series.setData([]);
-                document.getElementById('maLegend').style.display = 'none';
+        function calculateRSI(n = 14) {
+            let up = 0, down = 0;
+            const res = [];
+            for (let i = 1; i < rawData.length; i++) {
+                const diff = rawData[i].close - rawData[i - 1].close;
+                const u = diff > 0 ? diff : 0;
+                const d = diff < 0 ? -diff : 0;
+                if (i <= n) {
+                    up += u; down += d;
+                    if (i === n) {
+                        up /= n; down /= n;
+                    }
+                } else {
+                    up = (up * (n - 1) + u) / n;
+                    down = (down * (n - 1) + d) / n;
+                }
+                if (i >= n) {
+                    const rs = down === 0 ? 100 : up / down;
+                    res.push({ time: rawData[i].time, value: 100 - (100 / (1 + rs)) });
+                }
             }
+            return res;
+        }
 
-            if (showBOLL) {
-                const boll = calculateBOLL(rawData);
-                bollUpperSeries.setData(boll.upper.slice(-currentDays));
-                bollMidSeries.setData(boll.mid.slice(-currentDays));
-                bollLowerSeries.setData(boll.lower.slice(-currentDays));
-            } else {
-                bollUpperSeries.setData([]);
-                bollMidSeries.setData([]);
-                bollLowerSeries.setData([]);
-            }
+        // --- Data Processing & Rendering ---
+        function processData() {
+            // Main Chart: Candle
+            sCandle.setData(rawData.map(d => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close })));
 
+            // Overlays
+            updateOverlays();
+            updateSubChart();
+
+            // Markers
             if (showSignals) {
-                const signals = detectSignals(rawData);
-                const displaySignals = signals.filter(s => displayData.some(d => d.time === s.time));
-                candleSeries.setMarkers(displaySignals);
+                // Determine signals (re-use older logic if needed or reimplement)
+                // For now, let's keep it simple or implement the previous logic
+                const signals = [];
+                const ma5 = calculateMA(5);
+                const ma10 = calculateMA(10);
+
+                for (let i = 1; i < rawData.length; i++) {
+                    const t = rawData[i].time;
+                    const tp = rawData[i - 1].time;
+                    const c5 = ma5.find(m => m.time === t)?.value;
+                    const c10 = ma10.find(m => m.time === t)?.value;
+                    const p5 = ma5.find(m => m.time === tp)?.value;
+                    const p10 = ma10.find(m => m.time === tp)?.value;
+                    if (c5 && c10 && p5 && p10) {
+                        if (p5 <= p10 && c5 > c10) signals.push({ time: t, position: 'belowBar', color: '#ef4444', shape: 'arrowUp', text: 'B' });
+                        if (p5 >= p10 && c5 < c10) signals.push({ time: t, position: 'aboveBar', color: '#22c55e', shape: 'arrowDown', text: 'S' });
+                    }
+                }
+                sCandle.setMarkers(signals);
             } else {
-                candleSeries.setMarkers([]);
-            }
-
-            klineChart.timeScale().fitContent();
-            volumeChart.timeScale().fitContent();
-        }
-
-        function handleCrosshair(param) {
-            if (!param.time || !param.seriesData) return;
-            const candle = param.seriesData.get(candleSeries);
-            if (candle) {
-                document.getElementById('legO').textContent = candle.open?.toFixed(2) || '--';
-                document.getElementById('legH').textContent = candle.high?.toFixed(2) || '--';
-                document.getElementById('legL').textContent = candle.low?.toFixed(2) || '--';
-                document.getElementById('legC').textContent = candle.close?.toFixed(2) || '--';
-            }
-            if (showMA) {
-                document.getElementById('legMA5').textContent = param.seriesData.get(ma5Series)?.value?.toFixed(2) || '--';
-                document.getElementById('legMA10').textContent = param.seriesData.get(ma10Series)?.value?.toFixed(2) || '--';
-                document.getElementById('legMA20').textContent = param.seriesData.get(ma20Series)?.value?.toFixed(2) || '--';
+                sCandle.setMarkers([]);
             }
         }
 
-        function toggleMA() {
-            showMA = !showMA;
-            document.getElementById('btnMA').classList.toggle('active', showMA);
-            updateChartData();
+        function updateOverlays() {
+            // Toggle visibility
+            const isMa = activeOverlay === 'MA';
+            const isBoll = activeOverlay === 'BOLL';
+
+            sMa5.applyOptions({ visible: isMa });
+            sMa10.applyOptions({ visible: isMa });
+            sMa20.applyOptions({ visible: isMa });
+
+            sBollUp.applyOptions({ visible: isBoll });
+            sBollMid.applyOptions({ visible: isBoll });
+            sBollLow.applyOptions({ visible: isBoll });
+
+            document.getElementById('ma-legend').innerHTML = ''; // Clear
+
+            if (isMa) {
+                sMa5.setData(calculateMA(5));
+                sMa10.setData(calculateMA(10));
+                sMa20.setData(calculateMA(20));
+                document.getElementById('ma-legend').innerHTML = `
+                   <span class="leg-item c-ma5">MA5:<span class="leg-val" id="l-ma5">--</span></span>
+                   <span class="leg-item c-ma10">MA10:<span class="leg-val" id="l-ma10">--</span></span>
+                   <span class="leg-item c-ma20">MA20:<span class="leg-val" id="l-ma20">--</span></span>
+                `;
+            } else if (isBoll) {
+                const boll = calculateBOLL();
+                sBollUp.setData(boll.map(b => ({ time: b.time, value: b.upper })));
+                sBollMid.setData(boll.map(b => ({ time: b.time, value: b.mid })));
+                sBollLow.setData(boll.map(b => ({ time: b.time, value: b.lower })));
+                document.getElementById('ma-legend').innerHTML = `
+                   <span class="leg-item" style="color:#f97316">UP:<span class="leg-val" id="l-b1">--</span></span>
+                   <span class="leg-item" style="color:#3b82f6">MID:<span class="leg-val" id="l-b2">--</span></span>
+                   <span class="leg-item" style="color:#22c55e">LOW:<span class="leg-val" id="l-b3">--</span></span>
+                `;
+            }
         }
 
-        function toggleBOLL() {
-            showBOLL = !showBOLL;
-            document.getElementById('btnBOLL').classList.toggle('active', showBOLL);
-            updateChartData();
+        function updateSubChart() {
+            // Clear previous sub-series
+            // Note: Efficient way is to remove/add series or just set data. 
+            // Lightweight charts doesn't easily let us re-use one chart for completely different types without cleaning up.
+            // Simplified: we'll clean chartSub's series.
+
+            // Re-create chartSub content implies removing series. 
+            // Correct approach: keep references, remove them if they exist.
+            if (sVol) chartSub.removeSeries(sVol);
+            if (sMacdHist) chartSub.removeSeries(sMacdHist);
+            if (sMacdLine) chartSub.removeSeries(sMacdLine);
+            if (sMacdSig) chartSub.removeSeries(sMacdSig);
+            if (sK) chartSub.removeSeries(sK);
+            if (sD) chartSub.removeSeries(sD);
+            if (sJ) chartSub.removeSeries(sJ);
+            if (sRsi) chartSub.removeSeries(sRsi);
+
+            sVol = null; sMacdHist = null; sMacdLine = null; sMacdSig = null; sK = null; sD = null; sJ = null; sRsi = null;
+
+            const subLeg = document.getElementById('sub-legend');
+            subLeg.innerHTML = '';
+
+            if (activeSub === 'VOL') {
+                sVol = chartSub.addHistogramSeries({ priceFormat: { type: 'volume' } });
+                const volData = rawData.map(d => ({
+                    time: d.time, value: d.volume,
+                    color: d.close >= d.open ? getColors().up : getColors().down
+                }));
+                sVol.setData(volData);
+                subLeg.innerHTML = `<span class="leg-item">Vol:<span class="leg-val" id="l-vol">--</span></span>`;
+            }
+            else if (activeSub === 'MACD') {
+                const macd = calculateMACD();
+                // Histogram needs 'volume' type logic for zero-based, but we want price scale. 
+                // Lightweight chart histogram is fine with negative if valid.
+                sMacdHist = chartSub.addHistogramSeries({
+                    color: '#2962ff',
+                    lineWidth: 2,
+                    priceFormat: {
+                        type: 'price',
+                    },
+                });
+                sMacdLine = chartSub.addLineSeries({ color: '#f59e0b', lineWidth: 1 }); // DIFF
+                sMacdSig = chartSub.addLineSeries({ color: '#3b82f6', lineWidth: 1 });  // DEA
+
+                sMacdLine.setData(macd.map(m => ({ time: m.time, value: m.diff })));
+                sMacdSig.setData(macd.map(m => ({ time: m.time, value: m.dea })));
+                sMacdHist.setData(macd.map(m => ({
+                    time: m.time, value: m.hist,
+                    color: m.hist > 0 ? getColors().up : getColors().down
+                })));
+
+                subLeg.innerHTML = `
+                    <span class="leg-item" style="color:#f59e0b">DIF:<span class="leg-val" id="l-dif">--</span></span>
+                    <span class="leg-item" style="color:#3b82f6">DEA:<span class="leg-val" id="l-dea">--</span></span>
+                    <span class="leg-item">MACD:<span class="leg-val" id="l-macd">--</span></span>
+                 `;
+            }
+            else if (activeSub === 'KDJ') {
+                const kdj = calculateKDJ();
+                sK = chartSub.addLineSeries({ color: '#f59e0b', lineWidth: 1 });
+                sD = chartSub.addLineSeries({ color: '#3b82f6', lineWidth: 1 });
+                sJ = chartSub.addLineSeries({ color: '#a855f7', lineWidth: 1 });
+
+                sK.setData(kdj.map(x => ({ time: x.time, value: x.k })));
+                sD.setData(kdj.map(x => ({ time: x.time, value: x.d })));
+                sJ.setData(kdj.map(x => ({ time: x.time, value: x.j })));
+
+                subLeg.innerHTML = `
+                    <span class="leg-item" style="color:#f59e0b">K:<span class="leg-val" id="l-k">--</span></span>
+                    <span class="leg-item" style="color:#3b82f6">D:<span class="leg-val" id="l-d">--</span></span>
+                    <span class="leg-item" style="color:#a855f7">J:<span class="leg-val" id="l-j">--</span></span>
+                 `;
+            }
+            else if (activeSub === 'RSI') {
+                const rsi = calculateRSI();
+                sRsi = chartSub.addLineSeries({ color: '#a855f7', lineWidth: 1 });
+                sRsi.setData(rsi);
+                // Add 80/20 lines?
+                subLeg.innerHTML = `<span class="leg-item" style="color:#a855f7">RSI(14):<span class="leg-val" id="l-rsi">--</span></span>`;
+            }
+
+            // chartSub.timeScale().fitContent(); // Maybe don't force fit, stick to sync
+        }
+
+
+        // --- Interaction ---
+        function setPeriod(p, btn) {
+            if (timeFrame === p) return;
+            timeFrame = p;
+            btn.parentNode.querySelectorAll('.t-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            loadData();
+        }
+
+        function toggleOverlays(type) {
+            if (activeOverlay === type) activeOverlay = 'NONE';
+            else activeOverlay = type;
+
+            document.getElementById('btn-ma').classList.toggle('active', activeOverlay === 'MA');
+            document.getElementById('btn-boll').classList.toggle('active', activeOverlay === 'BOLL');
+            updateOverlays();
+        }
+
+        function setSubChart(type, btn) {
+            if (activeSub === type) return;
+            activeSub = type;
+            btn.parentNode.querySelectorAll('.t-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            updateSubChart();
         }
 
         function toggleSignals() {
             showSignals = !showSignals;
-            document.getElementById('btnSignals').classList.toggle('active', showSignals);
-            updateChartData();
+            document.getElementById('btn-signals').classList.toggle('active', showSignals);
+            if (rawData.length) processData(); // Re-run markers
         }
 
-        function setPeriod(period) {
-            currentPeriod = period;
-            document.getElementById('btnDaily').classList.toggle('active', period === 'daily');
-            document.getElementById('btnWeekly').classList.toggle('active', period === 'weekly');
-            loadChart();
+        // --- Legends ---
+        function updateMainLegend(param) {
+            if (!param.time || !param.seriesData) return;
+            const c = param.seriesData.get(sCandle);
+            if (c) {
+                document.getElementById('l-o').textContent = c.open.toFixed(2);
+                document.getElementById('l-h').textContent = c.high.toFixed(2);
+                document.getElementById('l-l').textContent = c.low.toFixed(2);
+                document.getElementById('l-c').textContent = c.close.toFixed(2);
+            }
+            if (activeOverlay === 'MA') {
+                const v5 = param.seriesData.get(sMa5);
+                const v10 = param.seriesData.get(sMa10);
+                const v20 = param.seriesData.get(sMa20);
+                if (v5) document.getElementById('l-ma5').textContent = v5.value.toFixed(2);
+                if (v10) document.getElementById('l-ma10').textContent = v10.value.toFixed(2);
+                if (v20) document.getElementById('l-ma20').textContent = v20.value.toFixed(2);
+            }
+            if (activeOverlay === 'BOLL') {
+                const u = param.seriesData.get(sBollUp);
+                const m = param.seriesData.get(sBollMid);
+                const l = param.seriesData.get(sBollLow);
+                if (u) document.getElementById('l-b1').textContent = u.value.toFixed(2);
+                if (m) document.getElementById('l-b2').textContent = m.value.toFixed(2);
+                if (l) document.getElementById('l-b3').textContent = l.value.toFixed(2);
+            }
         }
 
-        function setDays(days) {
-            currentDays = days;
-            document.querySelectorAll('.toolbar-btn').forEach(btn => {
-                if (['30', '60', '120'].includes(btn.textContent)) {
-                    btn.classList.toggle('active', btn.textContent === String(days));
+        function updateSubLegend(param) {
+            if (!param.time || !param.seriesData) return;
+
+            if (activeSub === 'VOL') {
+                const v = param.seriesData.get(sVol);
+                if (v) document.getElementById('l-vol').textContent = (v.value / 10000).toFixed(1) + '万';
+            } else if (activeSub === 'MACD') {
+                const diff = param.seriesData.get(sMacdLine);
+                const dea = param.seriesData.get(sMacdSig);
+                const hist = param.seriesData.get(sMacdHist);
+                if (diff) document.getElementById('l-dif').textContent = diff.value.toFixed(3);
+                if (dea) document.getElementById('l-dea').textContent = dea.value.toFixed(3);
+                if (hist) document.getElementById('l-macd').textContent = hist.value.toFixed(3);
+            } else if (activeSub === 'KDJ') {
+                const k = param.seriesData.get(sK);
+                const d = param.seriesData.get(sD);
+                const j = param.seriesData.get(sJ);
+                if (k) document.getElementById('l-k').textContent = k.value.toFixed(2);
+                if (d) document.getElementById('l-d').textContent = d.value.toFixed(2);
+                if (j) document.getElementById('l-j').textContent = j.value.toFixed(2);
+            } else if (activeSub === 'RSI') {
+                const r = param.seriesData.get(sRsi);
+                if (r) document.getElementById('l-rsi').textContent = r.value.toFixed(2);
+            }
+        }
+
+        // --- Chip Distribution (Preserved Logic) ---
+        function toggleChipsPanel() {
+            const p = document.getElementById('side-panel');
+            const bg = document.getElementById('backdrop');
+            p.classList.toggle('open');
+            // bg.classList.toggle('open'); // Mobile only backdrop
+            if (window.innerWidth < 768) bg.classList.toggle('open');
+        }
+
+        // Adapted from original code
+        function calculateChipDistribution(data, upToIndex) {
+            if (!data || data.length === 0) return { distribution: [], avgCost: 0, profitRatio: 0, concentration: 0 };
+            // Use same logic as before but concise
+            const endIndex = upToIndex >= 0 ? upToIndex : data.length - 1;
+            const currentPrice = data[endIndex].close;
+            const lookback = Math.min(60, endIndex + 1);
+            const startIndex = endIndex - lookback + 1;
+
+            let minPrice = Infinity, maxPrice = -Infinity, totalVol = 0;
+            for (let i = startIndex; i <= endIndex; i++) {
+                if (data[i].low < minPrice) minPrice = data[i].low;
+                if (data[i].high > maxPrice) maxPrice = data[i].high;
+                totalVol += data[i].volume;
+            }
+            const padding = (maxPrice - minPrice) * 0.1;
+            minPrice = Math.max(0, minPrice - padding); maxPrice += padding;
+            const numBuckets = 30; // More detail
+            const bucketSize = (maxPrice - minPrice) / numBuckets;
+            const buckets = new Array(numBuckets).fill(0);
+
+            for (let i = startIndex; i <= endIndex; i++) {
+                const d = data[i];
+                const avg = (d.high + d.low + d.close) / 3;
+                const decay = 1 - (endIndex - i) * 0.02; // Faster decay
+                const vol = d.volume * Math.max(0.1, decay);
+                const lowB = Math.floor((d.low - minPrice) / bucketSize);
+                const highB = Math.floor((d.high - minPrice) / bucketSize);
+                for (let b = Math.max(0, lowB); b <= Math.min(numBuckets - 1, highB); b++) {
+                    buckets[b] += vol / (highB - lowB + 1);
                 }
-            });
-            updateChartData();
-            renderChipDistribution(selectedDayIndex);
+            }
+
+            const maxB = Math.max(...buckets);
+            const dist = [];
+            let profitV = 0, lossV = 0, wSum = 0, tVol = 0;
+
+            for (let i = 0; i < numBuckets; i++) {
+                const price = minPrice + (i + 0.5) * bucketSize;
+                const pct = maxB > 0 ? (buckets[i] / maxB) * 100 : 0;
+                const isP = price <= currentPrice;
+                dist.push({ price, percentage: pct, isProfit: isP });
+
+                if (buckets[i] > 0) {
+                    if (isP) profitV += buckets[i]; else lossV += buckets[i];
+                    wSum += price * buckets[i]; tVol += buckets[i];
+                }
+            }
+            const avgCost = tVol > 0 ? wSum / tVol : currentPrice;
+            const profitRatio = (profitV + lossV) > 0 ? (profitV / (profitV + lossV)) * 100 : 0;
+
+            const sorted = [...buckets].sort((a, b) => b - a).slice(0, Math.floor(numBuckets * 0.2));
+            const topSum = sorted.reduce((a, b) => a + b, 0);
+            const conc = tVol > 0 ? (topSum / tVol) * 100 : 0;
+
+            return { distribution: dist.reverse(), avgCost, profitRatio, concentration: conc, currentPrice };
         }
 
-        initTheme();
-        loadChart();
+        async function renderChipDistribution(dayIndex) {
+            const displayData = rawData; // Use full data for index calculation
+            const idx = dayIndex >= 0 ? dayIndex : rawData.length - 1;
+            const target = rawData[idx];
 
+            document.getElementById('chip-date').textContent = target.time;
+
+            // Try API?
+            // Fallback local
+            const chips = calculateChipDistribution(rawData, idx);
+
+            const cont = document.getElementById('chip-chart-area');
+            cont.innerHTML = '';
+
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'display:flex; flex-direction:column; height:100%; justify-content:center; gap:1px;';
+
+            chips.distribution.forEach(d => {
+                const row = document.createElement('div');
+                row.className = 'chip-bar-row';
+                row.innerHTML = `
+                    <div class="chip-price">${d.price.toFixed(1)}</div>
+                    <div class="chip-track">
+                        <div class="chip-fill ${d.isProfit ? 'p' : 'l'}" style="width:${d.percentage}%"></div>
+                    </div>
+                `;
+                wrapper.appendChild(row);
+            });
+            cont.appendChild(wrapper);
+
+            document.getElementById('p-ratio').textContent = chips.profitRatio.toFixed(1) + '%';
+            document.getElementById('avg-cost').textContent = chips.avgCost.toFixed(2);
+            document.getElementById('conc').textContent = chips.concentration.toFixed(1) + '%';
+        }
+
+        // --- Telegram Integration ---
         if (window.Telegram?.WebApp) {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
+            // Color scheme sync
+            Telegram.WebApp.onEvent('themeChanged', initTheme);
         }
+
     </script>
 </body>
 

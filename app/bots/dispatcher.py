@@ -1,5 +1,5 @@
 import asyncio
-from typing import Dict, List
+from typing import Dict, List, Optional
 from aiogram import Bot, Dispatcher
 from app.bots.bot_spec import BotSpec
 from app.bots.registry import BOT_SPECS
@@ -8,6 +8,13 @@ from app.core.config import settings
 from app.core.logger import Logger
 
 logger = Logger("BotDispatcher")
+
+# Runtime cache for bot usernames (populated on startup via getMe)
+_bot_usernames: Dict[str, str] = {}
+
+def get_bot_username(bot_name: str) -> Optional[str]:
+    """Get cached bot username by bot name (e.g., 'crawler-bot' -> 'MyBotUsername')."""
+    return _bot_usernames.get(bot_name)
 
 class BotDispatcher:
     def __init__(self):
@@ -28,6 +35,7 @@ class BotDispatcher:
                 logger.error(f"⚠️ Webhook registration failed, will use polling: {e}")
 
     async def _setup_bot(self, spec: BotSpec):
+        global _bot_usernames
         try:
             bot = Bot(token=spec.token)
             dp = Dispatcher()
@@ -55,6 +63,15 @@ class BotDispatcher:
                     logger.info(f"✅ {spec.name} commands registered ({len(spec.commands)})")
                 except Exception as e:
                     logger.warn(f"⚠️ {spec.name} command registration failed: {e}")
+
+            # Cache bot username via getMe (for Mini App direct links)
+            try:
+                me = await bot.get_me()
+                if me and me.username:
+                    _bot_usernames[spec.name] = me.username
+                    logger.info(f"📛 {spec.name} username: @{me.username}")
+            except Exception as e:
+                logger.warn(f"⚠️ {spec.name} getMe failed: {e}")
 
             self.apps.append({"bot": bot, "dp": dp, "name": spec.name})
             logger.info(f"✅ {spec.name} initialized")

@@ -24,7 +24,20 @@ def get_chart_url(
     code = _normalize_code(code)
     
     if source == "miniapp":
-        # Use our Mini App chart
+        # Prefer direct Mini App link via t.me/{bot_username}/chart?startapp={code}
+        # This bypasses Telegram's external link confirmation dialog
+        # Get bot username from runtime cache (populated on bot startup via getMe)
+        try:
+            from app.bots.dispatcher import get_bot_username
+            bot_username = get_bot_username("crawler-bot")
+        except ImportError:
+            bot_username = None
+        
+        if bot_username:
+            # Direct Mini App link - opens chart immediately
+            return f"https://t.me/{bot_username}/chart?startapp={code}"
+        
+        # Fallback to standard web URL (requires user confirmation)
         base_url = settings.WEBFRONT_URL
         if base_url:
             return f"{base_url.rstrip('/')}/miniapp/chart/?code={code}"
