@@ -164,34 +164,32 @@ class WatchlistService:
         if not watchlist:
             return []
         
-        ak = self._get_akshare()
-        if not ak:
+        if not db.pool:
             return watchlist
         
-        # Optimized: Fetch prices for only the stocks in the watchlist
+        # Use local stock_history database for prices (fast, no remote API calls)
         result = []
         for stock in watchlist:
             code = stock['code']
             add_price = float(stock.get('add_price') or 0)
+            stock_name = stock.get('name') or code
             
             current_price = 0
             today_change = 0
-            stock_name = stock.get('name') or code
             
             try:
-                # Use efficient single-stock API
-                df = await asyncio.to_thread(ak.stock_individual_info_em, symbol=code)
-                if df is not None and not df.empty:
-                    info = dict(zip(df['item'], df['value']))
-                    
-                    price_val = info.get('总市值')  # Try different fields
-                    try:
-                        current_price = float(info.get('最新价', 0) or 0)
-                    except:
-                        current_price = 0
-                    
-                    today_change = 0  # individual_info_em doesn't have change %
-                    stock_name = info.get('股票简称') or stock_name
+                # Get latest price from local stock_history table
+                row = await db.pool.fetchrow("""
+                    SELECT close, change_pct
+                    FROM stock_history
+                    WHERE code = $1
+                    ORDER BY date DESC
+                    LIMIT 1
+                """, code)
+                
+                if row:
+                    current_price = float(row['close'] or 0)
+                    today_change = float(row['change_pct'] or 0)
                     
             except Exception as e:
                 logger.warn(f"Failed to get price for {code}: {e}")
@@ -213,6 +211,7 @@ class WatchlistService:
             })
         
         return result
+
 
     
     # ─────────────────────────────────────────────────────────────────────────
