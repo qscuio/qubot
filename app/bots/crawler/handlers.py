@@ -85,7 +85,8 @@ async def cmd_start(message: types.Message):
     builder.button(text="📊 板块分析", callback_data="sector:main")
     builder.button(text="📋 市场报告", callback_data="report:main")
     builder.button(text="⭐ 自选列表", callback_data="watch:list")
-    builder.adjust(2, 2, 1)
+    builder.button(text="💰 模拟交易", callback_data="sim:main")
+    builder.adjust(2, 2, 2)
     
     await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
 
@@ -1992,6 +1993,37 @@ async def get_watchlist_ui(user_id: int):
 # Trading Simulator (模拟交易)
 # ═══════════════════════════════════════════════════════════════════════════
 
+@router.callback_query(F.data == "sim:main")
+async def cb_sim_main(callback: types.CallbackQuery):
+    """Trading simulator main menu."""
+    await safe_answer(callback)
+    
+    stats = await trading_simulator.get_statistics()
+    
+    text = (
+        "💰 <b>模拟交易</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 账户总值: ¥{stats.get('total_value', 1000000):,.0f}\n"
+        f"📈 总收益: {stats.get('total_return_pct', 0):+.2f}%\n"
+        f"📦 当前持仓: {stats.get('current_positions', 0)}/{MAX_POSITIONS}\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "<i>每日15:35自动扫描交易</i>"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 持仓", callback_data="sim:portfolio")
+    builder.button(text="📉 盈亏", callback_data="sim:pnl")
+    builder.button(text="📜 历史", callback_data="sim:trades")
+    builder.button(text="🔍 手动扫描", callback_data="sim:scan")
+    builder.button(text="◀️ 返回", callback_data="main")
+    builder.adjust(2, 2, 1)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
 @router.message(Command("portfolio"))
 async def cmd_portfolio(message: types.Message):
     """Show current trading portfolio."""
@@ -2086,7 +2118,8 @@ async def cb_trades(callback: types.CallbackQuery):
     builder.button(text="📊 持仓", callback_data="sim:portfolio")
     builder.button(text="📉 盈亏", callback_data="sim:pnl")
     builder.button(text="🔄 刷新", callback_data="sim:trades")
-    builder.adjust(2, 1)
+    builder.button(text="◀️ 返回", callback_data="sim:main")
+    builder.adjust(2, 2)
     
     try:
         await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
