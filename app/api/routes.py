@@ -270,3 +270,113 @@ async def chart_chips(code: str, date: str = None):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Watchlist Endpoints (for Mini App)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class WatchlistRequest(BaseModel):
+    user_id: int
+    code: str
+    name: Optional[str] = None
+
+@chart_router.post("/chart/watchlist/add")
+async def chart_watchlist_add(req: WatchlistRequest):
+    """Add stock to watchlist from Mini App."""
+    from app.services.watchlist import watchlist_service
+    try:
+        result = await watchlist_service.add_stock(req.user_id, req.code, req.name)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@chart_router.post("/chart/watchlist/remove")
+async def chart_watchlist_remove(req: WatchlistRequest):
+    """Remove stock from watchlist from Mini App."""
+    from app.services.watchlist import watchlist_service
+    try:
+        success = await watchlist_service.remove_stock(req.user_id, req.code)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@chart_router.get("/chart/watchlist/status")
+async def chart_watchlist_status(user_id: int, code: str):
+    """Check if stock is in watchlist."""
+    from app.services.watchlist import watchlist_service
+    try:
+        watchlist = await watchlist_service.get_watchlist(user_id)
+        is_in = any(item['code'] == code for item in watchlist)
+        return {"in_watchlist": is_in}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@chart_router.get("/chart/navigation")
+async def get_chart_navigation(code: str, context: str, user_id: int = None):
+    """Get previous and next stock codes based on context."""
+    from app.services.limit_up import limit_up_service
+    from app.services.watchlist import watchlist_service
+    
+    stocks = []
+    
+    try:
+        if context == "limit_up":
+            # Today's sealed limit ups
+            data = await limit_up_service.get_realtime_limit_ups()
+            stocks = [s for s in data if s.get("is_sealed", True)]
+            # Sort: limit_times desc, price desc
+            stocks.sort(key=lambda x: (-x.get("limit_times", 1), -x.get("close_price", 0)))
+            
+        elif context == "limit_up_first":
+            # First board
+            data = await limit_up_service.get_realtime_limit_ups()
+            stocks = [s for s in data if s.get("limit_times", 1) == 1 and s.get("is_sealed", True)]
+            stocks.sort(key=lambda x: -x.get("turnover_rate", 0))
+            
+        elif context == "limit_up_burst":
+            # Burst
+            data = await limit_up_service.get_realtime_limit_ups()
+            stocks = [s for s in data if not s.get("is_sealed", True)]
+            stocks.sort(key=lambda x: -x.get("change_pct", 0))
+            
+        elif context == "limit_up_streak":
+            # Streak leaders
+            stocks = await limit_up_service.get_streak_leaders()
+            # Already sorted by streak count
+            
+        elif context == "limit_up_strong":
+            # Strong stocks
+            stocks = await limit_up_service.get_strong_stocks()
+            # Already sorted
+            
+        elif context == "limit_up_watch":
+            # Startup watchlist
+            stocks = await limit_up_service.get_startup_watchlist()
+            # Already sorted
+            
+        elif context == "watchlist" and user_id:
+            # User watchlist
+            stocks = await watchlist_service.get_watchlist(user_id)
+            # Usually sorted by add time or custom order
+            
+    except Exception as e:
+        print(f"Navigation error: {e}")
+        return {"prev": None, "next": None}
+    
+    if not stocks:
+        return {"prev": None, "next": None}
+        
+    # Extract codes list
+    codes = [s['code'] for s in stocks]
+    
+    try:
+        idx = codes.index(code)
+    except ValueError:
+        return {"prev": None, "next": None}
+        
+    prev_code = codes[idx - 1] if idx > 0 else None
+    next_code = codes[idx + 1] if idx < len(codes) - 1 else None
+    
+    return {"prev": prev_code, "next": next_code}

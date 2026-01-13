@@ -9,7 +9,8 @@ def _normalize_code(code: str) -> str:
 def get_chart_url(
     code: str, 
     name: Optional[str] = None,
-    source: Literal["miniapp", "eastmoney"] = "miniapp"
+    source: Literal["miniapp", "eastmoney"] = "miniapp",
+    context: Optional[str] = None
 ) -> str:
     """Return chart URL for a stock code.
     
@@ -17,6 +18,7 @@ def get_chart_url(
         code: Stock code (e.g., "600519")
         name: Stock name (optional, for display)
         source: Link source - "miniapp" (our chart) or "eastmoney"
+        context: Context for navigation (e.g., "limit_up", "watchlist")
     
     Returns:
         URL to stock chart page
@@ -41,12 +43,17 @@ def get_chart_url(
         
         if bot_username:
             # Direct Mini App link - opens chart immediately without confirmation
-            return f"https://t.me/{bot_username}/chart?startapp={code}"
+            # Pass context in startapp param: code_context
+            start_param = f"{code}_{context}" if context else code
+            return f"https://t.me/{bot_username}/chart?startapp={start_param}"
         
         # 3. Fallback to standard web URL (shows confirmation dialog)
         base_url = settings.WEBFRONT_URL
         if base_url:
-            return f"{base_url.rstrip('/')}/miniapp/chart/?code={code}"
+            url = f"{base_url.rstrip('/')}/miniapp/chart/?code={code}"
+            if context:
+                url += f"&context={context}"
+            return url
         # 4. Fallback to EastMoney if WEBFRONT_URL not configured
         source = "eastmoney"
     

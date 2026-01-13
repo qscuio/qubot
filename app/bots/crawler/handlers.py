@@ -477,7 +477,7 @@ async def get_today_ui(page: int = 1):
         for i, r in enumerate(rows, start_idx + 1):
             lt = r.get('limit_times', 1)
             streak = f" [{lt}板]" if lt > 1 else ""
-            chart_url = get_chart_url(r['code'], r.get('name'))
+            chart_url = get_chart_url(r['code'], r.get('name'), context="limit_up")
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}){streak}\n"
     
     builder = InlineKeyboardBuilder()
@@ -557,7 +557,7 @@ async def get_first_ui(page: int = 1):
     else:
         text = f"🆕 <b>首板</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, r in enumerate(rows, start_idx + 1):
-            chart_url = get_chart_url(r['code'], r.get('name'))
+            chart_url = get_chart_url(r['code'], r.get('name'), context="limit_up_first")
             tr = r.get('turnover_rate', 0)
             turnover = f"换手{tr:.1f}%" if tr else ""
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {turnover}\n"
@@ -635,7 +635,7 @@ async def get_burst_ui(page: int = 1):
     else:
         text = f"💥 <b>曾涨停</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n<i>日内涨停但未封住</i>\n\n"
         for i, r in enumerate(rows, start_idx + 1):
-            chart_url = get_chart_url(r['code'], r.get('name'))
+            chart_url = get_chart_url(r['code'], r.get('name'), context="limit_up_burst")
             cp = r.get('change_pct', 0)
             change = f"{cp:.1f}%" if cp else ""
             text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {change}\n"
@@ -682,7 +682,7 @@ async def get_streak_ui():
     else:
         text = f"🔥 <b>连板榜</b> ({len(streaks)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, s in enumerate(streaks, 1):
-            chart_url = get_chart_url(s['code'], s.get('name'))
+            chart_url = get_chart_url(s['code'], s.get('name'), context="limit_up_streak")
             text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - <b>{s['streak_count']}连板</b>\n"
     
     builder = InlineKeyboardBuilder()
@@ -723,7 +723,7 @@ async def get_strong_ui():
     else:
         text = f"💪 <b>强势股</b> (7日, {len(strong)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
         for i, s in enumerate(strong, 1):
-            chart_url = get_chart_url(s['code'], s.get('name'))
+            chart_url = get_chart_url(s['code'], s.get('name'), context="limit_up_strong")
             text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['limit_count']}次涨停\n"
     
     builder = InlineKeyboardBuilder()
@@ -788,7 +788,7 @@ async def get_watch_ui(page: int = 1):
     else:
         text = f"👀 <b>启动追踪</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n<i>一个月涨停一次，再次涨停将剔除</i>\n\n"
         for i, w in enumerate(rows, start_idx + 1):
-            chart_url = get_chart_url(w['code'], w.get('name'))
+            chart_url = get_chart_url(w['code'], w.get('name'), context="limit_up_watch")
             limit_date = w['first_limit_date'].strftime('%m/%d') if w['first_limit_date'] else ''
             text += f"{i}. <a href=\"{chart_url}\">{w['name']}</a> ({w['code']}) {limit_date}\n"
     

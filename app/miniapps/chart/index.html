@@ -588,6 +588,20 @@
             display: block;
             opacity: 1;
         }
+
+        /* Landscape Mode */
+        .force-landscape {
+            transform: rotate(90deg);
+            transform-origin: top left;
+            width: 100vh !important;
+            height: 100vw !important;
+            position: fixed;
+            top: 0;
+            left: 100%;
+            z-index: 9999;
+            background: var(--bg-primary);
+            overflow: hidden;
+        }
     </style>
 </head>
 
@@ -602,6 +616,8 @@
             <div class="stock-price-row" style="margin-top: 4px;">
                 <span class="price-curr" id="price">--</span>
                 <div class="price-change flat" id="change">--%</div>
+                <button class="t-btn xs" id="btn-watchlist" onclick="toggleWatchlist()"
+                    style="margin-left: 8px; font-size: 16px; padding: 2px 6px;">☆</button>
             </div>
         </div>
 
@@ -659,6 +675,9 @@
         <button class="t-btn xs active" onclick="toggleChipsPanel()" id="btn-chips">Chips</button>
 
         <div class="spacer"></div>
+        <button class="t-btn xs" onclick="navigateTo('prev')" id="btn-prev" style="display:none;">&lt;</button>
+        <button class="t-btn xs" onclick="navigateTo('next')" id="btn-next" style="display:none;">&gt;</button>
+        <button class="t-btn xs" onclick="toggleLandscape()" id="btn-landscape" style="font-size: 16px;">⟲</button>
         <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
     </div>
 
@@ -741,6 +760,14 @@
             || params.get('code');
         const code = tgStartParam || '600519';
         const API_BASE = window.location.origin;
+
+        // User ID for watchlist
+        let userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+        // Fallback for testing if not in Telegram
+        if (!userId) {
+            console.warn("No Telegram User ID found, using test ID");
+            userId = 123456;
+        }
 
         let chartData = [];
         let timeFrame = 'daily';
@@ -908,6 +935,7 @@
             const theme = localStorage.getItem('pro-chart-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
             document.documentElement.setAttribute('data-theme', theme);
             updateThemeIcon(theme);
+            syncTelegramTheme();
         }
 
         function toggleTheme() {
@@ -917,6 +945,25 @@
             localStorage.setItem('pro-chart-theme', next);
             updateThemeIcon(next);
             if (chartMain) applyChartTheme();
+            syncTelegramTheme();
+        }
+
+        function syncTelegramTheme() {
+            if (window.Telegram?.WebApp) {
+                // Wait for style update
+                requestAnimationFrame(() => {
+                    const style = getComputedStyle(document.documentElement);
+                    const headerColor = style.getPropertyValue('--bg-secondary').trim();
+                    const bgColor = style.getPropertyValue('--bg-primary').trim();
+
+                    try {
+                        Telegram.WebApp.setHeaderColor(headerColor);
+                        Telegram.WebApp.setBackgroundColor(bgColor);
+                    } catch (e) {
+                        console.warn("Failed to set Telegram colors", e);
+                    }
+                });
+            }
         }
 
         function updateThemeIcon(t) {
@@ -1763,6 +1810,241 @@
             // Color scheme sync
             Telegram.WebApp.onEvent('themeChanged', initTheme);
         }
+
+        // --- Watchlist Functions ---
+        async function checkWatchlistStatus() {
+            if (!userId) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/chart/watchlist/status?user_id=${userId}&code=${code}`);
+                const data = await res.json();
+                updateWatchlistBtn(data.in_watchlist);
+            } catch (e) {
+                console.error("Failed to check watchlist:", e);
+            }
+        }
+
+        function updateWatchlistBtn(isIn) {
+            const btn = document.getElementById('btn-watchlist');
+            if (isIn) {
+                btn.textContent = "★";
+                btn.style.color = "#f59e0b"; // Gold/Orange
+                btn.classList.add('active');
+            } else {
+                btn.textContent = "☆";
+                btn.style.color = "var(--text-secondary)";
+                btn.classList.remove('active');
+            }
+        }
+
+        // --- Landscape Mode ---
+        let isLandscape = false;
+
+        function toggleLandscape() {
+            isLandscape = !isLandscape;
+            const body = document.body;
+            const btn = document.getElementById('btn-landscape');
+
+            if (isLandscape) {
+                body.classList.add('force-landscape');
+                btn.classList.add('active');
+            } else {
+                body.classList.remove('force-landscape');
+                btn.classList.remove('active');
+            }
+
+            // Trigger resize after transition
+            setTimeout(() => {
+                if (chartMain) chartMain.resize(0, 0);
+                if (chartSub) chartSub.resize(0, 0);
+                renderSidePanelChips(lastChipIdx);
+            }, 100);
+        }
+
+        // Auto-detect orientation change
+        window.addEventListener('orientationchange', () => {
+            // If physically rotated to landscape, remove forced landscape
+            if (window.orientation === 90 || window.orientation === -90) {
+                if (isLandscape) toggleLandscape(); // Turn off forced mode
+            }
+        });
+
+        // Also listen to resize to detect orientation change on some devices
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > window.innerHeight && isLandscape) {
+                toggleLandscape();
+            }
+        });
+
+        async function toggleWatchlist() {
+            const btn = document.getElementById('btn-watchlist');
+            const isAdding = btn.textContent === "☆";
+
+            // Optimistic update
+            updateWatchlistBtn(isAdding);
+
+            try {
+                const endpoint = isAdding ? '/api/chart/watchlist/add' : '/api/chart/watchlist/remove';
+                const res = await fetch(`${API_BASE}${endpoint}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        code: code,
+                        name: document.getElementById('name').textContent
+                    })
+                });
+
+                const data = await res.json();
+                if (isAdding && !data.success && !data.code) { // Check for failure
+                    updateWatchlistBtn(false); // Revert
+                    showToast("Failed to add");
+                } else if (!isAdding && !data.success) {
+                    updateWatchlistBtn(true); // Revert
+                    showToast("Failed to remove");
+                } else {
+                    showToast(isAdding ? "Added to Watchlist" : "Removed from Watchlist");
+                }
+
+            } catch (e) {
+                console.error("Watchlist toggle error:", e);
+                updateWatchlistBtn(!isAdding); // Revert
+                showToast("Error updating watchlist");
+            }
+        }
+
+        function showToast(msg) {
+            // Simple toast implementation
+            const toast = document.createElement('div');
+            toast.textContent = msg;
+            toast.style.position = 'fixed';
+            toast.style.bottom = '80px';
+            toast.style.left = '50%';
+            toast.style.transform = 'translateX(-50%)';
+            toast.style.background = 'rgba(0,0,0,0.7)';
+            toast.style.color = 'white';
+            toast.style.padding = '8px 16px';
+            toast.style.borderRadius = '20px';
+            toast.style.fontSize = '12px';
+            toast.style.zIndex = '100';
+            toast.style.opacity = '0';
+            toast.style.transition = 'opacity 0.3s';
+
+            document.body.appendChild(toast);
+
+            // Trigger reflow
+            toast.offsetHeight;
+            toast.style.opacity = '1';
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
+        }
+
+        // --- Navigation ---
+        let navContext = null;
+        let prevCode = null;
+        let nextCode = null;
+
+        function initNavigation() {
+            // Parse context from start param or URL
+            // startapp=CODE_CONTEXT
+            const params = new URLSearchParams(window.location.search);
+            let startapp = params.get('tgWebAppStartParam') || params.get('startapp');
+
+            if (startapp && startapp.includes('_')) {
+                const parts = startapp.split('_');
+                // Last part is context? Or first part is code?
+                // Format: CODE_CONTEXT. But CODE is 6 digits.
+                // Example: 000001_limit_up
+                // But context can have underscores too (limit_up_first)
+                // So split by first underscore
+                const idx = startapp.indexOf('_');
+                if (idx !== -1) {
+                    navContext = startapp.substring(idx + 1);
+                }
+            } else {
+                // Check URL param
+                navContext = params.get('context');
+            }
+
+            if (navContext) {
+                checkNavigation();
+            }
+        }
+
+        async function checkNavigation() {
+            if (!navContext) return;
+            try {
+                let url = `${API_BASE}/api/chart/navigation?code=${code}&context=${navContext}`;
+                if (userId) url += `&user_id=${userId}`;
+
+                const res = await fetch(url);
+                const data = await res.json();
+
+                prevCode = data.prev;
+                nextCode = data.next;
+
+                const btnPrev = document.getElementById('btn-prev');
+                const btnNext = document.getElementById('btn-next');
+
+                if (prevCode) {
+                    btnPrev.style.display = 'inline-block';
+                    btnPrev.title = prevCode;
+                } else {
+                    btnPrev.style.display = 'none';
+                }
+
+                if (nextCode) {
+                    btnNext.style.display = 'inline-block';
+                    btnNext.title = nextCode;
+                } else {
+                    btnNext.style.display = 'none';
+                }
+
+            } catch (e) {
+                console.error("Nav check failed", e);
+            }
+        }
+
+        function navigateTo(dir) {
+            const target = dir === 'prev' ? prevCode : nextCode;
+            if (target) {
+                // Reload page with new code
+                // We need to keep the context!
+                // Construct new URL
+                const url = new URL(window.location.href);
+                url.searchParams.set('code', target);
+                // If using startapp, we might need to update it too, but for web reload 'code' param is key if we support it
+                // Actually, our init logic parses 'code' from URL param 'code' OR 'tgWebAppStartParam'
+
+                // Let's just reload with code param, keeping context param if exists
+                if (navContext) {
+                    url.searchParams.set('context', navContext);
+                }
+
+                // Also update startapp if present to avoid confusion? 
+                // Telegram WebApp might not like full reload.
+                // Better to just update state and re-render?
+
+                code = target;
+                // Update URL without reload if possible
+                window.history.pushState({}, '', url);
+
+                // Reset data
+                rawData = [];
+                document.getElementById('loading').style.display = 'flex';
+
+                // Re-init
+                loadData();
+                checkWatchlistStatus();
+                checkNavigation(); // Update buttons for new code
+            }
+        }
+
+        // Initialize
+        checkWatchlistStatus();
+        initNavigation();
 
     </script>
 </body>
