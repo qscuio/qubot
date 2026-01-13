@@ -154,6 +154,7 @@ class StockScanner:
             "small_bullish_5_1_bearish": [],  # 五阳一阴
             "small_bullish_3_1_bearish_1_bullish": [],  # 三阳一阴一阳
             "strong_first_negative": [],  # 强势股首阴
+            "broken_limit_up_streak": [],  # 连板断板
             "pullback_ma5": [],  # 5日线回踩
             "pullback_ma20": [],  # 20日线回踩
             "pullback_ma30": [],  # 30日线回踩
@@ -303,6 +304,9 @@ class StockScanner:
                     if self._check_strong_first_negative(hist, pd):
                         signals["strong_first_negative"].append(stock_info)
 
+                    if self._check_broken_limit_up_streak(hist, pd, code):
+                        signals["broken_limit_up_streak"].append(stock_info)
+
                     if self._check_ma_pullback(hist, pd, 5):
                         signals["pullback_ma5"].append(stock_info)
 
@@ -327,6 +331,7 @@ class StockScanner:
                         stock_info in signals["small_bullish_5_1_bearish"],
                         stock_info in signals["small_bullish_3_1_bearish_1_bullish"],
                         stock_info in signals["strong_first_negative"],
+                        stock_info in signals["broken_limit_up_streak"],
                         stock_info in signals["pullback_ma5"],
                         stock_info in signals["pullback_ma20"],
                         stock_info in signals["pullback_ma30"],
@@ -879,6 +884,49 @@ class StockScanner:
             return True
         except:
             return False
+
+    def _check_broken_limit_up_streak(self, hist, pd, code: str) -> bool:
+        """检查连板断板信号.
+        
+        条件:
+        1. 连板: T-2 和 T-1 都是涨停
+        2. 断板: T (今日) 不是涨停
+        """
+        try:
+            if len(hist) < 3:
+                return False
+                
+            # Determine limit up threshold
+            limit_pct = 9.5
+            if code.startswith('688') or code.startswith('300'):
+                limit_pct = 19.5
+                
+            # Check T-2 and T-1 (Must be Limit Up)
+            for i in [-2, -3]:
+                row = hist.iloc[i]
+                prev_close = hist.iloc[i-1]['收盘']
+                if prev_close == 0:
+                    return False
+                
+                gain = (row['收盘'] - prev_close) / prev_close * 100
+                if gain < limit_pct:
+                    return False
+            
+            # Check T (Today) - Must NOT be Limit Up
+            today = hist.iloc[-1]
+            yesterday_close = hist.iloc[-2]['收盘']
+            if yesterday_close == 0:
+                return False
+                
+            today_gain = (today['收盘'] - yesterday_close) / yesterday_close * 100
+            if today_gain >= limit_pct:
+                return False
+                
+            return True
+        except:
+            return False
+
+
 
     def _check_ma_pullback(self, hist, pd, window: int) -> bool:
         """检查均线回踩确认信号.

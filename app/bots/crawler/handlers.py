@@ -870,6 +870,7 @@ SIGNAL_NAMES = {
     "small_bullish_5_1_bearish": "五阳一阴",
     "small_bullish_3_1_bearish_1_bullish": "三阳一阴一阳",
     "strong_first_negative": "强势股首阴",
+    "broken_limit_up_streak": "连板断板",
     "pullback_ma5": "5日线回踩",
     "pullback_ma20": "20日线回踩",
     "pullback_ma30": "30日线回踩",
@@ -888,6 +889,7 @@ SIGNAL_ICONS = {
     "small_bullish_5_1_bearish": "📉",
     "small_bullish_3_1_bearish_1_bullish": "📈",
     "strong_first_negative": "🟢",
+    "broken_limit_up_streak": "💔",
     "pullback_ma5": "↩️",
     "pullback_ma20": "🔄",
     "pullback_ma30": "🔙",
@@ -930,6 +932,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="📉 五阳一阴", callback_data="scanner:scan:small_bullish_5_1_bearish")
     builder.button(text="📈 三阳一阴一阳", callback_data="scanner:scan:small_bullish_3_1_bearish_1_bullish")
     builder.button(text="🟢 强势股首阴", callback_data="scanner:scan:strong_first_negative")
+    builder.button(text="💔 连板断板", callback_data="scanner:scan:broken_limit_up_streak")
     builder.button(text="↩️ 5日线回踩", callback_data="scanner:scan:pullback_ma5")
     builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
     builder.button(text="🔙 30日线回踩", callback_data="scanner:scan:pullback_ma30")
@@ -1217,34 +1220,51 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
         _scan_results_cache[user_id] = signals
         
         # Helper to send complete stock list in multiple messages if needed
-        async def send_signal_list(title: str, stocks: list, context: str = None, max_chars: int = 3800):
-            """Send complete list, splitting into multiple messages if needed."""
+        async def send_signal_list(title: str, stocks: list, context: str = None, page: int = 1, page_size: int = 20, message_to_edit: types.Message = None):
+            """Send list with pagination."""
             if not stocks:
                 return
             
-            messages = []
-            current_lines = [title, ""]
-            current_len = len(title) + 1
+            total_stocks = len(stocks)
+            total_pages = (total_stocks + page_size - 1) // page_size
             
-            for i, s in enumerate(stocks, 1):
+            # Ensure page is valid
+            if page < 1: page = 1
+            if page > total_pages: page = total_pages
+            
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            current_page_stocks = stocks[start_idx:end_idx]
+            
+            # Build message text
+            lines = [f"{title} (第 {page}/{total_pages} 页)", ""]
+            for i, s in enumerate(current_page_stocks, start_idx + 1):
                 chart_url = get_chart_url(s['code'], s.get('name'), context=context)
                 line = f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})"
-                line_len = len(line) + 1
-                
-                if current_len + line_len > max_chars:
-                    messages.append("\n".join(current_lines))
-                    page_num = len(messages) + 1
-                    current_lines = [f"{title} (续{page_num})", ""]
-                    current_len = len(current_lines[0]) + 1
-                
-                current_lines.append(line)
-                current_len += line_len
+                lines.append(line)
             
-            if len(current_lines) > 2:
-                messages.append("\n".join(current_lines))
+            text = "\n".join(lines)
             
-            for msg in messages:
-                await sender.answer(msg, parse_mode="HTML", disable_web_page_preview=True)
+            # Build pagination keyboard
+            builder = InlineKeyboardBuilder()
+            
+            # Navigation buttons
+            nav_buttons = []
+            if page > 1:
+                nav_buttons.append(InlineKeyboardButton(text="⬅️ 上一页", callback_data=f"scanner:page:{context}:{page-1}"))
+            if page < total_pages:
+                nav_buttons.append(InlineKeyboardButton(text="下一页 ➡️", callback_data=f"scanner:page:{context}:{page+1}"))
+            
+            if nav_buttons:
+                builder.row(*nav_buttons)
+            
+            # Back button (if needed, but usually context handles it)
+            # builder.row(InlineKeyboardButton(text="🔙 返回菜单", callback_data="scanner:main"))
+            
+            if message_to_edit:
+                await message_to_edit.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+            else:
+                await sender.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
         
         # Send summary header
         total_signals = sum(len(v) for v in signals.values())
@@ -1284,6 +1304,101 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
             
     except Exception as e:
         await status.edit_text(f"❌ 扫描失败: {e}")
+
+
+@router.callback_query(F.data.startswith("scanner:page:"))
+async def cb_scanner_page(callback: types.CallbackQuery):
+    """Handle scanner pagination."""
+    try:
+        # Format: scanner:page:context:page_num
+        # context is like "scanner_signal_type"
+        parts = callback.data.split(":")
+        if len(parts) < 4:
+            await callback.answer("无效请求")
+            return
+            
+        context = parts[2]
+        page = int(parts[3])
+        
+        # Extract signal type from context (scanner_xxx)
+        signal_type = context.replace("scanner_", "")
+        
+        user_id = callback.from_user.id
+        if user_id not in _scan_results_cache:
+            await callback.answer("⚠️ 结果已过期，请重新扫描", show_alert=True)
+            return
+            
+        signals = _scan_results_cache[user_id]
+        if signal_type not in signals:
+            await callback.answer("⚠️ 无此信号数据", show_alert=True)
+            return
+            
+        stocks = signals[signal_type]
+        icon = SIGNAL_ICONS.get(signal_type, "•")
+        name = SIGNAL_NAMES.get(signal_type, signal_type)
+        title = f"{icon} <b>{name}</b> ({len(stocks)}只)"
+        
+        # We need to access send_signal_list logic. 
+        # Since it's a local function in cmd_scan, we should refactor it or duplicate logic.
+        # For simplicity/speed, let's duplicate the pagination logic here or make it a standalone helper.
+        # But wait, send_signal_list was defined inside cmd_scan. I should probably move it out.
+        # Refactoring to move send_signal_list out is better.
+        
+        await _send_signal_list_paginated(
+            callback.message, 
+            title, 
+            stocks, 
+            context=context, 
+            page=page, 
+            message_to_edit=callback.message
+        )
+        await callback.answer()
+        
+    except Exception as e:
+        await callback.answer(f"❌ 错误: {e}", show_alert=True)
+
+async def _send_signal_list_paginated(sender_or_message, title: str, stocks: list, context: str = None, page: int = 1, page_size: int = 20, message_to_edit: types.Message = None):
+    """Send list with pagination (Shared helper)."""
+    if not stocks:
+        return
+    
+    total_stocks = len(stocks)
+    total_pages = (total_stocks + page_size - 1) // page_size
+    
+    # Ensure page is valid
+    if page < 1: page = 1
+    if page > total_pages: page = total_pages
+    
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    current_page_stocks = stocks[start_idx:end_idx]
+    
+    # Build message text
+    lines = [f"{title} (第 {page}/{total_pages} 页)", ""]
+    for i, s in enumerate(current_page_stocks, start_idx + 1):
+        chart_url = get_chart_url(s['code'], s.get('name'), context=context)
+        line = f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})"
+        lines.append(line)
+    
+    text = "\n".join(lines)
+    
+    # Build pagination keyboard
+    builder = InlineKeyboardBuilder()
+    
+    # Navigation buttons
+    nav_buttons = []
+    if page > 1:
+        nav_buttons.append(InlineKeyboardButton(text="⬅️ 上一页", callback_data=f"scanner:page:{context}:{page-1}"))
+    if page < total_pages:
+        nav_buttons.append(InlineKeyboardButton(text="下一页 ➡️", callback_data=f"scanner:page:{context}:{page+1}"))
+    
+    if nav_buttons:
+        builder.row(*nav_buttons)
+    
+    if message_to_edit:
+        await message_to_edit.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+    elif isinstance(sender_or_message, types.Message):
+        await sender_or_message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
