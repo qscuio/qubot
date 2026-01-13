@@ -361,6 +361,20 @@ async def get_chart_navigation(code: str, context: str, user_id: int = None):
             stocks = await watchlist_service.get_watchlist(user_id)
             # Usually sorted by add time or custom order
             
+        elif context.startswith("scanner_") and user_id:
+            # Scanner results (cached in memory)
+            # Context format: scanner_{signal_type}
+            signal_type = context.replace("scanner_", "")
+            
+            # Import cache from handlers (assuming same process)
+            try:
+                from app.bots.crawler.handlers import _scan_results_cache
+                user_cache = _scan_results_cache.get(user_id)
+                if user_cache:
+                    stocks = user_cache.get(signal_type, [])
+            except ImportError:
+                pass
+            
     except Exception as e:
         print(f"Navigation error: {e}")
         return {"prev": None, "next": None}

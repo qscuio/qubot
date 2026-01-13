@@ -1172,7 +1172,7 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
         _scan_results_cache[user_id] = signals
         
         # Helper to send complete stock list in multiple messages if needed
-        async def send_signal_list(title: str, stocks: list, max_chars: int = 3800):
+        async def send_signal_list(title: str, stocks: list, context: str = None, max_chars: int = 3800):
             """Send complete list, splitting into multiple messages if needed."""
             if not stocks:
                 return
@@ -1182,7 +1182,7 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
             current_len = len(title) + 1
             
             for i, s in enumerate(stocks, 1):
-                chart_url = get_chart_url(s['code'], s.get('name'))
+                chart_url = get_chart_url(s['code'], s.get('name'), context=context)
                 line = f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})"
                 line_len = len(line) + 1
                 
@@ -1223,7 +1223,11 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
             if stocks:
                 icon = SIGNAL_ICONS.get(signal_type, "•")
                 name = SIGNAL_NAMES.get(signal_type, signal_type)
-                await send_signal_list(f"{icon} <b>{name}</b> ({len(stocks)}只)", stocks)
+                await send_signal_list(
+                    f"{icon} <b>{name}</b> ({len(stocks)}只)", 
+                    stocks, 
+                    context=f"scanner_{signal_type}"
+                )
             
     except Exception as e:
         await status.edit_text(f"❌ 扫描失败: {e}")

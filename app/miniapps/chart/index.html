@@ -602,6 +602,46 @@
             background: var(--bg-primary);
             overflow: hidden;
         }
+
+        /* Floating Navigation */
+        .floating-nav {
+            position: fixed;
+            bottom: 40px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 24px;
+            pointer-events: none;
+            z-index: 90;
+        }
+
+        .nav-btn {
+            pointer-events: auto;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--grid-color);
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: transform 0.1s, background 0.2s;
+            opacity: 0.9;
+        }
+
+        .nav-btn:active {
+            transform: scale(0.95);
+            opacity: 1;
+        }
+
+        [data-theme="dark"] .nav-btn {
+            background: rgba(30, 30, 30, 0.8);
+            backdrop-filter: blur(8px);
+        }
     </style>
 </head>
 
@@ -675,10 +715,24 @@
         <button class="t-btn xs active" onclick="toggleChipsPanel()" id="btn-chips">Chips</button>
 
         <div class="spacer"></div>
-        <button class="t-btn xs" onclick="navigateTo('prev')" id="btn-prev" style="display:none;">&lt;</button>
-        <button class="t-btn xs" onclick="navigateTo('next')" id="btn-next" style="display:none;">&gt;</button>
         <button class="t-btn xs" onclick="toggleLandscape()" id="btn-landscape" style="font-size: 16px;">⟲</button>
         <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
+    </div>
+
+    <!-- Floating Navigation -->
+    <div id="floating-nav" class="floating-nav" style="display: none;">
+        <button class="nav-btn prev" onclick="navigateTo('prev')" id="float-btn-prev">
+            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+        </button>
+        <button class="nav-btn next" onclick="navigateTo('next')" id="float-btn-next">
+            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+        </button>
     </div>
 
     <!-- Main Content -->
@@ -782,11 +836,13 @@
         const API_BASE = window.location.origin;
 
         // User ID for watchlist
+        const debugUserIdParam = params.get('debug_user_id');
         let userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-        // Fallback for testing if not in Telegram
+        if (!userId && debugUserIdParam && /^\d+$/.test(debugUserIdParam)) {
+            userId = Number(debugUserIdParam);
+        }
         if (!userId) {
-            console.warn("No Telegram User ID found, using test ID");
-            userId = 123456;
+            console.warn("No Telegram User ID found; watchlist disabled.");
         }
 
         let chartData = [];
@@ -1847,7 +1903,13 @@
 
         // --- Watchlist Functions ---
         async function checkWatchlistStatus() {
-            if (!userId) return;
+            if (!userId) {
+                const btn = document.getElementById('btn-watchlist');
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+                btn.title = "Open in Telegram to use watchlist";
+                return;
+            }
             try {
                 const res = await fetch(`${API_BASE}/api/chart/watchlist/status?user_id=${userId}&code=${code}`);
                 const data = await res.json();
@@ -1911,6 +1973,10 @@
 
         async function toggleWatchlist() {
             const btn = document.getElementById('btn-watchlist');
+            if (!userId) {
+                showToast("Open in Telegram to use watchlist");
+                return;
+            }
             const isAdding = btn.textContent === "☆";
 
             // Optimistic update
@@ -1997,21 +2063,28 @@
                 prevCode = data.prev;
                 nextCode = data.next;
 
-                const btnPrev = document.getElementById('btn-prev');
-                const btnNext = document.getElementById('btn-next');
+                const btnPrev = document.getElementById('float-btn-prev');
+                const btnNext = document.getElementById('float-btn-next');
+                const navContainer = document.getElementById('floating-nav');
+
+                if (prevCode || nextCode) {
+                    navContainer.style.display = 'flex';
+                } else {
+                    navContainer.style.display = 'none';
+                }
 
                 if (prevCode) {
-                    btnPrev.style.display = 'inline-block';
+                    btnPrev.style.visibility = 'visible';
                     btnPrev.title = prevCode;
                 } else {
-                    btnPrev.style.display = 'none';
+                    btnPrev.style.visibility = 'hidden';
                 }
 
                 if (nextCode) {
-                    btnNext.style.display = 'inline-block';
+                    btnNext.style.visibility = 'visible';
                     btnNext.title = nextCode;
                 } else {
-                    btnNext.style.display = 'none';
+                    btnNext.style.visibility = 'hidden';
                 }
 
             } catch (e) {
