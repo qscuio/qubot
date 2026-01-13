@@ -84,12 +84,13 @@ async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
     builder.button(text="🕷️ 网站爬虫", callback_data="crawler:main")
     builder.button(text="📈 涨停追踪", callback_data="lu:main")
-    builder.button(text=" 信号扫描", callback_data="scanner:main")
+    builder.button(text="🔍 信号扫描", callback_data="scanner:main")
     builder.button(text="📊 板块分析", callback_data="sector:main")
     builder.button(text="📋 市场报告", callback_data="report:main")
+    builder.button(text="🎯 打板交易", callback_data="daban:main")
     builder.button(text="⭐ 自选列表", callback_data="watch:list")
     builder.button(text="💰 模拟交易", callback_data="sim:main")
-    builder.adjust(2, 2, 2, 1)
+    builder.adjust(2, 2, 2, 2)
     
     await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
 

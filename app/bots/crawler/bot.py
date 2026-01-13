@@ -23,6 +23,7 @@ CRAWLER_BOT_COMMANDS = [
     BotCommand(command="history", description="个股历史"),
     BotCommand(command="chart", description="K线图表"),
     BotCommand(command="limitup", description="涨停报告"),
+    BotCommand(command="daban", description="打板交易"),
     # Database commands
     BotCommand(command="dbcheck", description="数据库状态"),
     BotCommand(command="dbsync", description="同步历史数据"),
@@ -44,4 +45,3 @@ CRAWLER_BOT = BotSpec(
     router_module="app.bots.crawler.handlers",
     commands=CRAWLER_BOT_COMMANDS,
 )
-

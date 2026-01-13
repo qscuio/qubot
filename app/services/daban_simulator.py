@@ -25,9 +25,11 @@ INITIAL_CAPITAL = 100000     # 10万初始资金
 MAX_POSITIONS = 2            # Max 2 stocks (concentrated bets)
 STOP_LOSS_OPEN = -5.0        # Stop loss if opens below -5%
 TRAILING_PROFIT = 5.0        # If up but not limit, trail from +5%
+TRAILING_DROP = 3.0          # Trailing sell if drops this much from intraday high
 LIMIT_PERCENT_MAIN = 10.0    # Main board limit = 10%
 LIMIT_PERCENT_STAR = 20.0    # 科创板/创业板 limit = 20%
 MIN_SCORE = 65               # Minimum score to consider buying
+LIMIT_UP_TOLERANCE = 0.5     # Tolerance for limit-up checks
 
 
 class DabanSimulator:
@@ -145,6 +147,51 @@ class DabanSimulator:
                 VALUES (1, $1, $1, $1)
             """, INITIAL_CAPITAL)
             logger.info(f"Created 打板 account with {INITIAL_CAPITAL} initial capital")
+
+    async def _get_spot_quotes(self, codes: List[str]) -> Dict[str, Dict]:
+        """Fetch spot quotes for given codes."""
+        if not codes:
+            return {}
+        ak = self._get_akshare()
+        if not ak:
+            return {}
+
+        try:
+            df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+            if df is None or df.empty:
+                return {}
+
+            df = df[df['代码'].isin(codes)]
+            quotes = {}
+            for _, row in df.iterrows():
+                code = str(row.get('代码', ''))
+                quotes[code] = {
+                    'price': float(row.get('最新价', 0) or 0),
+                    'open': float(row.get('今开', 0) or 0),
+                    'high': float(row.get('最高', 0) or 0),
+                    'low': float(row.get('最低', 0) or 0),
+                    'change_pct': float(row.get('涨跌幅', 0) or 0),
+                }
+            return quotes
+        except Exception as e:
+            logger.error(f"Failed to fetch spot quotes: {e}")
+            return {}
+
+    async def _get_limit_up_codes(self) -> set:
+        """Fetch current limit-up codes."""
+        ak = self._get_akshare()
+        if not ak:
+            return set()
+
+        try:
+            date_str = china_today().strftime("%Y%m%d")
+            df = await asyncio.to_thread(ak.stock_zt_pool_em, date=date_str)
+            if df is None or df.empty:
+                return set()
+            return {str(code) for code in df['代码'].tolist() if code}
+        except Exception as e:
+            logger.warn(f"Failed to fetch limit-up pool: {e}")
+            return set()
     
     async def get_account(self) -> Optional[Dict]:
         """Get account details."""
@@ -367,63 +414,102 @@ class DabanSimulator:
         if not positions:
             return
         
-        ak = self._get_akshare()
-        if not ak:
-            return
-        
         await self._notify("🔔 打板持仓早盘检查...")
-        
+
         try:
-            # Get real-time quotes
-            df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
-            
-            if df is None or df.empty:
+            codes = [p['code'] for p in positions]
+            quotes = await self._get_spot_quotes(codes)
+            if not quotes:
                 return
-            
-            price_map = {}
-            for _, row in df.iterrows():
-                code = str(row.get('代码', ''))
-                price_map[code] = {
-                    'price': float(row.get('最新价', 0) or 0),
-                    'open': float(row.get('今开', 0) or 0),
-                    'change_pct': float(row.get('涨跌幅', 0) or 0),
-                }
-            
+
+            limit_up_codes = await self._get_limit_up_codes()
+
             for pos in positions:
                 code = pos['code']
-                if code not in price_map:
+                current = quotes.get(code)
+                if not current:
                     continue
-                
-                current = price_map[code]
+
                 buy_price = float(pos['buy_price'])
                 limit_pct = float(pos['limit_pct'])
-                
-                open_price = current['open']
+                open_price = current['open'] or current['price']
                 current_price = current['price']
                 open_pct = (open_price - buy_price) / buy_price * 100
                 current_pct = (current_price - buy_price) / buy_price * 100
-                
+
+                is_limit = code in limit_up_codes or current['change_pct'] >= limit_pct - LIMIT_UP_TOLERANCE
+
                 # Check if hit limit again (连板成功 - hold)
-                if current['change_pct'] >= limit_pct - 0.5:
+                if is_limit:
                     await self._notify(
                         f"🚀 {pos['name']} 继续涨停! 持仓继续"
                     )
                     continue
-                
+
                 # Check stop loss at open
                 if open_pct <= STOP_LOSS_OPEN:
                     await self.sell_stock(pos['id'], current_price, 'stop_loss')
                     continue
-                
+
                 # Check if failed to continue and has profit
-                if current_pct >= TRAILING_PROFIT and current['change_pct'] < limit_pct - 0.5:
-                    # Has profit but not hitting limit, consider selling on trailing
+                if current_pct >= TRAILING_PROFIT:
                     await self._notify(
                         f"📈 {pos['name']} 盈利 {current_pct:.1f}% 但未封板，观察中..."
                     )
-                
+
         except Exception as e:
             logger.error(f"Morning check failed: {e}")
+
+    async def afternoon_check_positions(self):
+        """Check positions near close for limit continuation or burst."""
+        positions = await self.get_current_positions()
+        if not positions:
+            return
+
+        await self._notify("🔔 打板持仓尾盘检查...")
+
+        try:
+            codes = [p['code'] for p in positions]
+            quotes = await self._get_spot_quotes(codes)
+            if not quotes:
+                return
+
+            limit_up_codes = await self._get_limit_up_codes()
+
+            for pos in positions:
+                if pos['buy_date'] == china_today():
+                    # Avoid selling same-day buys
+                    continue
+
+                code = pos['code']
+                current = quotes.get(code)
+                if not current:
+                    continue
+
+                buy_price = float(pos['buy_price'])
+                limit_pct = float(pos['limit_pct'])
+                current_price = current['price']
+                current_pct = (current_price - buy_price) / buy_price * 100
+                high_price = current['high'] or current_price
+                high_pct = (high_price - buy_price) / buy_price * 100
+
+                is_limit = code in limit_up_codes or current['change_pct'] >= limit_pct - LIMIT_UP_TOLERANCE
+                if is_limit:
+                    continue
+
+                hit_limit = high_pct >= limit_pct - LIMIT_UP_TOLERANCE
+                if hit_limit:
+                    await self.sell_stock(pos['id'], current_price, 'burst')
+                    continue
+
+                if high_pct >= TRAILING_PROFIT and (high_pct - current_pct) >= TRAILING_DROP:
+                    await self.sell_stock(pos['id'], current_price, 'trailing')
+                    continue
+
+                await self.sell_stock(pos['id'], current_price, 'limit_fail')
+
+        except Exception as e:
+            logger.error(f"Afternoon check failed: {e}")
     
     async def get_statistics(self) -> Dict:
         """Get simulator statistics."""
@@ -435,28 +521,40 @@ class DabanSimulator:
         
         # Calculate unrealized P&L
         unrealized_pnl = 0
-        ak = self._get_akshare()
-        if ak and positions:
-            try:
-                df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
-                if df is not None and not df.empty:
-                    for pos in positions:
-                        row = df[df['代码'] == pos['code']]
-                        if not row.empty:
-                            current_price = float(row.iloc[0]['最新价'])
-                            buy_price = float(pos['buy_price'])
-                            unrealized_pnl += (current_price - buy_price) * pos['shares']
-            except:
-                pass
+        total_market_value = 0
+        quotes = {}
+        if positions:
+            quotes = await self._get_spot_quotes([p['code'] for p in positions])
+
+        for pos in positions:
+            quote = quotes.get(pos['code'])
+            if quote:
+                current_price = quote['price']
+                buy_price = float(pos['buy_price'])
+                unrealized_pnl += (current_price - buy_price) * pos['shares']
+                total_market_value += current_price * pos['shares']
+            else:
+                total_market_value += float(pos['buy_amount'])
         
         total_profit = float(account['total_profit']) + unrealized_pnl
         total_trades = account['total_trades']
         win_rate = account['win_count'] / total_trades * 100 if total_trades > 0 else 0
+        total_value = float(account['current_cash']) + total_market_value
+
+        if db.pool:
+            try:
+                await db.pool.execute("""
+                    UPDATE daban_account
+                    SET total_value = $1, updated_at = NOW()
+                    WHERE id = 1
+                """, total_value)
+            except Exception as e:
+                logger.warn(f"Failed to update account value: {e}")
         
         return {
             'initial_capital': float(account['initial_capital']),
             'current_cash': float(account['current_cash']),
-            'total_value': float(account['total_value']),
+            'total_value': float(total_value),
             'total_profit': round(total_profit, 2),
             'total_return_pct': round(total_profit / float(account['initial_capital']) * 100, 2),
             'realized_profit': float(account['total_profit']),
@@ -477,28 +575,21 @@ class DabanSimulator:
         
         lines = ["🎯 <b>打板持仓</b>\n"]
         
-        ak = self._get_akshare()
+        quotes = await self._get_spot_quotes([p['code'] for p in positions])
         total_pnl = 0
         
         for i, pos in enumerate(positions, 1):
             current_price = float(pos['buy_price'])  # Default
             pnl_pct = 0
             
-            # Try to get real-time price
-            if ak:
-                try:
-                    df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
-                    if df is not None and not df.empty:
-                        row = df[df['代码'] == pos['code']]
-                        if not row.empty:
-                            current_price = float(row.iloc[0]['最新价'])
-                            buy_price = float(pos['buy_price'])
-                            pnl_pct = (current_price - buy_price) / buy_price * 100
-                            total_pnl += (current_price - buy_price) * pos['shares']
-                except:
-                    pass
-            
-            emoji = '🔴' if pnl_pct >= 0 else '🟢'
+            quote = quotes.get(pos['code'])
+            if quote:
+                current_price = quote['price']
+                buy_price = float(pos['buy_price'])
+                pnl_pct = (current_price - buy_price) / buy_price * 100
+                total_pnl += (current_price - buy_price) * pos['shares']
+
+            emoji = '🟢' if pnl_pct >= 0 else '🔴'
             lines.append(
                 f"{i}. <b>{pos['name']}</b> ({pos['code']})\n"
                 f"   {pos['board_type']} | 评分: {pos['daban_score']:.1f}\n"
@@ -538,6 +629,7 @@ class DabanSimulator:
         """
         schedules = [
             (9, 35, 'morning_check'),   # Morning check at 09:35
+            (14, 45, 'afternoon_check'),  # Close check at 14:45
             (14, 50, 'afternoon_scan'),  # Afternoon scan at 14:50
         ]
         
@@ -573,6 +665,8 @@ class DabanSimulator:
                                 await self.morning_check_positions()
                             elif task == 'afternoon_scan':
                                 await self.afternoon_scan_buy()
+                            elif task == 'afternoon_check':
+                                await self.afternoon_check_positions()
                 
             except Exception as e:
                 logger.error(f"打板 scheduler error: {e}")
