@@ -450,6 +450,24 @@
             opacity: 0.8;
         }
 
+        .peak-marker {
+            position: absolute;
+            left: 0;
+            color: #f59e0b;
+            font-size: 8px;
+            line-height: 1;
+        }
+
+        .curr-marker {
+            color: var(--text-primary);
+            font-size: 10px;
+            margin-left: 2px;
+        }
+
+        .chip-track {
+            position: relative;
+        }
+
         /* Loading & Error */
         .overlay {
             position: absolute;
@@ -538,6 +556,7 @@
         <div class="group">
             <button class="t-btn active" onclick="setPeriod('daily', this)">Day</button>
             <button class="t-btn" onclick="setPeriod('weekly', this)">Week</button>
+            <button class="t-btn" onclick="setPeriod('monthly', this)">Month</button>
         </div>
 
         <div class="group">
@@ -552,7 +571,7 @@
             <button class="t-btn" onclick="setSubChart('RSI', this)">RSI</button>
         </div>
 
-        <button class="t-btn xs" onclick="toggleSignals()" id="btn-signals">Signals</button>
+        <button class="t-btn xs active" onclick="toggleSignals()" id="btn-signals">Signals</button>
 
         <div class="spacer"></div>
         <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
@@ -645,7 +664,7 @@
         // Display Options
         let activeOverlay = 'MA'; // 'MA', 'BOLL', 'NONE'
         let activeSub = 'VOL';    // 'VOL', 'MACD', 'KDJ', 'RSI'
-        let showSignals = false;
+        let showSignals = true;  // Enabled by default
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -706,7 +725,15 @@
                 layout: { background: { type: 'solid', color: 'transparent' }, textColor: c.text, fontFamily: "'Inter', sans-serif" },
                 grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-                timeScale: { borderColor: c.grid, timeVisible: true },
+                timeScale: {
+                    borderColor: c.grid,
+                    timeVisible: true,
+                    rightOffset: 5,  // Small right margin
+                    barSpacing: 8,
+                    minBarSpacing: 3,
+                    fixLeftEdge: true,  // Prevent scrolling past left edge
+                    fixRightEdge: true  // Prevent scrolling past right edge
+                },
                 rightPriceScale: { borderColor: c.grid },
                 autoSize: true
             };
@@ -738,15 +765,14 @@
             // Legend Sync
             chartMain.subscribeCrosshairMove(param => {
                 updateMainLegend(param);
-                if (param.time) chartSub.setCrosshairPosition(0, param.time, sVol);
-                if (param.time && rawData.length) {
-                    // Update Chip on Click? No, let's do click for chips
-                }
+                // Use current active sub-chart series for crosshair sync
+                const subSeries = sVol || sMacdHist || sK || sRsi;
+                if (param.time && subSeries) chartSub.setCrosshairPosition(0, param.time, subSeries);
             });
 
             chartSub.subscribeCrosshairMove(param => {
                 updateSubLegend(param);
-                if (param.time) chartMain.setCrosshairPosition(0, param.time, sCandle);
+                if (param.time && sCandle) chartMain.setCrosshairPosition(0, param.time, sCandle);
             });
 
             chartMain.subscribeClick(param => {
@@ -838,11 +864,10 @@
 
         // --- Indicator Calculations ---
         function calculateMA(n) {
-            // Filter out entries with invalid close values first
-            const validData = rawData.filter(d => d && d.close !== undefined && d.close !== null && !isNaN(d.close));
-            return validData.map((d, i, arr) => {
+            // rawData is already filtered for valid entries on load
+            return rawData.map((d, i, arr) => {
                 if (i < n - 1) return { time: d.time, value: NaN };
-                const sum = arr.slice(i - n + 1, i + 1).reduce((a, b) => a + (b.close || 0), 0);
+                const sum = arr.slice(i - n + 1, i + 1).reduce((a, b) => a + b.close, 0);
                 return { time: d.time, value: sum / n };
             }).filter(d => !isNaN(d.value));
         }
@@ -1236,36 +1261,53 @@
         }
 
         async function renderChipDistribution(dayIndex) {
-            const displayData = rawData; // Use full data for index calculation
             const idx = dayIndex >= 0 ? dayIndex : rawData.length - 1;
             const target = rawData[idx];
+            if (!target) return;
 
             document.getElementById('chip-date').textContent = target.time;
 
-            // Try API?
-            // Fallback local
+            // Calculate chip distribution
             const chips = calculateChipDistribution(rawData, idx);
 
             const cont = document.getElementById('chip-chart-area');
             cont.innerHTML = '';
 
             const wrapper = document.createElement('div');
-            wrapper.style.cssText = 'display:flex; flex-direction:column; height:100%; justify-content:center; gap:1px;';
+            wrapper.style.cssText = 'display:flex; flex-direction:column; height:100%; justify-content:flex-start; gap:0; padding: 4px 0;';
 
-            chips.distribution.forEach(d => {
+            // Find peak concentration for highlight
+            const peakPct = Math.max(...chips.distribution.map(d => d.percentage));
+            const currentPrice = chips.currentPrice;
+
+            chips.distribution.forEach((d, i) => {
                 const row = document.createElement('div');
                 row.className = 'chip-bar-row';
+
+                // Highlight bar at current price level
+                const isCurrentPrice = Math.abs(d.price - currentPrice) < ((chips.distribution[1]?.price - chips.distribution[0]?.price) || 1);
+                const isPeak = d.percentage === peakPct && peakPct > 10;
+
+                // Color intensity based on percentage
+                const intensity = Math.min(100, 40 + d.percentage * 0.6);
+
                 row.innerHTML = `
-                    <div class="chip-price">${d.price.toFixed(1)}</div>
+                    <div class="chip-price" ${isCurrentPrice ? 'style="font-weight:bold;color:var(--text-primary)"' : ''}>${d.price.toFixed(2)}</div>
                     <div class="chip-track">
-                        <div class="chip-fill ${d.isProfit ? 'p' : 'l'}" style="width:${d.percentage}%"></div>
+                        <div class="chip-fill ${d.isProfit ? 'p' : 'l'}" style="width:${d.percentage}%; opacity:${intensity / 100}"></div>
+                        ${isPeak ? '<span class="peak-marker">▶</span>' : ''}
                     </div>
+                    ${isCurrentPrice ? '<span class="curr-marker">◀</span>' : ''}
                 `;
                 wrapper.appendChild(row);
             });
             cont.appendChild(wrapper);
 
-            document.getElementById('p-ratio').textContent = chips.profitRatio.toFixed(1) + '%';
+            // Update stats with colors
+            const pRatioEl = document.getElementById('p-ratio');
+            pRatioEl.textContent = chips.profitRatio.toFixed(1) + '%';
+            pRatioEl.style.color = chips.profitRatio >= 50 ? 'var(--up-color)' : 'var(--down-color)';
+
             document.getElementById('avg-cost').textContent = chips.avgCost.toFixed(2);
             document.getElementById('conc').textContent = chips.concentration.toFixed(1) + '%';
         }

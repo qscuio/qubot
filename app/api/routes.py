@@ -144,13 +144,33 @@ async def chart_data(code: str, days: int = 60, period: str = "daily"):
     """
     import asyncio
     from app.services.stock_history import stock_history_service
+    from app.core.database import db
     
     data = []
-    name = code
+    name = code  # Default to code if name not found
     
     # Validate period
     if period not in ("daily", "weekly", "monthly"):
         period = "daily"
+    
+    # Try to get stock name from database first (stock_info or limit_up tables)
+    if db.pool:
+        try:
+            # Try stock_info table first
+            row = await db.pool.fetchrow("""
+                SELECT name FROM stock_info WHERE code = $1 LIMIT 1
+            """, code)
+            if row and row['name']:
+                name = row['name']
+            else:
+                # Fallback to stock_history (some have name stored)
+                row = await db.pool.fetchrow("""
+                    SELECT name FROM stock_history WHERE code = $1 AND name IS NOT NULL LIMIT 1
+                """, code)
+                if row and row.get('name'):
+                    name = row['name']
+        except Exception:
+            pass  # Table might not exist, continue
     
     try:
         # Only use database for daily data (weekly/monthly need to fetch fresh)
@@ -167,6 +187,9 @@ async def chart_data(code: str, days: int = 60, period: str = "daily"):
                         "close": float(h['close']),
                         "volume": int(h['volume']),
                     })
+                    # Get name from first record if available
+                    if name == code and h.get('name'):
+                        name = h['name']
     except Exception as e:
         pass
     

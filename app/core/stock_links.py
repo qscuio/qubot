@@ -26,22 +26,28 @@ def get_chart_url(
     if source == "miniapp":
         # Prefer direct Mini App link via t.me/{bot_username}/chart?startapp={code}
         # This bypasses Telegram's external link confirmation dialog
-        # Get bot username from runtime cache (populated on bot startup via getMe)
+        
+        # 1. Try runtime cache first (populated on bot startup via getMe)
+        bot_username = None
         try:
             from app.bots.dispatcher import get_bot_username
             bot_username = get_bot_username("crawler-bot")
         except ImportError:
-            bot_username = None
+            pass
+        
+        # 2. Fallback to config setting if runtime cache not yet populated
+        if not bot_username:
+            bot_username = getattr(settings, 'CRAWLER_BOT_USERNAME', None)
         
         if bot_username:
-            # Direct Mini App link - opens chart immediately
+            # Direct Mini App link - opens chart immediately without confirmation
             return f"https://t.me/{bot_username}/chart?startapp={code}"
         
-        # Fallback to standard web URL (requires user confirmation)
+        # 3. Fallback to standard web URL (shows confirmation dialog)
         base_url = settings.WEBFRONT_URL
         if base_url:
             return f"{base_url.rstrip('/')}/miniapp/chart/?code={code}"
-        # Fallback to EastMoney if WEBFRONT_URL not configured
+        # 4. Fallback to EastMoney if WEBFRONT_URL not configured
         source = "eastmoney"
     
     # EastMoney mobile web
