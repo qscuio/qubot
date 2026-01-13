@@ -29,6 +29,13 @@ class StockScanner:
         self._scheduler_task = None
         self._ak = None
         self._pd = None
+        self._last_scan_signature = None
+        self._last_signals = None
+        self._last_scan_used_cache = False
+
+    @property
+    def last_scan_used_cache(self) -> bool:
+        return self._last_scan_used_cache
     
     def _get_libs(self):
         """Lazy load akshare and pandas."""
@@ -123,12 +130,13 @@ class StockScanner:
         await telegram_service.send_message(settings.STOCK_ALERT_CHANNEL, text, parse_mode="html")
         logger.info(f"Sent scan report with {sum(len(v) for v in signals.values())} signals")
     
-    async def scan_all_stocks(self) -> Dict[str, List[Dict]]:
+    async def scan_all_stocks(self, force: bool = False) -> Dict[str, List[Dict]]:
         """Scan ALL stocks for all signal types.
         
         Uses local stock_history database ONLY for maximum speed.
         """
         logger.info("🔍 Starting scan_all_stocks (full scan)")
+        self._last_scan_used_cache = False
         
         _, pd = self._get_libs()
         if not pd:
@@ -169,6 +177,21 @@ class StockScanner:
                            f"date_range={count_row['min_date']} ~ {count_row['max_date']}")
             else:
                 logger.warn("⚠️ stock_history table appears to be empty")
+
+            max_date = count_row['max_date'] if count_row else None
+            max_date_count = 0
+            if max_date:
+                max_date_count = await db.pool.fetchval("""
+                    SELECT COUNT(DISTINCT code)
+                    FROM stock_history
+                    WHERE date = $1
+                """, max_date) or 0
+
+            signature = (max_date, max_date_count) if max_date else None
+            if not force and signature and self._last_signals is not None and signature == self._last_scan_signature:
+                logger.info("♻️ Using cached scan results (DB data unchanged)")
+                self._last_scan_used_cache = True
+                return self._last_signals
             
             # Check recent data specifically
             recent_count = await db.pool.fetchval("""
@@ -200,7 +223,20 @@ class StockScanner:
                 return signals
             
             codes = [r['code'] for r in rows]
-            code_name_map = {code: code for code in codes}  # Use code as name (no name in query)
+            code_name_map = {code: code for code in codes}
+
+            # Enrich with stock names if available
+            try:
+                name_rows = await db.pool.fetch("""
+                    SELECT code, name
+                    FROM stock_info
+                    WHERE code = ANY($1)
+                """, codes)
+                for row in name_rows:
+                    if row.get('name'):
+                        code_name_map[row['code']] = row['name']
+            except Exception:
+                pass
             
             logger.info(f"✅ Found {len(codes)} stocks in local DB, starting scan...")
             
@@ -273,7 +309,9 @@ class StockScanner:
             for sig_type, stocks in signals.items():
                 if stocks:
                     logger.info(f"   {sig_type}: {len(stocks)} signals")
-            
+            if signature:
+                self._last_scan_signature = signature
+                self._last_signals = signals
             return signals
             
         except Exception as e:

@@ -907,10 +907,11 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     
     builder = InlineKeyboardBuilder()
     builder.button(text="🔍 开始扫描", callback_data="scanner:scan")
+    builder.button(text="⚡ 强制扫描", callback_data="scanner:scan:force")
     builder.button(text="📊 数据库状态", callback_data="scanner:dbcheck")
     builder.button(text="🔄 同步数据", callback_data="scanner:dbsync")
     builder.button(text="◀️ 返回", callback_data="main")
-    builder.adjust(1, 2, 1)
+    builder.adjust(1, 2, 1, 1)
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -918,26 +919,40 @@ async def cb_scanner_main(callback: types.CallbackQuery):
         pass
 
 
-@router.callback_query(F.data == "scanner:scan")
-async def cb_scanner_scan(callback: types.CallbackQuery):
-    """Trigger stock signal scan."""
+async def _run_scan_from_callback(callback: types.CallbackQuery, force: bool = False):
+    """Trigger stock signal scan from callback."""
     await safe_answer(callback, "扫描中...")
-    
-    # Create a mock message object for cmd_scan
+
     class MockMessage:
         def __init__(self, msg):
             self.from_user = callback.from_user
             self._msg = msg
-        
+            self._first_answer = True
+
         async def answer(self, text, **kwargs):
-            try:
-                await self._msg.edit_text(text, **kwargs)
-            except:
-                pass
-            return self._msg
-    
+            if self._first_answer:
+                self._first_answer = False
+                try:
+                    await self._msg.edit_text(text, **kwargs)
+                except:
+                    pass
+                return self._msg
+            return await self._msg.answer(text, **kwargs)
+
     mock_msg = MockMessage(callback.message)
-    await cmd_scan(mock_msg)
+    await cmd_scan(mock_msg, force=force)
+
+
+@router.callback_query(F.data == "scanner:scan")
+async def cb_scanner_scan(callback: types.CallbackQuery):
+    """Trigger stock signal scan."""
+    await _run_scan_from_callback(callback, force=False)
+
+
+@router.callback_query(F.data == "scanner:scan:force")
+async def cb_scanner_scan_force(callback: types.CallbackQuery):
+    """Trigger stock signal scan (force)."""
+    await _run_scan_from_callback(callback, force=True)
 
 
 @router.callback_query(F.data == "scanner:dbcheck")
@@ -1131,21 +1146,29 @@ async def cb_db_sync(callback: types.CallbackQuery):
 
 
 @router.message(Command("scan"))
-async def cmd_scan(message: types.Message):
+async def cmd_scan(message: types.Message, command: CommandObject = None, force: bool = False):
     if not await is_allowed(message.from_user.id):
         return
     
+    user_id = message.from_user.id if hasattr(message, 'from_user') else 0
+    _scan_results_cache.pop(user_id, None)
+
+    if not force and command and command.args:
+        arg = command.args.strip().lower()
+        force = arg in ("force", "f", "强制")
+
     status = await message.answer("🔍 正在扫描全A股启动信号...\n\n⏳ 需要几分钟，请稍候")
+    sender = status
     
     try:
-        signals = await stock_scanner.scan_all_stocks()
+        signals = await stock_scanner.scan_all_stocks(force=force)
         
         if not signals or all(len(v) == 0 for v in signals.values()):
-            await status.edit_text("🔍 扫描完成\n\n📭 暂无信号")
+            cache_note = "\n\n♻️ 使用缓存结果（数据库未更新）" if stock_scanner.last_scan_used_cache else ""
+            await status.edit_text(f"🔍 扫描完成\n\n📭 暂无信号{cache_note}")
             return
         
         # Cache results for pagination
-        user_id = message.from_user.id if hasattr(message, 'from_user') else 0
         _scan_results_cache[user_id] = signals
         
         # Helper to send complete stock list in multiple messages if needed
@@ -1176,11 +1199,16 @@ async def cmd_scan(message: types.Message):
                 messages.append("\n".join(current_lines))
             
             for msg in messages:
-                await message.answer(msg, parse_mode="HTML", disable_web_page_preview=True)
+                await sender.answer(msg, parse_mode="HTML", disable_web_page_preview=True)
         
         # Send summary header
         total_signals = sum(len(v) for v in signals.values())
-        summary = "🔍 <b>启动信号扫描完成</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+        cache_note = "♻️ 使用缓存结果（数据库未更新）\n\n" if stock_scanner.last_scan_used_cache else ""
+        summary = (
+            "🔍 <b>启动信号扫描完成</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{cache_note}"
+        )
         for signal_type, stocks in signals.items():
             if stocks:
                 icon = SIGNAL_ICONS.get(signal_type, "•")
@@ -1298,23 +1326,7 @@ async def cmd_chart(message: types.Message, command: CommandObject):
 
 @router.callback_query(F.data == "lu:scan")
 async def cb_scan(callback: types.CallbackQuery):
-    await safe_answer(callback, "扫描中...")
-    
-    # Create a mock message object for cmd_scan
-    class MockMessage:
-        def __init__(self, msg):
-            self.from_user = callback.from_user
-            self._msg = msg
-        
-        async def answer(self, text, **kwargs):
-            try:
-                await self._msg.edit_text(text, **kwargs)
-            except:
-                pass
-            return self._msg
-    
-    mock_msg = MockMessage(callback.message)
-    await cmd_scan(mock_msg)
+    await _run_scan_from_callback(callback, force=False)
 
 
 @router.callback_query(F.data.startswith("scan:list:"))
@@ -1732,6 +1744,7 @@ async def cmd_help(message: types.Message):
         "/strong - 强势股\n"
         "/watch - 启动追踪\n"
         "/scan - 信号扫描\n"
+        "/scan force - 强制扫描(忽略缓存)\n"
         "/sync - 同步涨停\n\n"
         "<b>📊 板块分析</b>\n"
         "/industry - 行业板块\n"
@@ -2808,4 +2821,3 @@ async def cb_daban_signals(callback: types.CallbackQuery):
         await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e:
         await callback.message.edit_text(f"❌ 失败: {e}")
-

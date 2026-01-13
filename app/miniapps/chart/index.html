@@ -345,6 +345,8 @@
             flex-direction: column;
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 30;
+            position: relative;
+            overflow: hidden;
         }
 
         @media (max-width: 768px) {
@@ -370,6 +372,9 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            position: relative;
+            z-index: 2;
+            background: var(--bg-secondary);
         }
 
         .close-btn {
@@ -391,6 +396,12 @@
             flex: 1;
             padding: 8px;
             overflow: hidden;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--chip-height, 100%);
+            z-index: 1;
         }
 
         .chip-stats {
@@ -400,6 +411,10 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
+            position: relative;
+            z-index: 2;
+            background: var(--bg-secondary);
+            margin-top: auto;
         }
 
         .chip-row {
@@ -1626,24 +1641,19 @@
             // Ensure canvas resolution matches display size
             const dpr = window.devicePixelRatio || 1;
 
-            // We want the canvas to exactly match the main chart's height logic
-            // The container is flexed, but we need to ensure it aligns with the chart.
-            // Actually, the side panel covers the whole height including sub-chart? 
-            // No, the side panel is adjacent to .content-area which contains chart-section.
-            // Wait, .content-area contains .chart-section AND .side-panel.
-            // .chart-section contains #main-chart (flex:3) and #sub-chart (flex:1.2).
-            // So the side panel height = main-chart + sub-chart.
-            // BUT we want to sync with MAIN chart.
-            // We need to know where the main chart is relative to the side panel.
-
-            // Let's just draw relative to the MAIN chart's price scale.
-            // We can get the main chart's height.
+            // Align chip Y coordinates with main chart price scale.
+            // We need the offset between main chart top and chip panel top.
             const mainChartEl = document.getElementById('main-chart');
-            const mainHeight = mainChartEl.clientHeight;
+            const mainRect = mainChartEl.getBoundingClientRect();
+            const mainHeight = mainRect.height;
 
-            // The side panel canvas should probably only draw where the main chart is?
-            // Or maybe we just draw in the top part corresponding to main chart?
-            // Yes, let's set the canvas height to match the container, but only draw in the main chart area.
+            const sidePanel = document.getElementById('side-panel');
+            if (sidePanel) {
+                sidePanel.style.setProperty('--chip-height', `${mainHeight}px`);
+            }
+
+            const chipRect = container.getBoundingClientRect();
+            const yOffset = mainRect.top - chipRect.top;
 
             canvas.width = rect.width * dpr;
             canvas.height = rect.height * dpr;
@@ -1685,14 +1695,15 @@
             // Canvas is fast enough for this.
 
             chips.distribution.forEach(d => {
-                const y = sCandle.priceToCoordinate(d.price);
+                const yMain = sCandle.priceToCoordinate(d.price);
 
-                // If y is null, it's off screen (or invalid). 
-                // Note: priceToCoordinate returns null if off-scale? No, usually returns value, can be outside.
-                if (y === null) return;
+                if (yMain === null) return;
 
                 // Check if y is within the main chart area
-                if (y < 0 || y > mainHeight) return;
+                if (yMain < 0 || yMain > mainHeight) return;
+
+                const y = yMain + yOffset;
+                if (y < 0 || y > rect.height) return;
 
                 const barWidth = (d.percentage / maxPct) * (rect.width - 40); // Leave space for text
                 const barHeight = 2; // Thin lines for high res look
@@ -1719,8 +1730,9 @@
             ctx.globalAlpha = 1.0;
 
             // Draw Current Price Line
-            const currY = sCandle.priceToCoordinate(currentPrice);
-            if (currY !== null && currY >= 0 && currY <= mainHeight) {
+            const currYMain = sCandle.priceToCoordinate(currentPrice);
+            const currY = currYMain !== null ? currYMain + yOffset : null;
+            if (currYMain !== null && currYMain >= 0 && currYMain <= mainHeight && currY !== null && currY >= 0 && currY <= rect.height) {
                 ctx.strokeStyle = '#fbbf24'; // Yellow
                 ctx.lineWidth = 1;
                 ctx.setLineDash([4, 2]);

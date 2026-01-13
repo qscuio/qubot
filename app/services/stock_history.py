@@ -441,10 +441,32 @@ class StockHistoryService:
             
             # Filter main board stocks (exclude ST, 退市)
             # A-share codes: 00xxxx (SZ), 30xxxx (创业板), 60xxxx (SH), 68xxxx (科创板)
-            codes = df[
+            df_filtered = df[
                 ~df['名称'].str.contains('ST|退', na=False) &
                 (df['代码'].str.match(r'^[036]'))
-            ]['代码'].tolist()
+            ][['代码', '名称']]
+            
+            codes = df_filtered['代码'].tolist()
+            
+            # Best-effort: update stock name mapping for UI display
+            if db.pool:
+                try:
+                    records = []
+                    for _, row in df_filtered.iterrows():
+                        code_val = row.get('代码')
+                        name_val = row.get('名称')
+                        if pd.notna(code_val) and pd.notna(name_val):
+                            records.append((str(code_val), str(name_val)))
+                    if records:
+                        await db.pool.executemany("""
+                            INSERT INTO stock_info (code, name, updated_at)
+                            VALUES ($1, $2, NOW())
+                            ON CONFLICT (code) DO UPDATE SET
+                                name = EXCLUDED.name,
+                                updated_at = NOW()
+                        """, records)
+                except Exception as e:
+                    logger.debug(f"Failed to update stock_info: {e}")
             
             logger.info(f"Found {len(codes)} A-share stocks")
             return [str(c) for c in codes]

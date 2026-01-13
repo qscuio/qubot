@@ -441,6 +441,15 @@ class Database:
                     UNIQUE(code, date)
                 );
             """)
+
+            # Stock Info Table (code -> name mapping)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS stock_info (
+                    code TEXT PRIMARY KEY,
+                    name TEXT,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
             
             # Indexes for stock history queries
             await conn.execute("""
