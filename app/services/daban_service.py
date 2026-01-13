@@ -47,17 +47,24 @@ class ExecutabilityFlag:
 
 
 class DabanService:
-    """打板 盘后复盘服务 (Post-Close Review)."""
+    """打板 盘后复盘 + 盘中实时信号服务."""
     
     def __init__(self):
         self.is_running = False
         self._scheduler_task = None
+        self._intraday_task = None  # Phase 3: intraday polling
         self._ak = None
         self._last_date = None  # For date change detection
         self._triggered_today = set()
         
         # Stats for observability
         self._stats = defaultdict(int)
+        
+        # Phase 3: Intraday state tracking
+        self._intraday_state = {}  # {code: {seal, limit_since, burst_count, ...}}
+        self._signal_history = []  # Recent signals for display
+        self._notify_callback = None
+
     
     def _get_akshare(self):
         """Lazy load akshare module."""
@@ -74,9 +81,12 @@ class DabanService:
         """Start the 打板 service."""
         if self.is_running:
             return
+        # Initialize Phase 2 tables
+        await self.ensure_phase2_tables()
         self.is_running = True
         self._scheduler_task = asyncio.create_task(self._scheduler_loop())
-        logger.info("✅ 打板 盘后复盘服务 started")
+        self._intraday_task = asyncio.create_task(self._intraday_loop())  # Phase 3
+        logger.info("✅ 打板 盘后复盘 + 实时监控 started")
     
     async def stop(self):
         """Stop the service."""
@@ -85,6 +95,12 @@ class DabanService:
             self._scheduler_task.cancel()
             try:
                 await self._scheduler_task
+            except asyncio.CancelledError:
+                pass
+        if self._intraday_task:
+            self._intraday_task.cancel()
+            try:
+                await self._intraday_task
             except asyncio.CancelledError:
                 pass
         logger.info("打板 service stopped")
@@ -557,15 +573,18 @@ class DabanService:
     
     async def _scheduler_loop(self):
         """
-        Background scheduler for 打板 reports.
+        Background scheduler for 打板 reports and Phase 2 tracking.
         
-        Fixes:
-        - Uses time window instead of exact match
-        - Uses date change for clearing triggered set
+        Schedule:
+        - 15:05: Send daily report
+        - 15:10: Save market stats + recommendations
+        - 09:40: Update yesterday's recommendation performance
         """
-        # Report at 15:05 (after market close)
-        report_hour = 15
-        report_minute = 5
+        schedules = [
+            (15, 5, 'daily_report'),
+            (15, 10, 'save_stats'),
+            (9, 40, 'update_perf'),
+        ]
         
         while self.is_running:
             try:
@@ -583,22 +602,678 @@ class DabanService:
                     await asyncio.sleep(60)
                     continue
                 
-                # Check if within report window (within 1 minute of target time)
-                key = f"{current_date}_daban_report"
-                if key not in self._triggered_today:
-                    target_time = now.replace(hour=report_hour, minute=report_minute, second=0, microsecond=0)
-                    time_diff = abs((now - target_time).total_seconds())
+                for sched_hour, sched_min, task in schedules:
+                    key = f"{current_date}_{task}"
                     
-                    if time_diff < 60:  # Within 1 minute window
-                        self._triggered_today.add(key)
-                        logger.info("Triggering 打板复盘 report")
-                        await self.send_daban_report()
+                    if key not in self._triggered_today:
+                        target_time = now.replace(hour=sched_hour, minute=sched_min, second=0, microsecond=0)
+                        time_diff = abs((now - target_time).total_seconds())
+                        
+                        if time_diff < 60:  # Within 1 minute window
+                            self._triggered_today.add(key)
+                            logger.info(f"Triggering 打板 task: {task}")
+                            
+                            if task == 'daily_report':
+                                await self.send_daban_report()
+                            elif task == 'save_stats':
+                                await self.save_market_stats()
+                                await self.save_recommendations()
+                            elif task == 'update_perf':
+                                await self.update_recommendation_performance()
                 
             except Exception as e:
                 logger.error(f"打板 scheduler error: {e}")
             
             await asyncio.sleep(30)
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Phase 2: Market Sentiment & Recommendation Tracking
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    async def ensure_phase2_tables(self):
+        """Create Phase 2 database tables."""
+        if not db.pool:
+            return
+        
+        try:
+            # Market sentiment daily stats
+            await db.pool.execute("""
+                CREATE TABLE IF NOT EXISTS daban_market_stats (
+                    id SERIAL PRIMARY KEY,
+                    stat_date DATE UNIQUE,
+                    total_limit_ups INT,
+                    max_streak INT,
+                    shouban_count INT,
+                    erban_count INT,
+                    sanban_count INT,
+                    sibanplus_count INT,
+                    yizi_count INT,
+                    burst_count INT,
+                    promotion_rate_2b DECIMAL(5,2),
+                    promotion_rate_3b DECIMAL(5,2),
+                    avg_turnover DECIMAL(5,2),
+                    created_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            
+            # Daily recommendations with next-day performance tracking
+            await db.pool.execute("""
+                CREATE TABLE IF NOT EXISTS daban_recommendations (
+                    id SERIAL PRIMARY KEY,
+                    rec_date DATE,
+                    code VARCHAR(10),
+                    name VARCHAR(50),
+                    rec_price DECIMAL(10,2),
+                    score DECIMAL(5,2),
+                    board_type VARCHAR(20),
+                    limit_times INT,
+                    exec_flag VARCHAR(20),
+                    next_open DECIMAL(10,2),
+                    next_high DECIMAL(10,2),
+                    next_close DECIMAL(10,2),
+                    next_limit_up BOOLEAN DEFAULT FALSE,
+                    open_pct DECIMAL(6,2),
+                    high_pct DECIMAL(6,2),
+                    close_pct DECIMAL(6,2),
+                    tracked BOOLEAN DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(rec_date, code)
+                )
+            """)
+            
+            logger.info("✅ 打板 Phase 2 tables initialized")
+        except Exception as e:
+            logger.error(f"Failed to create Phase 2 tables: {e}")
+    
+    async def save_market_stats(self, target_date: date = None):
+        """
+        Calculate and save daily market sentiment stats.
+        Call this at end of day (15:05+) to record the day's data.
+        """
+        if not db.pool:
+            return
+        
+        target_date = target_date or china_today()
+        candidates, stats = await self.analyze_daban_candidates(target_date)
+        
+        if not candidates:
+            return
+        
+        # Calculate additional stats
+        streak_counts = {}
+        total_turnover = 0
+        burst_count = 0
+        
+        for c in candidates:
+            lt = c.get('limit_times', 1)
+            streak_counts[lt] = streak_counts.get(lt, 0) + 1
+            total_turnover += c.get('turnover_rate', 0)
+            # Approximate burst detection: high turnover + not early board
+            if c.get('turnover_rate', 0) > 15 and c.get('time_label', '') in ['午后板', '尾盘板']:
+                burst_count += 1
+        
+        avg_turnover = total_turnover / len(candidates) if candidates else 0
+        
+        # Calculate promotion rates (need previous day data)
+        shouban = streak_counts.get(1, 0)
+        erban = streak_counts.get(2, 0)
+        sanban = streak_counts.get(3, 0)
+        sibanplus = sum(v for k, v in streak_counts.items() if k >= 4)
+        
+        # Note: True promotion rate needs yesterday's shouban count
+        # For now, store the counts and can calculate later
+        promotion_rate_2b = 0  # Will be calculated in get_market_sentiment
+        promotion_rate_3b = 0
+        
+        try:
+            await db.pool.execute("""
+                INSERT INTO daban_market_stats 
+                (stat_date, total_limit_ups, max_streak, shouban_count, erban_count,
+                 sanban_count, sibanplus_count, yizi_count, burst_count,
+                 promotion_rate_2b, promotion_rate_3b, avg_turnover)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                ON CONFLICT (stat_date) DO UPDATE SET
+                    total_limit_ups = $2, max_streak = $3, shouban_count = $4,
+                    erban_count = $5, sanban_count = $6, sibanplus_count = $7,
+                    yizi_count = $8, burst_count = $9, promotion_rate_2b = $10,
+                    promotion_rate_3b = $11, avg_turnover = $12
+            """, target_date, len(candidates), stats.get('market_max_streak', 0),
+                shouban, erban, sanban, sibanplus, stats.get('yizi_count', 0),
+                burst_count, promotion_rate_2b, promotion_rate_3b, avg_turnover)
+            
+            logger.info(f"Saved market stats for {target_date}")
+        except Exception as e:
+            logger.error(f"Failed to save market stats: {e}")
+    
+    async def save_recommendations(self, target_date: date = None):
+        """
+        Save today's top recommendations for next-day tracking.
+        Call this at end of day after market close.
+        """
+        if not db.pool:
+            return
+        
+        target_date = target_date or china_today()
+        recommendations = await self.get_buy_recommendations(top_n=10)
+        
+        if not recommendations:
+            logger.info("No recommendations to save")
+            return
+        
+        saved = 0
+        for rec in recommendations:
+            try:
+                await db.pool.execute("""
+                    INSERT INTO daban_recommendations
+                    (rec_date, code, name, rec_price, score, board_type, 
+                     limit_times, exec_flag)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (rec_date, code) DO NOTHING
+                """, target_date, rec['code'], rec['name'], rec['price'],
+                    rec['score'], rec['board_type'], rec['limit_times'], rec['exec_flag'])
+                saved += 1
+            except Exception as e:
+                logger.warn(f"Failed to save recommendation {rec['code']}: {e}")
+        
+        logger.info(f"Saved {saved} recommendations for {target_date}")
+    
+    async def update_recommendation_performance(self, rec_date: date = None):
+        """
+        Update next-day performance for recommendations made on rec_date.
+        Call this the day AFTER recommendations were made (after 15:00).
+        """
+        if not db.pool:
+            return
+        
+        ak = self._get_akshare()
+        if not ak:
+            return
+        
+        # Get recommendations from previous trading day that haven't been tracked
+        rows = await db.pool.fetch("""
+            SELECT id, code, rec_price FROM daban_recommendations
+            WHERE tracked = FALSE AND rec_date <= $1
+            ORDER BY rec_date DESC
+            LIMIT 50
+        """, rec_date or china_today())
+        
+        if not rows:
+            return
+        
+        # Get real-time/daily data
+        try:
+            df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+            if df is None or df.empty:
+                return
+            
+            price_map = {}
+            for _, row in df.iterrows():
+                code = str(row.get('代码', ''))
+                price_map[code] = {
+                    'open': float(row.get('今开', 0) or 0),
+                    'high': float(row.get('最高', 0) or 0),
+                    'close': float(row.get('最新价', 0) or 0),
+                    'change_pct': float(row.get('涨跌幅', 0) or 0),
+                }
+            
+            updated = 0
+            for rec in rows:
+                code = rec['code']
+                if code not in price_map:
+                    continue
+                
+                p = price_map[code]
+                rec_price = float(rec['rec_price'])
+                
+                if rec_price == 0:
+                    continue
+                
+                open_pct = (p['open'] - rec_price) / rec_price * 100
+                high_pct = (p['high'] - rec_price) / rec_price * 100
+                close_pct = (p['close'] - rec_price) / rec_price * 100
+                
+                # Check if hit limit again (within 0.5% of limit)
+                next_limit_up = p['change_pct'] >= 9.5  # Simplified check
+                
+                try:
+                    await db.pool.execute("""
+                        UPDATE daban_recommendations
+                        SET next_open = $1, next_high = $2, next_close = $3,
+                            next_limit_up = $4, open_pct = $5, high_pct = $6,
+                            close_pct = $7, tracked = TRUE
+                        WHERE id = $8
+                    """, p['open'], p['high'], p['close'], next_limit_up,
+                        open_pct, high_pct, close_pct, rec['id'])
+                    updated += 1
+                except Exception as e:
+                    logger.warn(f"Failed to update performance: {e}")
+            
+            logger.info(f"Updated {updated} recommendation performances")
+            
+        except Exception as e:
+            logger.error(f"Failed to update performances: {e}")
+    
+    async def get_market_sentiment(self, days: int = 7) -> Dict:
+        """
+        Get market sentiment summary over recent days.
+        Calculates promotion rates and trend indicators.
+        """
+        if not db.pool:
+            return {}
+        
+        rows = await db.pool.fetch("""
+            SELECT * FROM daban_market_stats
+            ORDER BY stat_date DESC
+            LIMIT $1
+        """, days)
+        
+        if not rows:
+            return {}
+        
+        # Calculate averages and trends
+        total_limits = [r['total_limit_ups'] for r in rows]
+        max_streaks = [r['max_streak'] for r in rows]
+        
+        # Calculate actual promotion rates using consecutive days
+        promotion_2b_rates = []
+        for i in range(len(rows) - 1):
+            today_erban = rows[i]['erban_count']
+            yesterday_shouban = rows[i + 1]['shouban_count']
+            if yesterday_shouban > 0:
+                rate = today_erban / yesterday_shouban * 100
+                promotion_2b_rates.append(rate)
+        
+        return {
+            'days_analyzed': len(rows),
+            'avg_limit_ups': sum(total_limits) / len(total_limits),
+            'avg_max_streak': sum(max_streaks) / len(max_streaks),
+            'latest_max_streak': rows[0]['max_streak'] if rows else 0,
+            'promotion_2b_avg': sum(promotion_2b_rates) / len(promotion_2b_rates) if promotion_2b_rates else 0,
+            'trend': 'up' if len(rows) >= 2 and rows[0]['total_limit_ups'] > rows[1]['total_limit_ups'] else 'down',
+        }
+    
+    async def get_recommendation_performance_stats(self, days: int = 30) -> Dict:
+        """
+        Calculate performance statistics for past recommendations.
+        This is the backtest result.
+        """
+        if not db.pool:
+            return {}
+        
+        rows = await db.pool.fetch("""
+            SELECT * FROM daban_recommendations
+            WHERE tracked = TRUE
+            ORDER BY rec_date DESC
+            LIMIT $1
+        """, days * 10)  # Roughly 10 recommendations per day
+        
+        if not rows:
+            return {}
+        
+        total = len(rows)
+        open_positive = sum(1 for r in rows if r['open_pct'] and r['open_pct'] > 0)
+        high_over_5 = sum(1 for r in rows if r['high_pct'] and r['high_pct'] >= 5)
+        close_positive = sum(1 for r in rows if r['close_pct'] and r['close_pct'] > 0)
+        limit_continued = sum(1 for r in rows if r['next_limit_up'])
+        
+        avg_open = sum(r['open_pct'] for r in rows if r['open_pct']) / total if total else 0
+        avg_high = sum(r['high_pct'] for r in rows if r['high_pct']) / total if total else 0
+        avg_close = sum(r['close_pct'] for r in rows if r['close_pct']) / total if total else 0
+        
+        return {
+            'total_tracked': total,
+            'open_positive_rate': open_positive / total * 100 if total else 0,
+            'high_over_5pct_rate': high_over_5 / total * 100 if total else 0,
+            'close_positive_rate': close_positive / total * 100 if total else 0,
+            'limit_continue_rate': limit_continued / total * 100 if total else 0,
+            'avg_next_open_pct': avg_open,
+            'avg_next_high_pct': avg_high,
+            'avg_next_close_pct': avg_close,
+        }
+    
+    async def generate_sentiment_report(self) -> str:
+        """Generate market sentiment report."""
+        sentiment = await self.get_market_sentiment(days=7)
+        perf = await self.get_recommendation_performance_stats(days=14)
+        
+        if not sentiment:
+            return "📊 <b>市场情绪</b>\n\n暂无数据，请确保已收集数据"
+        
+        trend_emoji = "📈" if sentiment.get('trend') == 'up' else "📉"
+        
+        lines = [
+            "📊 <b>市场情绪 & 打板效果</b>\n",
+            f"<b>近{sentiment.get('days_analyzed', 7)}日情绪</b>",
+            f"• 日均涨停: {sentiment.get('avg_limit_ups', 0):.0f} 只",
+            f"• 平均高度: {sentiment.get('avg_max_streak', 0):.1f} 板",
+            f"• 最新高度: {sentiment.get('latest_max_streak', 0)} 板",
+            f"• 二板晋级率: {sentiment.get('promotion_2b_avg', 0):.1f}%",
+            f"• 趋势: {trend_emoji} {sentiment.get('trend', 'unknown')}",
+        ]
+        
+        if perf and perf.get('total_tracked', 0) > 0:
+            lines.extend([
+                f"\n<b>推荐效果 (近{perf.get('total_tracked', 0)}笔)</b>",
+                f"• 开盘正收益: {perf.get('open_positive_rate', 0):.1f}%",
+                f"• 盘中涨5%+: {perf.get('high_over_5pct_rate', 0):.1f}%",
+                f"• 收盘正收益: {perf.get('close_positive_rate', 0):.1f}%",
+                f"• 连板成功: {perf.get('limit_continue_rate', 0):.1f}%",
+                f"• 平均开盘: {perf.get('avg_next_open_pct', 0):+.2f}%",
+                f"• 平均最高: {perf.get('avg_next_high_pct', 0):+.2f}%",
+            ])
+        
+        return "\n".join(lines)
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Phase 3: Intraday Real-Time Signal Detection
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    def set_notify_callback(self, callback):
+        """Set callback for sending signal notifications."""
+        self._notify_callback = callback
+    
+    async def _notify(self, message: str):
+        """Send notification."""
+        logger.info(f"[SIGNAL] {message}")
+        if self._notify_callback:
+            try:
+                await self._notify_callback(message)
+            except Exception as e:
+                logger.error(f"Signal notification failed: {e}")
+    
+    def _is_market_hours(self) -> bool:
+        """Check if currently in A-share market hours."""
+        now = china_now()
+        if now.weekday() >= 5:  # Weekend
+            return False
+        
+        hour, minute = now.hour, now.minute
+        time_mins = hour * 60 + minute
+        
+        # 09:30-11:30 (570-690) or 13:00-15:00 (780-900)
+        return (570 <= time_mins <= 690) or (780 <= time_mins <= 900)
+    
+    async def _poll_limit_up_pool(self) -> Dict:
+        """Fetch current limit-up pool and return state."""
+        ak = self._get_akshare()
+        if not ak:
+            return {}
+        
+        today = china_today()
+        date_str = today.strftime("%Y%m%d")
+        
+        try:
+            df = await asyncio.to_thread(ak.stock_zt_pool_em, date=date_str)
+            
+            if df is None or df.empty:
+                return {}
+            
+            current_state = {}
+            for _, row in df.iterrows():
+                code = str(row.get('代码', ''))
+                name = str(row.get('名称', ''))
+                
+                # Skip ST
+                if 'ST' in name:
+                    continue
+                
+                seal_amount = float(row.get('封单额', 0) or 0)
+                first_limit_time = str(row.get('首次涨停时间', '') or '')
+                limit_times = int(row.get('连板数', 1) or 1)
+                turnover_rate = float(row.get('换手率', 0) or 0)
+                
+                current_state[code] = {
+                    'name': name,
+                    'seal': seal_amount,
+                    'limit_since': first_limit_time,
+                    'limit_times': limit_times,
+                    'turnover': turnover_rate,
+                }
+            
+            return current_state
+            
+        except Exception as e:
+            logger.warn(f"Failed to poll limit-up pool: {e}")
+            return {}
+    
+    async def _detect_signals(self, current_state: Dict):
+        """Compare current state with previous and detect signals."""
+        signals = []
+        now_str = china_now().strftime("%H:%M:%S")
+        prev_codes = set(self._intraday_state.keys())
+        curr_codes = set(current_state.keys())
+        
+        # 🔥 新上板 - New limit-ups
+        new_limits = curr_codes - prev_codes
+        for code in new_limits:
+            info = current_state[code]
+            signals.append({
+                'type': 'new_limit',
+                'emoji': '🔥',
+                'code': code,
+                'name': info['name'],
+                'time': now_str,
+                'msg': f"新上板 {info['limit_times']}板 换手{info['turnover']:.1f}%",
+            })
+            # Initialize tracking
+            self._intraday_state[code] = {
+                'seal': info['seal'],
+                'prev_seal': info['seal'],
+                'limit_since': info['limit_since'],
+                'burst_count': 0,
+                'reseal_count': 0,
+                'name': info['name'],
+                'limit_times': info['limit_times'],
+            }
+        
+        # ⚠️ 炸板 - Limit breaks (was in pool, now not)
+        burst = prev_codes - curr_codes
+        for code in burst:
+            if code in self._intraday_state:
+                info = self._intraday_state[code]
+                info['burst_count'] = info.get('burst_count', 0) + 1
+                signals.append({
+                    'type': 'burst',
+                    'emoji': '⚠️',
+                    'code': code,
+                    'name': info.get('name', ''),
+                    'time': now_str,
+                    'msg': f"炸板! 第{info['burst_count']}次",
+                })
+        
+        # Check existing stocks for seal changes
+        for code in curr_codes & prev_codes:
+            curr_info = current_state[code]
+            prev_info = self._intraday_state.get(code, {})
+            
+            curr_seal = curr_info['seal']
+            prev_seal = prev_info.get('seal', curr_seal)
+            
+            if prev_seal > 0:
+                change_pct = (curr_seal - prev_seal) / prev_seal * 100
+                
+                # 📉 撤单 - Seal drops >30%
+                if change_pct <= -30:
+                    signals.append({
+                        'type': 'seal_drop',
+                        'emoji': '📉',
+                        'code': code,
+                        'name': curr_info['name'],
+                        'time': now_str,
+                        'msg': f"封单骤降 {change_pct:.0f}%",
+                    })
+                
+                # 💪 加封 - Seal increases >50%
+                elif change_pct >= 50:
+                    signals.append({
+                        'type': 'seal_add',
+                        'emoji': '💪',
+                        'code': code,
+                        'name': curr_info['name'],
+                        'time': now_str,
+                        'msg': f"封单增加 +{change_pct:.0f}%",
+                    })
+            
+            # Update state
+            self._intraday_state[code] = {
+                'seal': curr_seal,
+                'prev_seal': prev_seal,
+                'limit_since': curr_info['limit_since'],
+                'burst_count': prev_info.get('burst_count', 0),
+                'reseal_count': prev_info.get('reseal_count', 0),
+                'name': curr_info['name'],
+                'limit_times': curr_info['limit_times'],
+            }
+        
+        # 🔄 回封 - Stocks that were burst but came back
+        for code in curr_codes:
+            if code in self._intraday_state:
+                info = self._intraday_state[code]
+                if info.get('burst_count', 0) > 0 and code not in burst:
+                    # Check if this is a reseal (was marked as burst, now back)
+                    if code not in prev_codes:
+                        info['reseal_count'] = info.get('reseal_count', 0) + 1
+                        signals.append({
+                            'type': 'reseal',
+                            'emoji': '🔄',
+                            'code': code,
+                            'name': info.get('name', ''),
+                            'time': now_str,
+                            'msg': f"回封成功! 第{info['reseal_count']}次",
+                        })
+        
+        return signals
+    
+    async def _send_signal_alerts(self, signals: List[Dict]):
+        """Send alerts for detected signals."""
+        if not signals:
+            return
+        
+        # Add to history (keep last 50)
+        self._signal_history.extend(signals)
+        self._signal_history = self._signal_history[-50:]
+        
+        # Group alerts
+        alert_lines = []
+        for sig in signals:
+            alert_lines.append(
+                f"{sig['emoji']} <b>{sig['name']}</b> ({sig['code']})\n"
+                f"   {sig['msg']} @ {sig['time']}"
+            )
+        
+        if alert_lines:
+            now = china_now()
+            message = (
+                f"🎯 <b>打板实时信号</b>\n"
+                f"<i>{now.strftime('%H:%M:%S')}</i>\n\n" +
+                "\n".join(alert_lines)
+            )
+            await self._notify(message)
+    
+    async def _intraday_loop(self):
+        """Intraday polling loop - runs every 60 seconds during market hours."""
+        logger.info("Starting intraday monitoring loop")
+        
+        while self.is_running:
+            try:
+                if self._is_market_hours():
+                    # Poll and detect signals
+                    current_state = await self._poll_limit_up_pool()
+                    
+                    if current_state:
+                        signals = await self._detect_signals(current_state)
+                        if signals:
+                            await self._send_signal_alerts(signals)
+                    
+                    await asyncio.sleep(60)  # Poll every 60 seconds
+                else:
+                    # Outside market hours - check less frequently
+                    # Clear state at market open
+                    now = china_now()
+                    if now.hour == 9 and now.minute == 25:
+                        self._intraday_state.clear()
+                        self._signal_history.clear()
+                        logger.info("Cleared intraday state for new trading day")
+                    
+                    await asyncio.sleep(60)
+                    
+            except Exception as e:
+                logger.error(f"Intraday loop error: {e}")
+                await asyncio.sleep(30)
+    
+    def get_live_status(self) -> Dict:
+        """Get current live limit-up status."""
+        return {
+            'stocks': list(self._intraday_state.values()),
+            'count': len(self._intraday_state),
+            'is_market_hours': self._is_market_hours(),
+        }
+    
+    def get_signal_history(self, limit: int = 20) -> List[Dict]:
+        """Get recent signal history."""
+        return self._signal_history[-limit:]
+    
+    async def generate_live_report(self) -> str:
+        """Generate live limit-up status report."""
+        status = self.get_live_status()
+        
+        if not status['is_market_hours']:
+            return "📊 <b>打板实时监控</b>\n\n非交易时段，暂无数据"
+        
+        if not status['stocks']:
+            return "📊 <b>打板实时监控</b>\n\n当前无涨停股票"
+        
+        now = china_now()
+        lines = [
+            "📊 <b>打板实时监控</b>",
+            f"<i>{now.strftime('%H:%M:%S')}</i>",
+            f"涨停 {status['count']} 只\n",
+        ]
+        
+        # Sort by seal amount
+        stocks = sorted(status['stocks'], key=lambda x: x.get('seal', 0), reverse=True)
+        
+        for s in stocks[:15]:  # Top 15
+            seal_yi = s.get('seal', 0) / 100000000
+            burst = s.get('burst_count', 0)
+            reseal = s.get('reseal_count', 0)
+            
+            flags = ""
+            if burst > 0:
+                flags += f" ⚠️炸{burst}"
+            if reseal > 0:
+                flags += f" 🔄封{reseal}"
+            
+            lines.append(
+                f"• <b>{s.get('name', '')}</b> {s.get('limit_times', 1)}板 "
+                f"封{seal_yi:.1f}亿{flags}"
+            )
+        
+        return "\n".join(lines)
+    
+    async def generate_signals_report(self) -> str:
+        """Generate recent signals report."""
+        signals = self.get_signal_history(20)
+        
+        if not signals:
+            return "🔔 <b>打板信号记录</b>\n\n暂无信号"
+        
+        now = china_now()
+        lines = [
+            "🔔 <b>打板信号记录</b>",
+            f"<i>{now.strftime('%H:%M:%S')}</i>\n",
+        ]
+        
+        # Reverse to show most recent first
+        for sig in reversed(signals[-15:]):
+            lines.append(
+                f"{sig['emoji']} {sig['time']} <b>{sig['name']}</b> - {sig['msg']}"
+            )
+        
+        return "\n".join(lines)
 
 
 # Singleton
 daban_service = DabanService()
+
+

@@ -2436,6 +2436,31 @@ async def cmd_daban(message: types.Message, command: CommandObject):
         await message.answer(report, parse_mode="HTML", reply_markup=builder.as_markup())
         return
     
+    if args == "live":
+        report = await daban_service.generate_live_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔔 信号", callback_data="daban:signals")
+        builder.button(text="🔄 刷新", callback_data="daban:live")
+        builder.button(text="◀️ 返回", callback_data="daban:main")
+        builder.adjust(2, 1)
+        
+        await message.answer(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        return
+    
+    if args == "signals":
+        report = await daban_service.generate_signals_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📊 实时", callback_data="daban:live")
+        builder.button(text="🔄 刷新", callback_data="daban:signals")
+        builder.button(text="◀️ 返回", callback_data="daban:main")
+        builder.adjust(2, 1)
+        
+        await message.answer(report, parse_mode="HTML", reply_markup=builder.as_markup())
+        return
+
+    
     if args == "scan":
         status_msg = await message.answer("⏳ 扫描打板标的...")
         try:
@@ -2461,9 +2486,11 @@ async def cmd_daban(message: types.Message, command: CommandObject):
         builder = InlineKeyboardBuilder()
         builder.button(text="📦 持仓", callback_data="daban:portfolio")
         builder.button(text="📊 统计", callback_data="daban:stats")
+        builder.button(text="🟢 实时", callback_data="daban:live")
+        builder.button(text="🌡️ 情绪", callback_data="daban:sentiment")
         builder.button(text="🔍 扫描买入", callback_data="daban:scan")
         builder.button(text="🔄 刷新", callback_data="daban:main")
-        builder.adjust(2, 2)
+        builder.adjust(3, 3)
         
         await status_msg.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e:
@@ -2482,10 +2509,12 @@ async def cb_daban_main(callback: types.CallbackQuery):
         builder = InlineKeyboardBuilder()
         builder.button(text="📦 持仓", callback_data="daban:portfolio")
         builder.button(text="📊 统计", callback_data="daban:stats")
+        builder.button(text="🟢 实时", callback_data="daban:live")
+        builder.button(text="🌡️ 情绪", callback_data="daban:sentiment")
         builder.button(text="🔍 扫描买入", callback_data="daban:scan")
         builder.button(text="🔄 刷新", callback_data="daban:main")
         builder.button(text="◀️ 返回", callback_data="main")
-        builder.adjust(2, 2, 1)
+        builder.adjust(3, 3, 1)
         
         await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e:
@@ -2551,4 +2580,61 @@ async def cb_daban_scan(callback: types.CallbackQuery):
         )
     except Exception as e:
         await callback.message.edit_text(f"❌ 扫描失败: {e}")
+
+
+@router.callback_query(F.data == "daban:sentiment")
+async def cb_daban_sentiment(callback: types.CallbackQuery):
+    """Show market sentiment and recommendation performance."""
+    await safe_answer(callback)
+    
+    try:
+        await callback.message.edit_text("⏳ 加载市场情绪...", parse_mode="HTML")
+        report = await daban_service.generate_sentiment_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📊 打板分析", callback_data="daban:main")
+        builder.button(text="🔄 刷新", callback_data="daban:sentiment")
+        builder.adjust(2)
+        
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 失败: {e}")
+
+
+@router.callback_query(F.data == "daban:live")
+async def cb_daban_live(callback: types.CallbackQuery):
+    """Show live limit-up monitoring status."""
+    await safe_answer(callback)
+    
+    try:
+        report = await daban_service.generate_live_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔔 信号", callback_data="daban:signals")
+        builder.button(text="🔄 刷新", callback_data="daban:live")
+        builder.button(text="◀️ 返回", callback_data="daban:main")
+        builder.adjust(2, 1)
+        
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 失败: {e}")
+
+
+@router.callback_query(F.data == "daban:signals")
+async def cb_daban_signals(callback: types.CallbackQuery):
+    """Show recent signal history."""
+    await safe_answer(callback)
+    
+    try:
+        report = await daban_service.generate_signals_report()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📊 实时", callback_data="daban:live")
+        builder.button(text="🔄 刷新", callback_data="daban:signals")
+        builder.button(text="◀️ 返回", callback_data="daban:main")
+        builder.adjust(2, 1)
+        
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 失败: {e}")
 

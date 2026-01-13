@@ -119,6 +119,21 @@ async def lifespan(app: FastAPI):
     from app.services.daban_service import daban_service
     from app.services.daban_simulator import daban_simulator
     
+    # Set up notification callback for daban_service (real-time signals)
+    async def daban_signal_callback(message: str):
+        from app.bots.registry import get_bot
+        bot = get_bot("crawler")
+        if bot and settings.REPORT_TARGET_CHANNEL:
+            try:
+                await bot.send_message(
+                    int(settings.REPORT_TARGET_CHANNEL),
+                    message,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.warn(f"Failed to send daban signal: {e}")
+    
+    daban_service.set_notify_callback(daban_signal_callback)
     await daban_service.start()
     
     # Set up notification callback for daban simulator
@@ -137,6 +152,7 @@ async def lifespan(app: FastAPI):
     
     daban_simulator.set_notify_callback(daban_notify_callback)
     await daban_simulator.start()
+
 
 
     # AI Service doesn't need explicit start but is ready
