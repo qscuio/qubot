@@ -274,15 +274,13 @@ class StockHistoryService:
         success_count = 0
         error_count = 0
         
-        # Create sync database connection
+        # Create sync database connection using DATABASE_URL from settings
         try:
             import asyncio
+            from app.core.config import settings
             loop = asyncio.new_event_loop()
             conn = loop.run_until_complete(
-                asyncpg.connect(
-                    host=db.db_host, port=db.db_port, user=db.db_user,
-                    password=db.db_password, database=db.db_name
-                )
+                asyncpg.connect(settings.DATABASE_URL)
             )
         except Exception as e:
             logger.error(f"[BG Thread] Failed to connect to DB: {e}")
@@ -348,15 +346,13 @@ class StockHistoryService:
         success_count = 0
         error_count = 0
         
-        # Create sync database connection
+        # Create sync database connection using DATABASE_URL from settings
         try:
             import asyncio
+            from app.core.config import settings
             loop = asyncio.new_event_loop()
             conn = loop.run_until_complete(
-                asyncpg.connect(
-                    host=db.db_host, port=db.db_port, user=db.db_user,
-                    password=db.db_password, database=db.db_name
-                )
+                asyncpg.connect(settings.DATABASE_URL)
             )
         except Exception as e:
             logger.error(f"[BG Thread] Failed to connect to DB: {e}")
