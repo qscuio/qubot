@@ -49,6 +49,9 @@ class LimitUpService:
         self.is_running = True
         self._scheduler_task = asyncio.create_task(self._scheduler_loop())
         logger.info("✅ Limit-Up Tracker started")
+        
+        # Check if we're in a report window and send immediately
+        await self._check_and_send_startup_report()
     
     async def stop(self):
         """Stop the service."""
@@ -601,6 +604,26 @@ class LimitUpService:
         afternoon_time = "15:15"
         
         triggered_today = set()
+        
+        # On startup: immediately send report if we're in the window
+        now = datetime.now(CHINA_TZ)
+        time_str = now.strftime("%H:%M")
+        if now.weekday() < 5:  # Weekday
+            # Check if in morning window (9:15-10:00, excluding 9:25-9:30)
+            hour, minute = now.hour, now.minute
+            in_morning_window = (
+                (hour == 9 and 15 <= minute < 25) or
+                (hour == 9 and 30 < minute <= 59) or
+                (hour == 10 and minute == 0)
+            )
+            if in_morning_window:
+                logger.info(f"Startup in morning window ({time_str}), sending immediate report")
+                asyncio.create_task(self.send_morning_price_update())
+            
+            # Check if at afternoon report time
+            if time_str == afternoon_time:
+                logger.info(f"Startup at afternoon report time ({time_str}), sending immediate report")
+                asyncio.create_task(self.send_afternoon_report())
         
         while self.is_running:
             try:
