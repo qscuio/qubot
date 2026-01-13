@@ -134,53 +134,63 @@ async def rss_unsubscribe(source_id: str, user_id: str = Depends(verify_api_key)
 chart_router = APIRouter(prefix="/api", tags=["Chart"])
 
 @chart_router.get("/chart/data/{code}")
-async def chart_data(code: str, days: int = 60):
-    """Get OHLCV data for stock chart Mini App."""
+async def chart_data(code: str, days: int = 60, period: str = "daily"):
+    """Get OHLCV data for stock chart Mini App.
+    
+    Args:
+        code: Stock code (e.g., 600519)
+        days: Number of periods to return
+        period: 'daily', 'weekly', or 'monthly'
+    """
     import asyncio
     from app.services.stock_history import stock_history_service
     
     data = []
     name = code
     
+    # Validate period
+    if period not in ("daily", "weekly", "monthly"):
+        period = "daily"
+    
     try:
-        # Try to get from database first
-        history = await stock_history_service.get_stock_history(code, days=days)
-        
-        if history:
-            # Format data for Lightweight Charts (expects time as string YYYY-MM-DD)
-            for h in reversed(history):  # Reverse to chronological order
-                data.append({
-                    "time": h['date'].strftime("%Y-%m-%d"),
-                    "open": float(h['open']),
-                    "high": float(h['high']),
-                    "low": float(h['low']),
-                    "close": float(h['close']),
-                    "volume": int(h['volume']),
-                })
+        # Only use database for daily data (weekly/monthly need to fetch fresh)
+        if period == "daily":
+            history = await stock_history_service.get_stock_history(code, days=days)
+            
+            if history:
+                for h in reversed(history):
+                    data.append({
+                        "time": h['date'].strftime("%Y-%m-%d"),
+                        "open": float(h['open']),
+                        "high": float(h['high']),
+                        "low": float(h['low']),
+                        "close": float(h['close']),
+                        "volume": int(h['volume']),
+                    })
     except Exception as e:
-        # Database error - will try fallback below
         pass
     
-    # Fallback: fetch directly from AkShare if DB empty or failed
+    # Fallback or weekly/monthly: fetch from AkShare
     if not data:
         try:
             import akshare as ak
             from datetime import datetime, timedelta
             
+            # For weekly/monthly, request more source data
+            extra_days = 30 if period == "daily" else (days * 7 if period == "weekly" else days * 31)
             end_date = datetime.now().strftime("%Y%m%d")
-            start_date = (datetime.now() - timedelta(days=days + 30)).strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=days + extra_days)).strftime("%Y%m%d")
             
             df = await asyncio.to_thread(
                 ak.stock_zh_a_hist,
                 symbol=code,
-                period="daily",
+                period=period,
                 start_date=start_date,
                 end_date=end_date,
                 adjust="qfq"
             )
             
             if df is not None and not df.empty:
-                # Get stock name if available
                 if '名称' in df.columns:
                     name = str(df['名称'].iloc[0]) if not df['名称'].isna().all() else code
                 
@@ -205,6 +215,7 @@ async def chart_data(code: str, days: int = 60):
     return {
         "code": code,
         "name": name,
+        "period": period,
         "data": data,
     }
 

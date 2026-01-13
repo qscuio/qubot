@@ -455,6 +455,67 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_stock_history_code_date 
                 ON stock_history(code, date);
             """)
+
+            # Trading Portfolio Table (模拟交易持仓)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS trading_portfolio (
+                    id SERIAL PRIMARY KEY,
+                    code TEXT NOT NULL,
+                    name TEXT,
+                    status TEXT DEFAULT 'holding',
+                    buy_date DATE NOT NULL,
+                    buy_price DECIMAL NOT NULL,
+                    buy_amount DECIMAL NOT NULL,
+                    shares INT NOT NULL,
+                    sell_date DATE,
+                    sell_price DECIMAL,
+                    sell_reason TEXT,
+                    profit_loss DECIMAL,
+                    profit_pct DECIMAL,
+                    holding_days INT,
+                    signal_type TEXT,
+                    peak_price DECIMAL,
+                    created_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            
+            # Add peak_price column if not exists (migration)
+            await conn.execute("""
+                ALTER TABLE trading_portfolio 
+                ADD COLUMN IF NOT EXISTS peak_price DECIMAL;
+            """)
+            
+            # Index for trading portfolio queries
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_trading_portfolio_status 
+                ON trading_portfolio(status);
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_trading_portfolio_code 
+                ON trading_portfolio(code);
+            """)
+
+            # Trading Account Table (模拟账户)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS trading_account (
+                    id SERIAL PRIMARY KEY,
+                    initial_capital DECIMAL DEFAULT 1000000,
+                    current_cash DECIMAL DEFAULT 1000000,
+                    total_value DECIMAL DEFAULT 1000000,
+                    total_profit DECIMAL DEFAULT 0,
+                    total_trades INT DEFAULT 0,
+                    win_count INT DEFAULT 0,
+                    loss_count INT DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            
+            # Initialize account if not exists
+            await conn.execute("""
+                INSERT INTO trading_account (id, initial_capital, current_cash)
+                VALUES (1, 1000000, 1000000)
+                ON CONFLICT (id) DO NOTHING;
+            """)
             
             # Seed allowed users from env if not already in DB
             env_users = settings.allowed_users_list or []

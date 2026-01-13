@@ -7,6 +7,51 @@
     <title>Stock Chart</title>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
+        :root {
+            /* Light theme (default) */
+            --bg-primary: #f5f7fa;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e8ecf1;
+            --text-primary: #1a1a2e;
+            --text-secondary: #666;
+            --text-muted: #888;
+            --border-color: #d1d5db;
+            --btn-bg: #e5e7eb;
+            --btn-border: #d1d5db;
+            --btn-text: #555;
+            --btn-hover-bg: #d1d5db;
+            --btn-active-bg: #3b82f6;
+            --btn-active-border: #2563eb;
+            --btn-active-text: #fff;
+            --chart-bg: #ffffff;
+            --chart-grid: #e5e7eb;
+            --legend-bg: rgba(255, 255, 255, 0.95);
+            --up-color: #ef4444;
+            --down-color: #22c55e;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border-color: #475569;
+            --btn-bg: #334155;
+            --btn-border: #475569;
+            --btn-text: #94a3b8;
+            --btn-hover-bg: #475569;
+            --btn-active-bg: #3b82f6;
+            --btn-active-border: #60a5fa;
+            --btn-active-text: #fff;
+            --chart-bg: #0f172a;
+            --chart-grid: #1e293b;
+            --legend-bg: rgba(15, 23, 42, 0.95);
+            --up-color: #ef4444;
+            --down-color: #22c55e;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -14,19 +59,20 @@
         }
 
         body {
-            background: #1a1a2e;
-            color: #eee;
+            background: var(--bg-primary);
+            color: var(--text-primary);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             overflow: hidden;
+            transition: background-color 0.3s, color 0.3s;
         }
 
         .header {
             padding: 10px 16px;
-            background: #16213e;
+            background: var(--bg-secondary);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid #0f3460;
+            border-bottom: 1px solid var(--border-color);
         }
 
         .stock-info {
@@ -42,7 +88,7 @@
 
         .stock-code {
             font-size: 14px;
-            color: #888;
+            color: var(--text-muted);
         }
 
         .stock-price {
@@ -57,55 +103,73 @@
         }
 
         .up {
-            color: #ef5350;
-            background: rgba(239, 83, 80, 0.15);
+            color: var(--up-color);
+            background: rgba(239, 68, 68, 0.15);
         }
 
         .down {
-            color: #26a69a;
-            background: rgba(38, 166, 154, 0.15);
+            color: var(--down-color);
+            background: rgba(34, 197, 94, 0.15);
         }
 
         .flat {
-            color: #888;
+            color: var(--text-muted);
             background: rgba(136, 136, 136, 0.15);
         }
 
         .toolbar {
             padding: 6px 16px;
-            background: #16213e;
+            background: var(--bg-secondary);
             display: flex;
             gap: 8px;
-            border-bottom: 1px solid #0f3460;
+            border-bottom: 1px solid var(--border-color);
             flex-wrap: wrap;
+            align-items: center;
         }
 
         .toolbar-btn {
             padding: 4px 10px;
             font-size: 12px;
-            background: #2a2a4e;
-            border: 1px solid #3a3a6e;
-            color: #aaa;
+            background: var(--btn-bg);
+            border: 1px solid var(--btn-border);
+            color: var(--btn-text);
             border-radius: 4px;
             cursor: pointer;
             transition: all 0.2s;
         }
 
         .toolbar-btn:hover {
-            background: #3a3a6e;
-            color: #fff;
+            background: var(--btn-hover-bg);
+            color: var(--text-primary);
         }
 
         .toolbar-btn.active {
-            background: #4a4a8e;
-            border-color: #6a6aae;
-            color: #fff;
+            background: var(--btn-active-bg);
+            border-color: var(--btn-active-border);
+            color: var(--btn-active-text);
         }
 
         .toolbar-divider {
             width: 1px;
-            background: #3a3a6e;
+            height: 20px;
+            background: var(--border-color);
             margin: 0 4px;
+        }
+
+        .theme-btn {
+            padding: 4px 8px;
+            font-size: 14px;
+            background: var(--btn-bg);
+            border: 1px solid var(--btn-border);
+            color: var(--btn-text);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-left: auto;
+        }
+
+        .theme-btn:hover {
+            background: var(--btn-hover-bg);
         }
 
         #chart-container {
@@ -119,11 +183,11 @@
             align-items: center;
             height: 100%;
             font-size: 16px;
-            color: #888;
+            color: var(--text-muted);
         }
 
         .error {
-            color: #ef5350;
+            color: var(--up-color);
             text-align: center;
             padding: 20px;
         }
@@ -133,12 +197,13 @@
             top: 110px;
             left: 16px;
             font-size: 11px;
-            color: #888;
-            background: rgba(26, 26, 46, 0.95);
+            color: var(--text-muted);
+            background: var(--legend-bg);
             padding: 8px 12px;
             border-radius: 4px;
             z-index: 10;
             max-width: 300px;
+            border: 1px solid var(--border-color);
         }
 
         .legend-row {
@@ -154,28 +219,28 @@
         }
 
         .legend-label {
-            color: #666;
+            color: var(--text-muted);
         }
 
         .legend-value {
-            color: #fff;
+            color: var(--text-primary);
             font-weight: 500;
         }
 
         .ma5 {
-            color: #ffd700;
+            color: #fbbf24;
         }
 
         .ma10 {
-            color: #ff69b4;
+            color: #ec4899;
         }
 
         .ma20 {
-            color: #00bfff;
+            color: #3b82f6;
         }
 
         .ma60 {
-            color: #9370db;
+            color: #a855f7;
         }
     </style>
 </head>
@@ -192,15 +257,27 @@
         </div>
     </div>
     <div class="toolbar">
+        <!-- Period buttons -->
+        <button class="toolbar-btn active" id="btnDaily" onclick="setPeriod('daily')">日K</button>
+        <button class="toolbar-btn" id="btnWeekly" onclick="setPeriod('weekly')">周K</button>
+        <button class="toolbar-btn" id="btnMonthly" onclick="setPeriod('monthly')">月K</button>
+        <div class="toolbar-divider"></div>
+        <!-- Indicator buttons -->
         <button class="toolbar-btn active" id="btnMA" onclick="toggleMA()">MA</button>
         <button class="toolbar-btn" id="btnBOLL" onclick="toggleBOLL()">BOLL</button>
         <div class="toolbar-divider"></div>
         <button class="toolbar-btn active" id="btnVol" onclick="toggleVolume()">VOL</button>
         <button class="toolbar-btn" id="btnMACD" onclick="toggleMACD()">MACD</button>
         <div class="toolbar-divider"></div>
-        <button class="toolbar-btn" onclick="setDays(30)">30D</button>
-        <button class="toolbar-btn active" onclick="setDays(60)">60D</button>
-        <button class="toolbar-btn" onclick="setDays(120)">120D</button>
+        <button class="toolbar-btn active" id="btnSignals" onclick="toggleSignals()">信号</button>
+        <button class="toolbar-btn" id="btnTrend" onclick="toggleTrend()">趋势线</button>
+        <div class="toolbar-divider"></div>
+        <!-- Days buttons -->
+        <button class="toolbar-btn" onclick="setDays(30)">30</button>
+        <button class="toolbar-btn active" onclick="setDays(60)">60</button>
+        <button class="toolbar-btn" onclick="setDays(120)">120</button>
+        <!-- Theme toggle -->
+        <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="切换主题">🌙</button>
     </div>
     <div id="chart-container">
         <div class="loading" id="loading">加载中...</div>
@@ -229,11 +306,11 @@
                     id="legMA60">--</span></div>
         </div>
         <div class="legend-row" id="bollLegend" style="display: none;">
-            <div class="legend-item"><span class="legend-label" style="color:#ff9800">UPPER:</span><span
+            <div class="legend-item"><span class="legend-label" style="color:#f97316">UPPER:</span><span
                     class="legend-value" id="legBollUp">--</span></div>
-            <div class="legend-item"><span class="legend-label" style="color:#2196f3">MID:</span><span
+            <div class="legend-item"><span class="legend-label" style="color:#3b82f6">MID:</span><span
                     class="legend-value" id="legBollMid">--</span></div>
-            <div class="legend-item"><span class="legend-label" style="color:#4caf50">LOWER:</span><span
+            <div class="legend-item"><span class="legend-label" style="color:#22c55e">LOWER:</span><span
                     class="legend-value" id="legBollLow">--</span></div>
         </div>
     </div>
@@ -243,6 +320,7 @@
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code') || '600519';
         let currentDays = parseInt(params.get('days')) || 60;
+        let currentPeriod = params.get('period') || 'daily';
 
         // API base URL (same origin)
         const API_BASE = window.location.origin;
@@ -258,6 +336,80 @@
         let showBOLL = false;
         let showVolume = true;
         let showMACD = false;
+        let showSignals = true;
+        let showTrend = false;
+
+        // Trend line series
+        let supportLine, resistanceLine;
+
+        // Theme management
+        function getSystemTheme() {
+            return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+
+        function getStoredTheme() {
+            return localStorage.getItem('chart-theme');
+        }
+
+        function initTheme() {
+            const stored = getStoredTheme();
+            const theme = stored || getSystemTheme();
+            applyTheme(theme);
+
+            // Listen for system theme changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+                if (!getStoredTheme()) {
+                    applyTheme(e.matches ? 'dark' : 'light');
+                }
+            });
+        }
+
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            document.getElementById('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
+
+            // Update chart colors if chart exists
+            if (chart) {
+                updateChartTheme();
+            }
+        }
+
+        function toggleTheme() {
+            const current = document.documentElement.getAttribute('data-theme') || 'light';
+            const newTheme = current === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('chart-theme', newTheme);
+            applyTheme(newTheme);
+        }
+
+        function getChartColors() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            return {
+                background: isDark ? '#0f172a' : '#ffffff',
+                textColor: isDark ? '#64748b' : '#888888',
+                gridColor: isDark ? '#1e293b' : '#e5e7eb',
+                borderColor: isDark ? '#475569' : '#d1d5db',
+            };
+        }
+
+        function updateChartTheme() {
+            const colors = getChartColors();
+            chart.applyOptions({
+                layout: {
+                    background: { color: colors.background },
+                    textColor: colors.textColor,
+                },
+                grid: {
+                    vertLines: { color: colors.gridColor },
+                    horzLines: { color: colors.gridColor },
+                },
+                rightPriceScale: {
+                    borderColor: colors.gridColor,
+                },
+                timeScale: {
+                    borderColor: colors.gridColor,
+                },
+            });
+        }
 
         // Calculate Moving Average
         function calculateMA(data, period) {
@@ -337,16 +489,144 @@
                     hist.push({
                         time: data[i].time,
                         value: histValue,
-                        color: histValue >= 0 ? 'rgba(239,83,80,0.8)' : 'rgba(38,166,154,0.8)'
+                        color: histValue >= 0 ? 'rgba(239,68,68,0.8)' : 'rgba(34,197,94,0.8)'
                     });
                 }
             }
             return { dif, dea, hist };
         }
 
+        // Detect trading signals
+        function detectSignals(data) {
+            const signals = [];
+            const ma5 = calculateMA(data, 5);
+            const ma10 = calculateMA(data, 10);
+            const macd = calculateMACD(data);
+            const boll = calculateBOLL(data);
+
+            // Find indices where MAs are valid
+            for (let i = 1; i < data.length; i++) {
+                const time = data[i].time;
+                const price = data[i].close;
+                const low = data[i].low;
+                const high = data[i].high;
+
+                // Get MA values for current and previous day
+                const ma5Curr = ma5.find(m => m.time === time)?.value;
+                const ma10Curr = ma10.find(m => m.time === time)?.value;
+                const prevTime = data[i - 1].time;
+                const ma5Prev = ma5.find(m => m.time === prevTime)?.value;
+                const ma10Prev = ma10.find(m => m.time === prevTime)?.value;
+
+                if (ma5Curr && ma10Curr && ma5Prev && ma10Prev) {
+                    // Golden Cross: MA5 crosses above MA10
+                    if (ma5Prev <= ma10Prev && ma5Curr > ma10Curr) {
+                        signals.push({
+                            time: time,
+                            position: 'belowBar',
+                            color: '#ef4444',
+                            shape: 'arrowUp',
+                            text: '金叉'
+                        });
+                    }
+                    // Death Cross: MA5 crosses below MA10
+                    if (ma5Prev >= ma10Prev && ma5Curr < ma10Curr) {
+                        signals.push({
+                            time: time,
+                            position: 'aboveBar',
+                            color: '#22c55e',
+                            shape: 'arrowDown',
+                            text: '死叉'
+                        });
+                    }
+                }
+
+                // MACD Golden/Death Cross
+                const difCurr = macd.dif.find(m => m.time === time)?.value;
+                const deaCurr = macd.dea.find(m => m.time === time)?.value;
+                const difPrev = macd.dif.find(m => m.time === prevTime)?.value;
+                const deaPrev = macd.dea.find(m => m.time === prevTime)?.value;
+
+                if (difCurr !== undefined && deaCurr !== undefined && difPrev !== undefined && deaPrev !== undefined) {
+                    // MACD Golden Cross (DIF crosses above DEA)
+                    if (difPrev <= deaPrev && difCurr > deaCurr) {
+                        signals.push({
+                            time: time,
+                            position: 'belowBar',
+                            color: '#f97316',
+                            shape: 'circle',
+                            text: 'M金'
+                        });
+                    }
+                    // MACD Death Cross
+                    if (difPrev >= deaPrev && difCurr < deaCurr) {
+                        signals.push({
+                            time: time,
+                            position: 'aboveBar',
+                            color: '#8b5cf6',
+                            shape: 'circle',
+                            text: 'M死'
+                        });
+                    }
+                }
+
+                // BOLL breakthrough signals
+                const bollUpper = boll.upper.find(b => b.time === time)?.value;
+                const bollLower = boll.lower.find(b => b.time === time)?.value;
+                const prevClose = data[i - 1].close;
+                const bollUpperPrev = boll.upper.find(b => b.time === prevTime)?.value;
+                const bollLowerPrev = boll.lower.find(b => b.time === prevTime)?.value;
+
+                if (bollUpper && bollLower && bollUpperPrev && bollLowerPrev) {
+                    // Price breaks above upper band (overbought warning)
+                    if (prevClose <= bollUpperPrev && price > bollUpper) {
+                        signals.push({
+                            time: time,
+                            position: 'aboveBar',
+                            color: '#f59e0b',
+                            shape: 'square',
+                            text: '超买'
+                        });
+                    }
+                    // Price breaks below lower band (oversold opportunity)
+                    if (prevClose >= bollLowerPrev && price < bollLower) {
+                        signals.push({
+                            time: time,
+                            position: 'belowBar',
+                            color: '#06b6d4',
+                            shape: 'square',
+                            text: '超卖'
+                        });
+                    }
+                }
+            }
+
+            return signals;
+        }
+
+        // Calculate support and resistance levels
+        function calculateTrendLevels(data) {
+            if (data.length < 5) return { support: null, resistance: null };
+
+            // Find recent swing highs and lows
+            const lookback = Math.min(20, data.length);
+            const recentData = data.slice(-lookback);
+
+            // Simple method: use recent high and low as resistance/support
+            let resistance = -Infinity;
+            let support = Infinity;
+
+            for (const d of recentData) {
+                if (d.high > resistance) resistance = d.high;
+                if (d.low < support) support = d.low;
+            }
+
+            return { support, resistance };
+        }
+
         async function loadChart() {
             try {
-                const response = await fetch(`${API_BASE}/api/chart/data/${code}?days=${currentDays + 60}`);
+                const response = await fetch(`${API_BASE}/api/chart/data/${code}?days=${currentDays + 60}&period=${currentPeriod}`);
                 if (!response.ok) throw new Error('Failed to load data');
 
                 const result = await response.json();
@@ -379,70 +659,75 @@
                 const container = document.getElementById('chart-container');
                 if (chart) chart.remove();
 
+                const colors = getChartColors();
                 chart = LightweightCharts.createChart(container, {
                     width: container.clientWidth,
                     height: container.clientHeight,
                     layout: {
-                        background: { color: '#1a1a2e' },
-                        textColor: '#888',
+                        background: { color: colors.background },
+                        textColor: colors.textColor,
                     },
                     grid: {
-                        vertLines: { color: '#2a2a4e' },
-                        horzLines: { color: '#2a2a4e' },
+                        vertLines: { color: colors.gridColor },
+                        horzLines: { color: colors.gridColor },
                     },
                     crosshair: {
                         mode: LightweightCharts.CrosshairMode.Normal,
                     },
                     rightPriceScale: {
-                        borderColor: '#2a2a4e',
+                        borderColor: colors.gridColor,
                     },
                     timeScale: {
-                        borderColor: '#2a2a4e',
+                        borderColor: colors.gridColor,
                         timeVisible: true,
                     },
                 });
 
                 // Candlestick series
                 candleSeries = chart.addCandlestickSeries({
-                    upColor: '#ef5350',
-                    downColor: '#26a69a',
-                    borderUpColor: '#ef5350',
-                    borderDownColor: '#26a69a',
-                    wickUpColor: '#ef5350',
-                    wickDownColor: '#26a69a',
+                    upColor: '#ef4444',
+                    downColor: '#22c55e',
+                    borderUpColor: '#ef4444',
+                    borderDownColor: '#22c55e',
+                    wickUpColor: '#ef4444',
+                    wickDownColor: '#22c55e',
                 });
 
                 // Volume series
                 volumeSeries = chart.addHistogramSeries({
-                    color: '#26a69a',
+                    color: '#22c55e',
                     priceFormat: { type: 'volume' },
                     priceScaleId: 'volume',
                     scaleMargins: { top: 0.85, bottom: 0 },
                 });
 
                 // MA series
-                ma5Series = chart.addLineSeries({ color: '#ffd700', lineWidth: 1, priceScaleId: 'right' });
-                ma10Series = chart.addLineSeries({ color: '#ff69b4', lineWidth: 1, priceScaleId: 'right' });
-                ma20Series = chart.addLineSeries({ color: '#00bfff', lineWidth: 1, priceScaleId: 'right' });
-                ma60Series = chart.addLineSeries({ color: '#9370db', lineWidth: 1, priceScaleId: 'right' });
+                ma5Series = chart.addLineSeries({ color: '#fbbf24', lineWidth: 1, priceScaleId: 'right' });
+                ma10Series = chart.addLineSeries({ color: '#ec4899', lineWidth: 1, priceScaleId: 'right' });
+                ma20Series = chart.addLineSeries({ color: '#3b82f6', lineWidth: 1, priceScaleId: 'right' });
+                ma60Series = chart.addLineSeries({ color: '#a855f7', lineWidth: 1, priceScaleId: 'right' });
 
-                bollUpperSeries = chart.addLineSeries({ color: '#ff9800', lineWidth: 1, priceScaleId: 'right', lineStyle: 2 });
-                bollMidSeries = chart.addLineSeries({ color: '#2196f3', lineWidth: 1, priceScaleId: 'right' });
-                bollLowerSeries = chart.addLineSeries({ color: '#4caf50', lineWidth: 1, priceScaleId: 'right', lineStyle: 2 });
+                bollUpperSeries = chart.addLineSeries({ color: '#f97316', lineWidth: 1, priceScaleId: 'right', lineStyle: 2 });
+                bollMidSeries = chart.addLineSeries({ color: '#3b82f6', lineWidth: 1, priceScaleId: 'right' });
+                bollLowerSeries = chart.addLineSeries({ color: '#22c55e', lineWidth: 1, priceScaleId: 'right', lineStyle: 2 });
+
+                // Trend lines
+                supportLine = chart.addLineSeries({ color: '#22c55e', lineWidth: 2, priceScaleId: 'right', lineStyle: 1 });
+                resistanceLine = chart.addLineSeries({ color: '#ef4444', lineWidth: 2, priceScaleId: 'right', lineStyle: 1 });
 
                 // MACD series (separate scale at bottom)
                 macdHistSeries = chart.addHistogramSeries({
-                    color: '#26a69a',
+                    color: '#22c55e',
                     priceScaleId: 'macd',
                     scaleMargins: { top: 0.85, bottom: 0.02 },
                 });
                 macdDifSeries = chart.addLineSeries({
-                    color: '#fff176',
+                    color: '#fbbf24',
                     lineWidth: 1,
                     priceScaleId: 'macd',
                 });
                 macdDeaSeries = chart.addLineSeries({
-                    color: '#ba68c8',
+                    color: '#a855f7',
                     lineWidth: 1,
                     priceScaleId: 'macd',
                 });
@@ -481,7 +766,7 @@
             const volumeData = displayData.map(d => ({
                 time: d.time,
                 value: d.volume,
-                color: d.close >= d.open ? 'rgba(239,83,80,0.5)' : 'rgba(38,166,154,0.5)',
+                color: d.close >= d.open ? 'rgba(239,68,68,0.5)' : 'rgba(34,197,94,0.5)',
             }));
 
             candleSeries.setData(candleData);
@@ -532,6 +817,38 @@
                 macdDifSeries.setData([]);
                 macdDeaSeries.setData([]);
                 macdHistSeries.setData([]);
+            }
+
+            // Signals
+            if (showSignals) {
+                const signals = detectSignals(rawData);
+                const displaySignals = signals.filter(s => {
+                    const displayTimes = displayData.map(d => d.time);
+                    return displayTimes.includes(s.time);
+                });
+                candleSeries.setMarkers(displaySignals);
+            } else {
+                candleSeries.setMarkers([]);
+            }
+
+            // Trend lines
+            if (showTrend) {
+                const levels = calculateTrendLevels(displayData);
+                if (levels.support && levels.resistance) {
+                    const startTime = displayData[0].time;
+                    const endTime = displayData[displayData.length - 1].time;
+                    supportLine.setData([
+                        { time: startTime, value: levels.support },
+                        { time: endTime, value: levels.support }
+                    ]);
+                    resistanceLine.setData([
+                        { time: startTime, value: levels.resistance },
+                        { time: endTime, value: levels.resistance }
+                    ]);
+                }
+            } else {
+                supportLine.setData([]);
+                resistanceLine.setData([]);
             }
 
             chart.timeScale().fitContent();
@@ -600,11 +917,32 @@
             updateChartData();
         }
 
+        function toggleSignals() {
+            showSignals = !showSignals;
+            document.getElementById('btnSignals').classList.toggle('active', showSignals);
+            updateChartData();
+        }
+
+        function toggleTrend() {
+            showTrend = !showTrend;
+            document.getElementById('btnTrend').classList.toggle('active', showTrend);
+            updateChartData();
+        }
+
+        function setPeriod(period) {
+            currentPeriod = period;
+            document.getElementById('btnDaily').classList.toggle('active', period === 'daily');
+            document.getElementById('btnWeekly').classList.toggle('active', period === 'weekly');
+            document.getElementById('btnMonthly').classList.toggle('active', period === 'monthly');
+            loadChart();
+        }
+
         function setDays(days) {
             currentDays = days;
             document.querySelectorAll('.toolbar-btn').forEach(btn => {
-                if (btn.textContent.includes('D')) {
-                    btn.classList.toggle('active', btn.textContent === days + 'D');
+                const text = btn.textContent;
+                if (['30', '60', '120'].includes(text)) {
+                    btn.classList.toggle('active', text === String(days));
                 }
             });
             updateChartData();
@@ -616,7 +954,10 @@
             return vol.toString();
         }
 
-        // Initialize
+        // Initialize theme first
+        initTheme();
+
+        // Initialize chart
         loadChart();
 
         // Telegram WebApp integration

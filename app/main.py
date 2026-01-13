@@ -21,6 +21,7 @@ from app.services.limit_up import limit_up_service
 from app.services.sector import sector_service
 from app.services.market_report import market_report_service
 from app.services.watchlist import watchlist_service
+from app.services.trading_simulator import trading_simulator
 from app.api import api_router
 
 logger = Logger("Main")
@@ -87,6 +88,10 @@ async def lifespan(app: FastAPI):
     # Watchlist Service (用户自选列表)
     await watchlist_service.start()
 
+    # Trading Simulator (模拟交易)
+    if settings.ENABLE_TRADING_SIM:
+        await trading_simulator.start()
+
     # AI Service doesn't need explicit start but is ready
     if ai_service.is_available():
         logger.info("✅ AI Service ready")
@@ -112,6 +117,8 @@ async def lifespan(app: FastAPI):
         from app.services.stock_history import stock_history_service
         await stock_history_service.stop()
     await watchlist_service.stop()
+    if settings.ENABLE_TRADING_SIM:
+        await trading_simulator.stop()
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")

@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     ENABLE_SECTOR: bool = True  # Sector analysis tracking
     ENABLE_MARKET_REPORT: bool = True  # Market analysis reports
     ENABLE_STOCK_HISTORY: bool = True  # A-share history database (5-year OHLCV)
+    ENABLE_TRADING_SIM: bool = True  # Trading simulator service
     KEYWORDS: Optional[str] = None
     FROM_USERS: Optional[str] = None
     ALLOWED_USERS: Optional[str] = None

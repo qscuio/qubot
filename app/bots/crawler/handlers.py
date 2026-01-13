@@ -16,6 +16,7 @@ from app.services.stock_scanner import stock_scanner
 from app.services.sector import sector_service
 from app.services.market_report import market_report_service
 from app.services.watchlist import watchlist_service
+from app.services.trading_simulator import trading_simulator
 from app.core.config import settings
 from app.core.database import db
 from app.core.logger import Logger
@@ -1985,3 +1986,194 @@ async def get_watchlist_ui(user_id: int):
     builder.adjust(2, 2, 2, 2, 2)
     
     return text, builder.as_markup()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Trading Simulator (模拟交易)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.message(Command("portfolio"))
+async def cmd_portfolio(message: types.Message):
+    """Show current trading portfolio."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    report = await trading_simulator.generate_portfolio_report()
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📉 盈亏统计", callback_data="sim:pnl")
+    builder.button(text="📜 交易历史", callback_data="sim:trades")
+    builder.button(text="🔄 刷新", callback_data="sim:portfolio")
+    builder.adjust(2, 1)
+    
+    await message.answer(report, parse_mode="HTML", reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data == "sim:portfolio")
+async def cb_portfolio(callback: types.CallbackQuery):
+    await safe_answer(callback)
+    report = await trading_simulator.generate_portfolio_report()
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📉 盈亏统计", callback_data="sim:pnl")
+    builder.button(text="📜 交易历史", callback_data="sim:trades")
+    builder.button(text="🔄 刷新", callback_data="sim:portfolio")
+    builder.adjust(2, 1)
+    
+    try:
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
+@router.message(Command("pnl"))
+async def cmd_pnl(message: types.Message):
+    """Show P&L statistics."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    report = await trading_simulator.generate_pnl_report()
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 持仓", callback_data="sim:portfolio")
+    builder.button(text="📜 历史", callback_data="sim:trades")
+    builder.button(text="🔄 刷新", callback_data="sim:pnl")
+    builder.adjust(2, 1)
+    
+    await message.answer(report, parse_mode="HTML", reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data == "sim:pnl")
+async def cb_pnl(callback: types.CallbackQuery):
+    await safe_answer(callback)
+    report = await trading_simulator.generate_pnl_report()
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 持仓", callback_data="sim:portfolio")
+    builder.button(text="📜 历史", callback_data="sim:trades")
+    builder.button(text="🔄 刷新", callback_data="sim:pnl")
+    builder.adjust(2, 1)
+    
+    try:
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
+@router.message(Command("trades"))
+async def cmd_trades(message: types.Message):
+    """Show recent trade history."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    report = await trading_simulator.generate_trades_report()
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 持仓", callback_data="sim:portfolio")
+    builder.button(text="📉 盈亏", callback_data="sim:pnl")
+    builder.button(text="🔄 刷新", callback_data="sim:trades")
+    builder.adjust(2, 1)
+    
+    await message.answer(report, parse_mode="HTML", reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data == "sim:trades")
+async def cb_trades(callback: types.CallbackQuery):
+    await safe_answer(callback)
+    report = await trading_simulator.generate_trades_report()
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 持仓", callback_data="sim:portfolio")
+    builder.button(text="📉 盈亏", callback_data="sim:pnl")
+    builder.button(text="🔄 刷新", callback_data="sim:trades")
+    builder.adjust(2, 1)
+    
+    try:
+        await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
+@router.message(Command("sim"))
+async def cmd_sim(message: types.Message, command: CommandObject):
+    """Trading simulator commands.
+    
+    /sim - Show main menu
+    /sim scan - Manual trigger daily scan
+    /sim status - Show account status
+    """
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    args = command.args
+    
+    if args == "scan":
+        # Manual scan trigger
+        status_msg = await message.answer("⏳ 正在扫描买卖信号...")
+        
+        try:
+            await trading_simulator.daily_routine()
+            stats = await trading_simulator.get_statistics()
+            
+            await status_msg.edit_text(
+                f"✅ 扫描完成\n\n"
+                f"📦 当前持仓: {stats.get('current_positions', 0)}/10\n"
+                f"💵 可用资金: ¥{stats.get('current_cash', 0):,.0f}\n"
+                f"📈 总收益: {stats.get('total_return_pct', 0):+.2f}%",
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            await status_msg.edit_text(f"❌ 扫描失败: {e}")
+        return
+    
+    if args == "status":
+        report = await trading_simulator.generate_pnl_report()
+        await message.answer(report, parse_mode="HTML")
+        return
+    
+    # Default: show sim menu
+    stats = await trading_simulator.get_statistics()
+    
+    text = (
+        "🤖 <b>模拟交易</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💰 初始资金: ¥{stats.get('initial_capital', 1000000):,.0f}\n"
+        f"📊 账户总值: ¥{stats.get('total_value', 1000000):,.0f}\n"
+        f"📈 总收益: {stats.get('total_return_pct', 0):+.2f}%\n"
+        f"📦 当前持仓: {stats.get('current_positions', 0)}/10\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "<i>每日15:35自动扫描交易</i>"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 持仓", callback_data="sim:portfolio")
+    builder.button(text="📉 盈亏", callback_data="sim:pnl")
+    builder.button(text="📜 历史", callback_data="sim:trades")
+    builder.button(text="🔍 手动扫描", callback_data="sim:scan")
+    builder.adjust(2, 2)
+    
+    await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+
+
+@router.callback_query(F.data == "sim:scan")
+async def cb_sim_scan(callback: types.CallbackQuery):
+    await safe_answer(callback, "⏳ 扫描中...")
+    
+    try:
+        await trading_simulator.daily_routine()
+        stats = await trading_simulator.get_statistics()
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="📊 查看持仓", callback_data="sim:portfolio")
+        builder.adjust(1)
+        
+        await callback.message.edit_text(
+            f"✅ 扫描完成\n\n"
+            f"📦 当前持仓: {stats.get('current_positions', 0)}/10\n"
+            f"💵 可用资金: ¥{stats.get('current_cash', 0):,.0f}\n"
+            f"📈 总收益: {stats.get('total_return_pct', 0):+.2f}%",
+            parse_mode="HTML",
+            reply_markup=builder.as_markup()
+        )
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 扫描失败: {e}")
