@@ -641,6 +641,7 @@
 
         <button class="t-btn xs active" onclick="toggleSignals()" id="btn-signals">Signals</button>
         <button class="t-btn xs active" onclick="togglePriceLines()" id="btn-lines" data-action="lines">Lines</button>
+        <button class="t-btn xs active" onclick="toggleChipOverlay()" id="btn-chips">Chips</button>
 
         <div class="spacer"></div>
         <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
@@ -672,6 +673,9 @@
                         <span class="leg-item c-ma20">MA20:<span class="leg-val c-ma20" id="l-ma20">--</span></span>
                     </div>
                 </div>
+                <!-- Chip distribution canvas overlay -->
+                <canvas id="chip-overlay"
+                    style="position:absolute; right:50px; top:0; pointer-events:none; z-index:5;"></canvas>
             </div>
 
             <div id="sub-chart">
@@ -735,6 +739,7 @@
         let activeSub = 'VOL';    // 'VOL', 'MACD', 'KDJ', 'RSI'
         let showSignals = true;  // Enabled by default
         let showPriceLines = true; // Support/Resistance/Trend lines
+        let showChipOverlay = true; // Chip distribution overlay on K-line
 
         // Price lines (support, resistance, trend)
         let priceLines = [];  // Store created price lines for cleanup
@@ -748,6 +753,7 @@
             if (chipDebounceTimer) clearTimeout(chipDebounceTimer);
             chipDebounceTimer = setTimeout(() => {
                 renderChipDistribution(idx);
+                drawChipOverlay(idx);  // Also update overlay on K-line
             }, 50);  // 50ms debounce
         }
 
@@ -862,6 +868,122 @@
             if (btn) btn.classList.toggle('active', showPriceLines);
         }
 
+        // --- Chip Overlay on K-line Chart ---
+        function drawChipOverlay(dayIndex = -1) {
+            const canvas = document.getElementById('chip-overlay');
+            if (!canvas || !chartMain || !sCandle || !rawData.length) return;
+
+            const ctx = canvas.getContext('2d');
+            const container = document.getElementById('main-chart');
+            if (!container) return;
+
+            // Get chart dimensions
+            const chartHeight = container.clientHeight;
+            const chartWidth = container.clientWidth;
+            const overlayWidth = 80;  // Width of chip overlay area
+
+            // Set canvas size
+            canvas.width = overlayWidth;
+            canvas.height = chartHeight;
+            canvas.style.height = chartHeight + 'px';
+            canvas.style.width = overlayWidth + 'px';
+
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (!showChipOverlay) return;
+
+            const idx = dayIndex >= 0 ? dayIndex : rawData.length - 1;
+            if (!rawData[idx]) return;
+
+            // Calculate chip distribution
+            const lookback = Math.min(60, idx + 1);
+            const startIdx = idx - lookback + 1;
+            const currentPrice = rawData[idx].close;
+
+            // Get price range from chart's price scale
+            // Use coordinateToPrice to get min/max prices at chart boundaries
+            const topPrice = sCandle.coordinateToPrice(0);
+            const bottomPrice = sCandle.coordinateToPrice(chartHeight);
+
+            if (topPrice === null || bottomPrice === null) return;
+
+            const minPrice = Math.min(topPrice, bottomPrice);
+            const maxPrice = Math.max(topPrice, bottomPrice);
+            const priceRange = maxPrice - minPrice;
+
+            if (priceRange <= 0) return;
+
+            // Calculate chip distribution within visible price range
+            const numBuckets = Math.floor(chartHeight / 8);  // ~8px per bucket
+            const bucketSize = priceRange / numBuckets;
+            const buckets = new Array(numBuckets).fill(0);
+
+            for (let i = startIdx; i <= idx; i++) {
+                const d = rawData[i];
+                if (!d) continue;
+                const decay = 1 - (idx - i) * 0.015;
+                const vol = d.volume * Math.max(0.1, decay);
+
+                // Map high/low to bucket indices
+                const lowBucket = Math.floor((d.low - minPrice) / bucketSize);
+                const highBucket = Math.floor((d.high - minPrice) / bucketSize);
+
+                for (let b = Math.max(0, lowBucket); b <= Math.min(numBuckets - 1, highBucket); b++) {
+                    buckets[b] += vol / (highBucket - lowBucket + 1);
+                }
+            }
+
+            const maxBucket = Math.max(...buckets);
+            if (maxBucket <= 0) return;
+
+            // Draw chips (horizontal bars from right edge)
+            const barMaxWidth = overlayWidth - 5;
+            const barHeight = chartHeight / numBuckets;
+
+            for (let i = 0; i < numBuckets; i++) {
+                const pct = buckets[i] / maxBucket;
+                if (pct < 0.01) continue;
+
+                const barWidth = pct * barMaxWidth;
+                const bucketPrice = minPrice + (i + 0.5) * bucketSize;
+
+                // Y position: use priceToCoordinate for accurate mapping
+                const y = sCandle.priceToCoordinate(bucketPrice);
+                if (y === null || y < 0 || y > chartHeight) continue;
+
+                // Color: profit (below current price) = red, loss = green
+                const isProfit = bucketPrice <= currentPrice;
+                ctx.fillStyle = isProfit
+                    ? `rgba(239, 68, 68, ${0.3 + pct * 0.5})` // Red (profit in China)
+                    : `rgba(34, 197, 94, ${0.3 + pct * 0.5})`; // Green (loss)
+
+                // Draw bar from right edge
+                ctx.fillRect(overlayWidth - barWidth, y - barHeight / 2, barWidth, barHeight - 1);
+            }
+
+            // Draw current price marker line
+            const currentY = sCandle.priceToCoordinate(currentPrice);
+            if (currentY !== null && currentY >= 0 && currentY <= chartHeight) {
+                ctx.strokeStyle = '#fbbf24';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([2, 2]);
+                ctx.beginPath();
+                ctx.moveTo(0, currentY);
+                ctx.lineTo(overlayWidth, currentY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        function toggleChipOverlay() {
+            showChipOverlay = !showChipOverlay;
+            drawChipOverlay();
+            // Update button state
+            const btn = document.getElementById('btn-chips');
+            if (btn) btn.classList.toggle('active', showChipOverlay);
+        }
+
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
             initTheme();
@@ -877,6 +999,8 @@
         window.addEventListener('resize', () => {
             if (chartMain) chartMain.resize(0, 0); // Auto-resize check
             if (chartSub) chartSub.resize(0, 0);
+            // Redraw chip overlay on resize
+            setTimeout(() => drawChipOverlay(), 100);
         });
 
         // --- Theme Logic ---
@@ -1206,6 +1330,9 @@
 
             // Draw support/resistance/trend lines
             calculateAndDrawPriceLines();
+
+            // Draw chip distribution overlay (synced with K-line Y-axis)
+            drawChipOverlay();
         }
 
         function updateActionBanner(ma5, ma10) {
@@ -1586,17 +1713,15 @@
             };
         }
 
-        // Get K-line chart visible price range
+        // Get K-line chart visible price range from ALL visible data
         function getKlinePriceRange() {
-            if (!chartMain || !sCandle) return null;
+            if (!chartMain || !sCandle || !rawData.length) return null;
             try {
-                // Get the auto-scale price range from the candle series
-                const priceScale = chartMain.priceScale('right');
-                // Try to get visible range from chart
+                // Get visible logical range (bar indices)
                 const visibleRange = chartMain.timeScale().getVisibleLogicalRange();
-                if (!visibleRange || !rawData.length) return null;
+                if (!visibleRange) return null;
 
-                // Calculate min/max from visible data
+                // Calculate min/max from ALL visible bars
                 const startIdx = Math.max(0, Math.floor(visibleRange.from));
                 const endIdx = Math.min(rawData.length - 1, Math.ceil(visibleRange.to));
 
@@ -1610,10 +1735,15 @@
 
                 if (min === Infinity || max === -Infinity) return null;
 
-                // Add some padding (5%)
-                const padding = (max - min) * 0.05;
-                return { min: min - padding, max: max + padding };
+                // Add padding to match chart's auto-scale behavior (~10%)
+                const range = max - min;
+                const padding = range * 0.1;
+                return {
+                    min: Math.max(0, min - padding),
+                    max: max + padding
+                };
             } catch (e) {
+                console.error('getKlinePriceRange error:', e);
                 return null;
             }
         }

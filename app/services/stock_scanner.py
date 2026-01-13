@@ -123,12 +123,12 @@ class StockScanner:
         await telegram_service.send_message(settings.STOCK_ALERT_CHANNEL, text, parse_mode="html")
         logger.info(f"Sent scan report with {sum(len(v) for v in signals.values())} signals")
     
-    async def scan_all_stocks(self, limit: int = 500) -> Dict[str, List[Dict]]:
-        """Scan stocks for all signal types.
+    async def scan_all_stocks(self) -> Dict[str, List[Dict]]:
+        """Scan ALL stocks for all signal types.
         
         Uses local stock_history database ONLY for maximum speed.
         """
-        logger.info(f"🔍 Starting scan_all_stocks with limit={limit}")
+        logger.info("🔍 Starting scan_all_stocks (full scan)")
         
         _, pd = self._get_libs()
         if not pd:
@@ -183,15 +183,13 @@ class StockScanner:
                 logger.warn("💡 Suggestion: Run /dbsync to sync stock history data")
                 return signals
             
-            # Get stock codes from stock_history only (no dependency on other tables)
-            # Names will just use code as fallback
+            # Get ALL stock codes from stock_history (no limit)
             rows = await db.pool.fetch("""
                 SELECT DISTINCT code
                 FROM stock_history 
-                WHERE date >= $2::date - INTERVAL '7 days'
+                WHERE date >= $1::date - INTERVAL '7 days'
                   AND code ~ '^[036]'
-                LIMIT $1
-            """, limit, today)
+            """, today)
             
             if not rows:
                 logger.warn(f"⚠️ No stocks found matching pattern '^[036]' in local database. Today (China): {today}")
@@ -301,16 +299,21 @@ class StockScanner:
         result = {}
         
         try:
-            # Fetch last 25 days of data for all codes
+            # Calculate China date for correct timezone
+            from app.core.timezone import china_today
+            today = china_today()
+            
+            # Fetch last 30 days of data for all codes (using China date)
             rows = await db.pool.fetch("""
                 SELECT code, date, open, high, low, close, volume
                 FROM stock_history
                 WHERE code = ANY($1)
-                  AND date >= CURRENT_DATE - INTERVAL '30 days'
+                  AND date >= $2::date - INTERVAL '30 days'
                 ORDER BY code, date DESC
-            """, codes)
+            """, codes, today)
             
             if not rows:
+                logger.warn(f"No history rows found for {len(codes)} codes since {today - __import__('datetime').timedelta(days=30)}")
                 return {}
             
             # Group by code and convert to DataFrame-like structure

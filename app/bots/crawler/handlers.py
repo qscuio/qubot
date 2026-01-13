@@ -1136,7 +1136,7 @@ async def cmd_scan(message: types.Message):
     status = await message.answer("🔍 正在扫描全A股启动信号...\n\n⏳ 需要几分钟，请稍候")
     
     try:
-        signals = await stock_scanner.scan_all_stocks(limit=300)
+        signals = await stock_scanner.scan_all_stocks()
         
         if not signals or all(len(v) == 0 for v in signals.values()):
             await status.edit_text("🔍 扫描完成\n\n📭 暂无信号")
