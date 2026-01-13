@@ -458,6 +458,63 @@
             line-height: 1;
         }
 
+        /* Action Banner */
+        .action-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: linear-gradient(90deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+            border-bottom: 1px solid var(--border-color);
+            gap: 12px;
+        }
+
+        .action-signal {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .action-badge {
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .action-badge.buy {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid #22c55e;
+        }
+
+        .action-badge.sell {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid #ef4444;
+        }
+
+        .action-badge.hold {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+            border: 1px solid #fbbf24;
+        }
+
+        .action-text {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .action-text strong {
+            color: var(--text-primary);
+        }
+
+        .action-time {
+            font-size: 10px;
+            color: var(--text-muted);
+        }
+
         .curr-marker {
             color: var(--text-primary);
             font-size: 10px;
@@ -549,6 +606,17 @@
         </div>
 
         <button class="t-btn" id="chips-toggle" onclick="toggleChipsPanel()" style="display: none;">Chips</button>
+    </div>
+
+    <!-- Action Banner -->
+    <div class="action-banner" id="action-banner">
+        <div class="action-signal">
+            <span class="action-badge hold" id="action-badge">HOLD</span>
+            <div>
+                <div class="action-text" id="action-text">Analyzing...</div>
+                <div class="action-time" id="action-time">--</div>
+            </div>
+        </div>
     </div>
 
     <!-- Toolbar -->
@@ -979,9 +1047,89 @@
                     }
                 }
                 sCandle.setMarkers(signals);
+
+                // Update action banner with current/next actionable signal
+                updateActionBanner(ma5, ma10);
             } else {
                 sCandle.setMarkers([]);
             }
+        }
+
+        function updateActionBanner(ma5, ma10) {
+            // Get current (latest) and previous data points
+            if (rawData.length < 2 || ma5.length < 2 || ma10.length < 2) return;
+
+            const lastIdx = rawData.length - 1;
+            const lastTime = rawData[lastIdx].time;
+            const prevTime = rawData[lastIdx - 1].time;
+
+            const curr5 = ma5.find(m => m.time === lastTime)?.value;
+            const curr10 = ma10.find(m => m.time === lastTime)?.value;
+            const prev5 = ma5.find(m => m.time === prevTime)?.value;
+            const prev10 = ma10.find(m => m.time === prevTime)?.value;
+
+            if (!curr5 || !curr10) return;
+
+            const badge = document.getElementById('action-badge');
+            const text = document.getElementById('action-text');
+            const timeEl = document.getElementById('action-time');
+
+            // Determine market state (China market hours)
+            const now = new Date();
+            const chinaTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }));
+            const hour = chinaTime.getHours();
+            const mins = chinaTime.getMinutes();
+            const dayOfWeek = chinaTime.getDay();
+            const timeMins = hour * 60 + mins;
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const isMarketOpen = !isWeekend && ((timeMins >= 570 && timeMins <= 690) || (timeMins >= 780 && timeMins <= 900));
+
+            // Calculate trend direction
+            const maDiff = curr5 - curr10;
+            const maDiffPrev = prev5 && prev10 ? prev5 - prev10 : 0;
+            const trendDir = maDiff > 0 ? 'bullish' : 'bearish';
+            const crossingUp = maDiffPrev <= 0 && maDiff > 0;
+            const crossingDown = maDiffPrev >= 0 && maDiff < 0;
+
+            // Determine action
+            let action = 'hold';
+            let actionText = '';
+            let timeLabel = '';
+
+            if (crossingUp) {
+                action = 'buy';
+                actionText = isMarketOpen
+                    ? '<strong>BUY Signal</strong> - MA5 crossed above MA10. Consider entry now.'
+                    : '<strong>BUY on Open</strong> - MA5 crossed above MA10. Watch at market open.';
+            } else if (crossingDown) {
+                action = 'sell';
+                actionText = isMarketOpen
+                    ? '<strong>SELL Signal</strong> - MA5 crossed below MA10. Consider exit now.'
+                    : '<strong>SELL on Open</strong> - MA5 crossed below MA10. Watch at market open.';
+            } else if (trendDir === 'bullish') {
+                action = 'hold';
+                actionText = '<strong>HOLD Long</strong> - MA5 > MA10, uptrend intact. Hold or add on dips.';
+            } else {
+                action = 'hold';
+                actionText = '<strong>HOLD/Wait</strong> - MA5 < MA10, downtrend. Wait for buy signal.';
+            }
+
+            // Time label
+            if (isMarketOpen) {
+                timeLabel = `Market Open • ${chinaTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+            } else if (isWeekend) {
+                timeLabel = 'Market Closed (Weekend) • Action applies to next open';
+            } else if (timeMins < 570) {
+                timeLabel = 'Pre-Market • Action applies to today\'s open';
+            } else {
+                timeLabel = 'After Hours • Action applies to next trading day';
+            }
+
+            // Update UI
+            badge.className = 'action-badge ' + action;
+            badge.textContent = action.toUpperCase();
+            text.innerHTML = actionText;
+            timeEl.textContent = timeLabel;
         }
 
         function updateOverlays() {
