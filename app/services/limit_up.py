@@ -49,9 +49,6 @@ class LimitUpService:
         self.is_running = True
         self._scheduler_task = asyncio.create_task(self._scheduler_loop())
         logger.info("✅ Limit-Up Tracker started")
-        
-        # Check if we're in a report window and send immediately
-        await self._check_and_send_startup_report()
     
     async def stop(self):
         """Stop the service."""
