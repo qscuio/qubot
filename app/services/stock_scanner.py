@@ -128,8 +128,11 @@ class StockScanner:
         
         Uses local stock_history database ONLY for maximum speed.
         """
+        logger.info(f"🔍 Starting scan_all_stocks with limit={limit}")
+        
         _, pd = self._get_libs()
         if not pd:
+            logger.error("❌ Failed to load pandas/akshare libraries")
             return {}
         
         signals = {
@@ -142,17 +145,51 @@ class StockScanner:
         }
         
         if not db.pool:
-            logger.warn("Database not connected, cannot scan")
+            logger.error("❌ Database not connected, cannot scan")
             return signals
         
         try:
+            # Use China timezone for date calculation
+            from app.core.timezone import china_today
+            today = china_today()
+            logger.info(f"📅 Using China date: {today}")
+            
+            # First, check if stock_history table has any data
+            count_row = await db.pool.fetchrow("""
+                SELECT 
+                    COUNT(*) as total,
+                    COUNT(DISTINCT code) as stock_count,
+                    MAX(date) as max_date,
+                    MIN(date) as min_date
+                FROM stock_history
+            """)
+            
+            if count_row:
+                logger.info(f"📊 stock_history stats: total={count_row['total']}, stocks={count_row['stock_count']}, "
+                           f"date_range={count_row['min_date']} ~ {count_row['max_date']}")
+            else:
+                logger.warn("⚠️ stock_history table appears to be empty")
+            
+            # Check recent data specifically
+            recent_count = await db.pool.fetchval("""
+                SELECT COUNT(DISTINCT code) 
+                FROM stock_history 
+                WHERE date >= $1::date - INTERVAL '7 days'
+            """, today)
+            logger.info(f"📈 Stocks with data in last 7 days: {recent_count}")
+            
+            if recent_count == 0:
+                logger.warn(f"⚠️ No stocks have data in the last 7 days (since {today - __import__('datetime').timedelta(days=7)})")
+                logger.warn("💡 Suggestion: Run /dbsync to sync stock history data")
+                return signals
+            
             # Get stock codes and names from local database
             # Join with user_watchlist or limit_up_stock for names if available
             rows = await db.pool.fetch("""
                 WITH recent_stocks AS (
                     SELECT DISTINCT code 
                     FROM stock_history 
-                    WHERE date >= CURRENT_DATE - INTERVAL '7 days'
+                    WHERE date >= $2::date - INTERVAL '7 days'
                 ),
                 stock_names AS (
                     SELECT code, name FROM user_watchlist GROUP BY code, name
@@ -164,31 +201,39 @@ class StockScanner:
                 LEFT JOIN stock_names sn ON rs.code = sn.code
                 WHERE rs.code ~ '^[036]'
                 LIMIT $1
-            """, limit)
+            """, limit, today)
             
             if not rows:
-                logger.warn("No stocks found in local database")
+                logger.warn(f"⚠️ No stocks found matching pattern '^[036]' in local database. Today (China): {today}")
+                # Try to debug: get some sample codes
+                sample = await db.pool.fetch("SELECT DISTINCT code FROM stock_history LIMIT 5")
+                if sample:
+                    logger.info(f"📋 Sample codes in DB: {[r['code'] for r in sample]}")
                 return signals
             
             codes = [r['code'] for r in rows]
             code_name_map = {r['code']: r['name'] or r['code'] for r in rows}
             
-            logger.info(f"Found {len(codes)} stocks in local DB, starting scan...")
+            logger.info(f"✅ Found {len(codes)} stocks in local DB, starting scan...")
             
             # Fetch history from local database
             local_data = await self._get_local_history_batch(codes)
             
             if not local_data:
-                logger.warn("No history data available")
+                logger.warn("⚠️ No history data available after fetching from DB")
                 return signals
             
+            logger.info(f"📊 Loaded history for {len(local_data)} stocks")
+            
             checked = 0
+            skipped_insufficient = 0
             for code in codes:
                 name = code_name_map.get(code, code)
                 
                 try:
                     # Use local data only
                     if code not in local_data or len(local_data[code]) < 21:
+                        skipped_insufficient += 1
                         continue
                     
                     hist = local_data[code]
@@ -229,14 +274,24 @@ class StockScanner:
                     checked += 1
                         
                 except Exception as e:
+                    logger.debug(f"Error checking {code}: {e}")
                     continue
             
+            if skipped_insufficient > 0:
+                logger.info(f"⏭️ Skipped {skipped_insufficient} stocks with insufficient history (<21 days)")
+            
             total_signals = sum(len(v) for v in signals.values())
-            logger.info(f"Scan complete: {checked} stocks, found {total_signals} signals")
+            logger.info(f"✅ Scan complete: checked {checked} stocks, found {total_signals} signals")
+            for sig_type, stocks in signals.items():
+                if stocks:
+                    logger.info(f"   {sig_type}: {len(stocks)} signals")
+            
             return signals
             
         except Exception as e:
-            logger.error(f"Scan failed: {e}")
+            logger.error(f"❌ Scan failed with error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return signals
 
     

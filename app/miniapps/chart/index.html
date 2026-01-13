@@ -734,6 +734,18 @@
         let activeSub = 'VOL';    // 'VOL', 'MACD', 'KDJ', 'RSI'
         let showSignals = true;  // Enabled by default
 
+        // Debounce for chip distribution updates
+        let chipDebounceTimer = null;
+        let lastChipIdx = -1;
+        function debouncedRenderChips(idx) {
+            if (idx === lastChipIdx) return;  // Skip if same index
+            lastChipIdx = idx;
+            if (chipDebounceTimer) clearTimeout(chipDebounceTimer);
+            chipDebounceTimer = setTimeout(() => {
+                renderChipDistribution(idx);
+            }, 50);  // 50ms debounce
+        }
+
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
             initTheme();
@@ -830,17 +842,33 @@
             chartMain.timeScale().subscribeVisibleLogicalRangeChange(r => chartSub.timeScale().setVisibleLogicalRange(r));
             chartSub.timeScale().subscribeVisibleLogicalRangeChange(r => chartMain.timeScale().setVisibleLogicalRange(r));
 
-            // Legend Sync
+            // Legend Sync + Chip Distribution on Hover
             chartMain.subscribeCrosshairMove(param => {
                 updateMainLegend(param);
                 // Use current active sub-chart series for crosshair sync
                 const subSeries = sVol || sMacdHist || sK || sRsi;
                 if (param.time && subSeries) chartSub.setCrosshairPosition(0, param.time, subSeries);
+
+                // Update chip distribution on hover (like 通达信)
+                if (param.time && rawData.length > 0) {
+                    const idx = rawData.findIndex(d => d.time === param.time);
+                    if (idx !== -1) {
+                        debouncedRenderChips(idx);
+                    }
+                }
             });
 
             chartSub.subscribeCrosshairMove(param => {
                 updateSubLegend(param);
                 if (param.time && sCandle) chartMain.setCrosshairPosition(0, param.time, sCandle);
+
+                // Also update chips when hovering on sub-chart
+                if (param.time && rawData.length > 0) {
+                    const idx = rawData.findIndex(d => d.time === param.time);
+                    if (idx !== -1) {
+                        debouncedRenderChips(idx);
+                    }
+                }
             });
 
             chartMain.subscribeClick(param => {
@@ -893,12 +921,18 @@
                 processData();
                 document.getElementById('loading').style.display = 'none';
 
-                // Initial Chip Render (latest)
+                // Reset chip cache and render latest
+                resetChipCache();
                 renderChipDistribution(-1);
 
             } catch (e) {
                 document.getElementById('loading').innerHTML = `<div class="error">${e.message}</div>`;
             }
+        }
+
+        // Reset chip cache when loading new data
+        function resetChipCache() {
+            lastChipIdx = -1;
         }
 
         function updateStockHeader(data) {
@@ -1170,21 +1204,22 @@
         }
 
         function updateSubChart() {
-            // Clear previous sub-series
-            // Note: Efficient way is to remove/add series or just set data. 
-            // Lightweight charts doesn't easily let us re-use one chart for completely different types without cleaning up.
-            // Simplified: we'll clean chartSub's series.
+            // Clear previous sub-series with error handling
+            // Note: removeSeries can throw if series was already removed or chart is in invalid state
+            const removeSafely = (series) => {
+                if (series) {
+                    try { chartSub.removeSeries(series); } catch (e) { /* ignore */ }
+                }
+            };
 
-            // Re-create chartSub content implies removing series. 
-            // Correct approach: keep references, remove them if they exist.
-            if (sVol) chartSub.removeSeries(sVol);
-            if (sMacdHist) chartSub.removeSeries(sMacdHist);
-            if (sMacdLine) chartSub.removeSeries(sMacdLine);
-            if (sMacdSig) chartSub.removeSeries(sMacdSig);
-            if (sK) chartSub.removeSeries(sK);
-            if (sD) chartSub.removeSeries(sD);
-            if (sJ) chartSub.removeSeries(sJ);
-            if (sRsi) chartSub.removeSeries(sRsi);
+            removeSafely(sVol);
+            removeSafely(sMacdHist);
+            removeSafely(sMacdLine);
+            removeSafely(sMacdSig);
+            removeSafely(sK);
+            removeSafely(sD);
+            removeSafely(sJ);
+            removeSafely(sRsi);
 
             sVol = null; sMacdHist = null; sMacdLine = null; sMacdSig = null; sK = null; sD = null; sJ = null; sRsi = null;
 
@@ -1193,11 +1228,17 @@
 
             if (activeSub === 'VOL') {
                 sVol = chartSub.addHistogramSeries({ priceFormat: { type: 'volume' } });
-                const volData = rawData.map(d => ({
-                    time: d.time, value: d.volume,
-                    color: d.close >= d.open ? getColors().up : getColors().down
-                }));
-                sVol.setData(volData);
+                // Filter out entries with undefined/null/0 volume and ensure valid data
+                const volData = rawData
+                    .filter(d => d.volume !== undefined && d.volume !== null && d.volume > 0)
+                    .map(d => ({
+                        time: d.time,
+                        value: d.volume,
+                        color: d.close >= d.open ? getColors().up : getColors().down
+                    }));
+                if (volData.length > 0) {
+                    sVol.setData(volData);
+                }
                 subLeg.innerHTML = `<span class="leg-item">Vol:<span class="leg-val" id="l-vol">--</span></span>`;
             }
             else if (activeSub === 'MACD') {

@@ -876,7 +876,7 @@ SIGNAL_ICONS = {
 
 @router.message(Command("dbcheck"))
 async def cmd_dbcheck(message: types.Message):
-    """Check stock_history database status and trigger repair."""
+    """Check stock_history database status (non-blocking)."""
     if not await is_allowed(message.from_user.id):
         return
     
@@ -885,7 +885,7 @@ async def cmd_dbcheck(message: types.Message):
     status = await message.answer("⏳ 检查数据库状态...")
     
     try:
-        # Get database stats
+        # Get database stats (fast local query)
         stats = await stock_history_service.get_stats()
         
         if not stats:
@@ -897,30 +897,38 @@ async def cmd_dbcheck(message: types.Message):
         min_date = stats.get('min_date')
         max_date = stats.get('max_date')
         
-        # Get all available stock codes
-        all_codes = await stock_history_service.get_all_stock_codes()
-        total_available = len(all_codes) if all_codes else 0
-        
-        # Calculate coverage
-        coverage = (stock_count / total_available * 100) if total_available > 0 else 0
+        # Use local database count (no external API call)
+        total_available = stock_count  # What we have is what we show
         
         # Check freshness
         today = china_today()
         days_old = (today - max_date).days if max_date else 999
         freshness = "✅ 最新" if days_old <= 1 else f"⚠️ {days_old}天前"
         
+        # Get recent data count
+        recent_count = 0
+        if db.pool:
+            recent_count = await db.pool.fetchval("""
+                SELECT COUNT(DISTINCT code) 
+                FROM stock_history 
+                WHERE date >= $1::date - INTERVAL '7 days'
+            """, today) or 0
+        
         text = (
             "📊 <b>stock_history 数据库状态</b>\n"
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"📁 总记录数: <b>{total_records:,}</b>\n"
-            f"📈 股票数量: <b>{stock_count}</b>/{total_available}\n"
+            f"📈 股票数量: <b>{stock_count}</b>\n"
             f"📅 数据范围: {min_date} ~ {max_date}\n"
             f"🕐 数据新鲜度: {freshness}\n"
-            f"📊 覆盖率: <b>{coverage:.1f}%</b>\n"
+            f"⏱️ 近7天数据: <b>{recent_count}</b> 只股票\n"
         )
         
         # Add recommendations
-        if coverage < 90:
+        if recent_count == 0:
+            text += "\n⚠️ <b>问题:</b> 近7天无数据，信号扫描将无法工作"
+            text += "\n💡 <b>建议:</b> 执行 /dbsync 同步数据"
+        elif coverage < 50:
             text += "\n⚠️ <b>建议:</b> 执行 /dbsync 填充缺失数据"
         elif days_old > 3:
             text += "\n⚠️ <b>建议:</b> 执行 /dbsync 更新陈旧数据"

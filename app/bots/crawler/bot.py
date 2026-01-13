@@ -23,6 +23,9 @@ CRAWLER_BOT_COMMANDS = [
     BotCommand(command="history", description="个股历史"),
     BotCommand(command="chart", description="K线图表"),
     BotCommand(command="limitup", description="涨停报告"),
+    # Database commands
+    BotCommand(command="dbcheck", description="数据库状态"),
+    BotCommand(command="dbsync", description="同步历史数据"),
     # Trading simulator
     BotCommand(command="sim", description="模拟交易"),
     BotCommand(command="portfolio", description="持仓"),
