@@ -753,12 +753,32 @@
         const params = new URLSearchParams(window.location.search);
         // Check for Telegram Mini App startapp parameter in multiple places:
         // 1. Telegram WebApp SDK (initDataUnsafe.start_param)
-        // 2. URL query param (tgWebAppStartParam - set by Telegram when opening via t.me link)
+        // 2. URL query param (tgWebAppStartParam/startapp - set by Telegram or manual)
         // 3. Direct URL query param (code - for direct web access)
         const tgStartParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param
             || params.get('tgWebAppStartParam')
-            || params.get('code');
-        const code = tgStartParam || '600519';
+            || params.get('startapp');
+
+        function parseStartParam(startParam) {
+            if (!startParam) {
+                return { code: null, context: null };
+            }
+            const idx = startParam.indexOf('_');
+            if (idx === -1) {
+                return { code: startParam, context: null };
+            }
+            const codePart = startParam.substring(0, idx);
+            const contextPart = startParam.substring(idx + 1);
+            return {
+                code: codePart || null,
+                context: contextPart || null
+            };
+        }
+
+        const parsedStart = parseStartParam(tgStartParam);
+        const parsedCodeParam = parseStartParam(params.get('code'));
+        let navContext = params.get('context') || parsedCodeParam.context || parsedStart.context;
+        let code = parsedCodeParam.code || parsedStart.code || '600519';
         const API_BASE = window.location.origin;
 
         // User ID for watchlist
@@ -1942,32 +1962,10 @@
         }
 
         // --- Navigation ---
-        let navContext = null;
         let prevCode = null;
         let nextCode = null;
 
         function initNavigation() {
-            // Parse context from start param or URL
-            // startapp=CODE_CONTEXT
-            const params = new URLSearchParams(window.location.search);
-            let startapp = params.get('tgWebAppStartParam') || params.get('startapp');
-
-            if (startapp && startapp.includes('_')) {
-                const parts = startapp.split('_');
-                // Last part is context? Or first part is code?
-                // Format: CODE_CONTEXT. But CODE is 6 digits.
-                // Example: 000001_limit_up
-                // But context can have underscores too (limit_up_first)
-                // So split by first underscore
-                const idx = startapp.indexOf('_');
-                if (idx !== -1) {
-                    navContext = startapp.substring(idx + 1);
-                }
-            } else {
-                // Check URL param
-                navContext = params.get('context');
-            }
-
             if (navContext) {
                 checkNavigation();
             }
