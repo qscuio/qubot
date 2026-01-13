@@ -872,6 +872,91 @@ SIGNAL_ICONS = {
 }
 
 
+@router.message(Command("dbcheck"))
+async def cmd_dbcheck(message: types.Message):
+    """Check stock_history database status and trigger repair."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    from app.services.stock_history import stock_history_service
+    
+    status = await message.answer("⏳ 检查数据库状态...")
+    
+    try:
+        # Get database stats
+        stats = await stock_history_service.get_stats()
+        
+        if not stats:
+            await status.edit_text("❌ 数据库未连接")
+            return
+        
+        total_records = stats.get('total_records', 0)
+        stock_count = stats.get('stock_count', 0)
+        min_date = stats.get('min_date')
+        max_date = stats.get('max_date')
+        
+        # Get all available stock codes
+        all_codes = await stock_history_service.get_all_stock_codes()
+        total_available = len(all_codes) if all_codes else 0
+        
+        # Calculate coverage
+        coverage = (stock_count / total_available * 100) if total_available > 0 else 0
+        
+        # Check freshness
+        today = china_today()
+        days_old = (today - max_date).days if max_date else 999
+        freshness = "✅ 最新" if days_old <= 1 else f"⚠️ {days_old}天前"
+        
+        text = (
+            "📊 <b>stock_history 数据库状态</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📁 总记录数: <b>{total_records:,}</b>\n"
+            f"📈 股票数量: <b>{stock_count}</b>/{total_available}\n"
+            f"📅 数据范围: {min_date} ~ {max_date}\n"
+            f"🕐 数据新鲜度: {freshness}\n"
+            f"📊 覆盖率: <b>{coverage:.1f}%</b>\n"
+        )
+        
+        # Add recommendations
+        if coverage < 90:
+            text += "\n⚠️ <b>建议:</b> 执行 /dbsync 填充缺失数据"
+        elif days_old > 3:
+            text += "\n⚠️ <b>建议:</b> 执行 /dbsync 更新陈旧数据"
+        else:
+            text += "\n✅ 数据库状态良好"
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 立即同步", callback_data="db:sync")
+        builder.button(text="◀️ 返回", callback_data="main")
+        builder.adjust(2)
+        
+        await status.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        
+    except Exception as e:
+        await status.edit_text(f"❌ 检查失败: {e}")
+
+
+@router.callback_query(F.data == "db:sync")
+async def cb_db_sync(callback: types.CallbackQuery):
+    """Trigger database sync."""
+    if not await is_allowed(callback.from_user.id):
+        await safe_answer(callback, "无权限")
+        return
+    
+    await safe_answer(callback)
+    
+    from app.services.stock_history import stock_history_service
+    
+    try:
+        await callback.message.edit_text("⏳ 正在后台同步数据，这可能需要几分钟...\n\n请稍后使用 /dbcheck 查看进度")
+        
+        # Trigger update in background
+        asyncio.create_task(stock_history_service.update_all_stocks())
+        
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 同步失败: {e}")
+
+
 @router.message(Command("scan"))
 async def cmd_scan(message: types.Message):
     if not await is_allowed(message.from_user.id):
