@@ -168,52 +168,52 @@ class WatchlistService:
         if not ak:
             return watchlist
         
-        try:
-            # Get all current prices
-            df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
-            if df is None or df.empty:
-                return watchlist
+        # Optimized: Fetch prices for only the stocks in the watchlist
+        result = []
+        for stock in watchlist:
+            code = stock['code']
+            add_price = float(stock.get('add_price') or 0)
             
-            # Build price lookup
-            price_map = {}
-            for _, row in df.iterrows():
-                code = str(row.get('代码', ''))
-                price_map[code] = {
-                    'current_price': float(row.get('最新价', 0) or 0),
-                    'change_pct': float(row.get('涨跌幅', 0) or 0),
-                    'name': str(row.get('名称', '')),
-                }
+            current_price = 0
+            today_change = 0
+            stock_name = stock.get('name') or code
             
-            # Enrich watchlist
-            result = []
-            for stock in watchlist:
-                code = stock['code']
-                info = price_map.get(code, {})
-                
-                current_price = info.get('current_price', 0)
-                add_price = float(stock.get('add_price') or 0)
-                
-                # Calculate performance since added
-                if add_price > 0 and current_price > 0:
-                    total_change = ((current_price - add_price) / add_price) * 100
-                else:
-                    total_change = 0
-                
-                result.append({
-                    'code': code,
-                    'name': info.get('name') or stock.get('name') or code,
-                    'add_price': add_price,
-                    'add_date': stock.get('add_date'),
-                    'current_price': current_price,
-                    'today_change': info.get('change_pct', 0),
-                    'total_change': total_change,
-                })
+            try:
+                # Use efficient single-stock API
+                df = await asyncio.to_thread(ak.stock_individual_info_em, symbol=code)
+                if df is not None and not df.empty:
+                    info = dict(zip(df['item'], df['value']))
+                    
+                    price_val = info.get('总市值')  # Try different fields
+                    try:
+                        current_price = float(info.get('最新价', 0) or 0)
+                    except:
+                        current_price = 0
+                    
+                    today_change = 0  # individual_info_em doesn't have change %
+                    stock_name = info.get('股票简称') or stock_name
+                    
+            except Exception as e:
+                logger.warn(f"Failed to get price for {code}: {e}")
             
-            return result
+            # Calculate performance since added
+            if add_price > 0 and current_price > 0:
+                total_change = ((current_price - add_price) / add_price) * 100
+            else:
+                total_change = 0
             
-        except Exception as e:
-            logger.error(f"Failed to get prices: {e}")
-            return watchlist
+            result.append({
+                'code': code,
+                'name': stock_name,
+                'add_price': add_price,
+                'add_date': stock.get('add_date'),
+                'current_price': current_price,
+                'today_change': today_change,
+                'total_change': total_change,
+            })
+        
+        return result
+
     
     # ─────────────────────────────────────────────────────────────────────────
     # Reports
