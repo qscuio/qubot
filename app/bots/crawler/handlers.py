@@ -2177,3 +2177,47 @@ async def cb_sim_scan(callback: types.CallbackQuery):
         )
     except Exception as e:
         await callback.message.edit_text(f"❌ 扫描失败: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Limit-Up Reports (涨停股报告)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.message(Command("limitup"))
+async def cmd_limitup(message: types.Message, command: CommandObject):
+    """Manual trigger for limit-up reports.
+    
+    /limitup morning - Send morning price update
+    /limitup afternoon - Send afternoon limit-up report
+    """
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    from app.services.limit_up import limit_up_service
+    
+    args = command.args or ""
+    
+    if args == "morning":
+        status_msg = await message.answer("⏳ 正在生成早报...")
+        try:
+            await limit_up_service.send_morning_price_update()
+            await status_msg.edit_text("✅ 早报已发送到频道")
+        except Exception as e:
+            await status_msg.edit_text(f"❌ 失败: {e}")
+    
+    elif args == "afternoon":
+        status_msg = await message.answer("⏳ 正在生成涨停日报...")
+        try:
+            await limit_up_service.send_afternoon_report()
+            await status_msg.edit_text("✅ 涨停日报已发送到频道")
+        except Exception as e:
+            await status_msg.edit_text(f"❌ 失败: {e}")
+    
+    else:
+        await message.answer(
+            "📊 <b>涨停股报告</b>\n\n"
+            "<code>/limitup morning</code> - 发送昨日涨停股早报\n"
+            "<code>/limitup afternoon</code> - 发送今日涨停日报",
+            parse_mode="HTML"
+        )
+
