@@ -1,6 +1,8 @@
 from typing import Optional, Literal
 from app.core.config import settings
 
+DEFAULT_CRAWLER_BOT_USERNAME = "q_tty_crawler_bot"
+
 
 def _normalize_code(code: str) -> str:
     return str(code).zfill(6)
@@ -40,6 +42,9 @@ def get_chart_url(
         # 2. Fallback to config setting if runtime cache not yet populated
         if not bot_username:
             bot_username = getattr(settings, 'CRAWLER_BOT_USERNAME', None)
+        # 3. Hard fallback to known bot username to avoid external web links
+        if not bot_username:
+            bot_username = DEFAULT_CRAWLER_BOT_USERNAME
         
         if bot_username:
             # Direct Mini App link - opens chart immediately without confirmation
@@ -71,11 +76,7 @@ def get_eastmoney_url(code: str) -> str:
 
 def get_miniapp_url(code: str) -> str:
     """Direct shortcut for our miniapp chart URL."""
-    code = _normalize_code(code)
-    base_url = settings.WEBFRONT_URL
-    if base_url:
-        return f"{base_url.rstrip('/')}/miniapp/chart/?code={code}"
-    return get_eastmoney_url(code)  # Fallback
+    return get_chart_url(code, source="miniapp")
 
 
 # Async wrapper for backward compatibility

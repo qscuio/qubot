@@ -1299,20 +1299,12 @@ async def cmd_chart(message: types.Message, command: CommandObject):
     
     code = code.strip()
     
-    # Build Mini App URL
-    base_url = settings.WEBFRONT_URL
-    if not base_url:
-        await message.answer("❌ WEBFRONT_URL not configured", parse_mode="HTML")
-        return
-    
-    base_url = base_url.rstrip('/')
-    webapp_url = f"{base_url}/miniapp/chart/?code={code}"
-    
-    # Create WebApp button
-    from aiogram.types import WebAppInfo
-    
+    # Build Mini App URL (use t.me deep link to avoid confirmation dialog)
+    webapp_url = get_chart_url(code)
+
+    # Create URL button (opens Mini App directly)
     builder = InlineKeyboardBuilder()
-    builder.button(text="📈 Open Chart", web_app=WebAppInfo(url=webapp_url))
+    builder.button(text="📈 Open Chart", url=webapp_url)
     builder.button(text="📜 History", callback_data=f"history:{code}")
     builder.adjust(1)
     
