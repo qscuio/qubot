@@ -75,15 +75,40 @@ class WatchlistService:
         
         if ak:
             try:
-                df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+                # Optimized: Get single stock info instead of fetching all 5000+ stocks
+                # stock_individual_info_em returns a dataframe with 'item' and 'value' columns
+                df = await asyncio.to_thread(ak.stock_individual_info_em, symbol=code)
+                
                 if df is not None and not df.empty:
-                    stock_row = df[df['代码'] == code]
-                    if not stock_row.empty:
-                        row = stock_row.iloc[0]
-                        add_price = float(row.get('最新价', 0) or 0)
-                        stock_name = stock_name or str(row.get('名称', ''))
+                    # Convert to dict for easier access
+                    # items: 股票代码, 股票简称, 最新价, ...
+                    # Use zip to avoid needing 'import pandas as pd'
+                    info = dict(zip(df['item'], df['value']))
+                    
+                    price_val = info.get('最新价')
+                    if price_val:
+                        try:
+                            add_price = float(price_val)
+                        except:
+                            add_price = 0
+                            
+                    stock_name = stock_name or info.get('股票简称', '')
+                    
             except Exception as e:
-                logger.warn(f"Failed to get stock price: {e}")
+                logger.warn(f"Failed to get stock price (optimized): {e}")
+                
+            # Fallback if name is still missing
+            if not stock_name and not add_price:
+                 try:
+                    df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+                    if df is not None and not df.empty:
+                        stock_row = df[df['代码'] == code]
+                        if not stock_row.empty:
+                            row = stock_row.iloc[0]
+                            add_price = float(row.get('最新价', 0) or 0)
+                            stock_name = stock_name or str(row.get('名称', ''))
+                 except Exception as e:
+                    logger.warn(f"Failed to get stock price (fallback): {e}")
         
         try:
             await db.pool.execute("""
