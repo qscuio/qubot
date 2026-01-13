@@ -8,7 +8,6 @@
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
-            /* Light theme (default) */
             --bg-primary: #f5f7fa;
             --bg-secondary: #ffffff;
             --bg-tertiary: #e8ecf1;
@@ -67,7 +66,7 @@
         }
 
         .header {
-            padding: 10px 16px;
+            padding: 8px 12px;
             background: var(--bg-secondary);
             display: flex;
             justify-content: space-between;
@@ -78,27 +77,27 @@
         .stock-info {
             display: flex;
             align-items: baseline;
-            gap: 12px;
+            gap: 8px;
         }
 
         .stock-name {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: 600;
         }
 
         .stock-code {
-            font-size: 14px;
+            font-size: 12px;
             color: var(--text-muted);
         }
 
         .stock-price {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 600;
         }
 
         .stock-change {
-            font-size: 14px;
-            padding: 2px 8px;
+            font-size: 12px;
+            padding: 2px 6px;
             border-radius: 4px;
         }
 
@@ -118,18 +117,18 @@
         }
 
         .toolbar {
-            padding: 6px 16px;
+            padding: 4px 12px;
             background: var(--bg-secondary);
             display: flex;
-            gap: 8px;
+            gap: 6px;
             border-bottom: 1px solid var(--border-color);
             flex-wrap: wrap;
             align-items: center;
         }
 
         .toolbar-btn {
-            padding: 4px 10px;
-            font-size: 12px;
+            padding: 3px 8px;
+            font-size: 11px;
             background: var(--btn-bg);
             border: 1px solid var(--btn-border);
             color: var(--btn-text);
@@ -140,7 +139,6 @@
 
         .toolbar-btn:hover {
             background: var(--btn-hover-bg);
-            color: var(--text-primary);
         }
 
         .toolbar-btn.active {
@@ -151,71 +149,141 @@
 
         .toolbar-divider {
             width: 1px;
-            height: 20px;
+            height: 16px;
             background: var(--border-color);
-            margin: 0 4px;
+            margin: 0 2px;
         }
 
         .theme-btn {
-            padding: 4px 8px;
-            font-size: 14px;
+            padding: 3px 6px;
+            font-size: 12px;
             background: var(--btn-bg);
             border: 1px solid var(--btn-border);
             color: var(--btn-text);
             border-radius: 4px;
             cursor: pointer;
-            transition: all 0.2s;
             margin-left: auto;
         }
 
-        .theme-btn:hover {
-            background: var(--btn-hover-bg);
-        }
-
-        #chart-container {
-            width: 100%;
-            height: calc(100vh - 100px);
-        }
-
-        .loading {
+        .main-container {
             display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100%;
-            font-size: 16px;
-            color: var(--text-muted);
+            height: calc(100vh - 80px);
         }
 
-        .error {
-            color: var(--up-color);
+        .charts-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        #kline-container {
+            flex: 3;
+            min-height: 0;
+            position: relative;
+        }
+
+        #volume-container {
+            flex: 1;
+            min-height: 60px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .chip-panel {
+            width: 120px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chip-header {
+            padding: 6px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
             text-align: center;
-            padding: 20px;
+        }
+
+        .chip-date {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        #chip-chart {
+            flex: 1;
+            padding: 4px;
+            overflow: hidden;
+        }
+
+        .chip-bar-container {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+
+        .chip-bar-row {
+            display: flex;
+            align-items: center;
+            font-size: 9px;
+            height: 14px;
+        }
+
+        .chip-price {
+            width: 40px;
+            text-align: right;
+            padding-right: 4px;
+            color: var(--text-muted);
+            font-size: 8px;
+        }
+
+        .chip-bar-wrapper {
+            flex: 1;
+            height: 10px;
+            background: var(--bg-tertiary);
+            position: relative;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .chip-bar {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .chip-bar.profit {
+            background: var(--up-color);
+        }
+
+        .chip-bar.loss {
+            background: var(--down-color);
         }
 
         .legend {
             position: absolute;
-            top: 110px;
-            left: 16px;
-            font-size: 11px;
+            top: 4px;
+            left: 8px;
+            font-size: 10px;
             color: var(--text-muted);
             background: var(--legend-bg);
-            padding: 8px 12px;
+            padding: 4px 8px;
             border-radius: 4px;
             z-index: 10;
-            max-width: 300px;
             border: 1px solid var(--border-color);
         }
 
         .legend-row {
             display: flex;
-            gap: 12px;
-            margin-bottom: 3px;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
         .legend-item {
             display: flex;
-            gap: 3px;
+            gap: 2px;
         }
 
         .legend-label {
@@ -242,6 +310,49 @@
         .ma60 {
             color: #a855f7;
         }
+
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .error {
+            color: var(--up-color);
+            text-align: center;
+            padding: 20px;
+        }
+
+        .chip-stats {
+            padding: 4px 8px;
+            font-size: 9px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .chip-stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+        }
+
+        .chip-stat-label {
+            color: var(--text-muted);
+        }
+
+        .chip-stat-value {
+            font-weight: 500;
+        }
+
+        .chip-stat-value.profit {
+            color: var(--up-color);
+        }
+
+        .chip-stat-value.loss {
+            color: var(--down-color);
+        }
     </style>
 </head>
 
@@ -251,127 +362,107 @@
             <span class="stock-name" id="stockName">--</span>
             <span class="stock-code" id="stockCode">--</span>
         </div>
-        <div style="display: flex; align-items: baseline; gap: 8px;">
+        <div style="display: flex; align-items: baseline; gap: 6px;">
             <span class="stock-price" id="stockPrice">--</span>
             <span class="stock-change flat" id="stockChange">--</span>
         </div>
     </div>
     <div class="toolbar">
-        <!-- Period buttons -->
         <button class="toolbar-btn active" id="btnDaily" onclick="setPeriod('daily')">日K</button>
         <button class="toolbar-btn" id="btnWeekly" onclick="setPeriod('weekly')">周K</button>
-        <button class="toolbar-btn" id="btnMonthly" onclick="setPeriod('monthly')">月K</button>
         <div class="toolbar-divider"></div>
-        <!-- Indicator buttons -->
         <button class="toolbar-btn active" id="btnMA" onclick="toggleMA()">MA</button>
         <button class="toolbar-btn" id="btnBOLL" onclick="toggleBOLL()">BOLL</button>
         <div class="toolbar-divider"></div>
-        <button class="toolbar-btn active" id="btnVol" onclick="toggleVolume()">VOL</button>
-        <button class="toolbar-btn" id="btnMACD" onclick="toggleMACD()">MACD</button>
-        <div class="toolbar-divider"></div>
         <button class="toolbar-btn active" id="btnSignals" onclick="toggleSignals()">信号</button>
-        <button class="toolbar-btn" id="btnTrend" onclick="toggleTrend()">趋势线</button>
         <div class="toolbar-divider"></div>
-        <!-- Days buttons -->
         <button class="toolbar-btn" onclick="setDays(30)">30</button>
         <button class="toolbar-btn active" onclick="setDays(60)">60</button>
         <button class="toolbar-btn" onclick="setDays(120)">120</button>
-        <!-- Theme toggle -->
         <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="切换主题">🌙</button>
     </div>
-    <div id="chart-container">
-        <div class="loading" id="loading">加载中...</div>
-    </div>
-    <div class="legend" id="legend" style="display: none;">
-        <div class="legend-row">
-            <div class="legend-item"><span class="legend-label">O:</span><span class="legend-value" id="legO">--</span>
+
+    <div class="main-container">
+        <div class="charts-container">
+            <div id="kline-container">
+                <div class="loading" id="loading">加载中...</div>
+                <div class="legend" id="legend" style="display: none;">
+                    <div class="legend-row">
+                        <div class="legend-item"><span class="legend-label">O:</span><span class="legend-value"
+                                id="legO">--</span></div>
+                        <div class="legend-item"><span class="legend-label">H:</span><span class="legend-value"
+                                id="legH">--</span></div>
+                        <div class="legend-item"><span class="legend-label">L:</span><span class="legend-value"
+                                id="legL">--</span></div>
+                        <div class="legend-item"><span class="legend-label">C:</span><span class="legend-value"
+                                id="legC">--</span></div>
+                    </div>
+                    <div class="legend-row" id="maLegend">
+                        <div class="legend-item"><span class="legend-label ma5">MA5:</span><span
+                                class="legend-value ma5" id="legMA5">--</span></div>
+                        <div class="legend-item"><span class="legend-label ma10">MA10:</span><span
+                                class="legend-value ma10" id="legMA10">--</span></div>
+                        <div class="legend-item"><span class="legend-label ma20">MA20:</span><span
+                                class="legend-value ma20" id="legMA20">--</span></div>
+                    </div>
+                </div>
             </div>
-            <div class="legend-item"><span class="legend-label">H:</span><span class="legend-value" id="legH">--</span>
-            </div>
-            <div class="legend-item"><span class="legend-label">L:</span><span class="legend-value" id="legL">--</span>
-            </div>
-            <div class="legend-item"><span class="legend-label">C:</span><span class="legend-value" id="legC">--</span>
-            </div>
-            <div class="legend-item"><span class="legend-label">Vol:</span><span class="legend-value"
-                    id="legVol">--</span></div>
+            <div id="volume-container"></div>
         </div>
-        <div class="legend-row" id="maLegend">
-            <div class="legend-item"><span class="legend-label ma5">MA5:</span><span class="legend-value ma5"
-                    id="legMA5">--</span></div>
-            <div class="legend-item"><span class="legend-label ma10">MA10:</span><span class="legend-value ma10"
-                    id="legMA10">--</span></div>
-            <div class="legend-item"><span class="legend-label ma20">MA20:</span><span class="legend-value ma20"
-                    id="legMA20">--</span></div>
-            <div class="legend-item"><span class="legend-label ma60">MA60:</span><span class="legend-value ma60"
-                    id="legMA60">--</span></div>
-        </div>
-        <div class="legend-row" id="bollLegend" style="display: none;">
-            <div class="legend-item"><span class="legend-label" style="color:#f97316">UPPER:</span><span
-                    class="legend-value" id="legBollUp">--</span></div>
-            <div class="legend-item"><span class="legend-label" style="color:#3b82f6">MID:</span><span
-                    class="legend-value" id="legBollMid">--</span></div>
-            <div class="legend-item"><span class="legend-label" style="color:#22c55e">LOWER:</span><span
-                    class="legend-value" id="legBollLow">--</span></div>
+        <div class="chip-panel">
+            <div class="chip-header">
+                筹码分布
+                <div class="chip-date" id="chipDate">--</div>
+            </div>
+            <div id="chip-chart"></div>
+            <div class="chip-stats">
+                <div class="chip-stat-row">
+                    <span class="chip-stat-label">获利比例</span>
+                    <span class="chip-stat-value profit" id="profitRatio">--%</span>
+                </div>
+                <div class="chip-stat-row">
+                    <span class="chip-stat-label">平均成本</span>
+                    <span class="chip-stat-value" id="avgCost">--</span>
+                </div>
+                <div class="chip-stat-row">
+                    <span class="chip-stat-label">集中度</span>
+                    <span class="chip-stat-value" id="concentration">--%</span>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        // Get stock code from URL params
         const params = new URLSearchParams(window.location.search);
         const code = params.get('code') || '600519';
         let currentDays = parseInt(params.get('days')) || 60;
         let currentPeriod = params.get('period') || 'daily';
-
-        // API base URL (same origin)
         const API_BASE = window.location.origin;
 
-        let chart, candleSeries, volumeSeries;
+        let klineChart, volumeChart, candleSeries, volumeSeries;
         let ma5Series, ma10Series, ma20Series, ma60Series;
         let bollUpperSeries, bollMidSeries, bollLowerSeries;
-        let macdDifSeries, macdDeaSeries, macdHistSeries;
         let rawData = [];
+        let selectedDayIndex = -1;
 
-        // State
         let showMA = true;
         let showBOLL = false;
-        let showVolume = true;
-        let showMACD = false;
         let showSignals = true;
-        let showTrend = false;
 
-        // Trend line series
-        let supportLine, resistanceLine;
-
-        // Theme management
+        // Theme
         function getSystemTheme() {
             return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
 
-        function getStoredTheme() {
-            return localStorage.getItem('chart-theme');
-        }
-
         function initTheme() {
-            const stored = getStoredTheme();
-            const theme = stored || getSystemTheme();
-            applyTheme(theme);
-
-            // Listen for system theme changes
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-                if (!getStoredTheme()) {
-                    applyTheme(e.matches ? 'dark' : 'light');
-                }
-            });
+            const stored = localStorage.getItem('chart-theme');
+            applyTheme(stored || getSystemTheme());
         }
 
         function applyTheme(theme) {
             document.documentElement.setAttribute('data-theme', theme);
             document.getElementById('themeBtn').textContent = theme === 'dark' ? '☀️' : '🌙';
-
-            // Update chart colors if chart exists
-            if (chart) {
-                updateChartTheme();
-            }
+            if (klineChart) updateChartTheme();
         }
 
         function toggleTheme() {
@@ -387,65 +478,40 @@
                 background: isDark ? '#0f172a' : '#ffffff',
                 textColor: isDark ? '#64748b' : '#888888',
                 gridColor: isDark ? '#1e293b' : '#e5e7eb',
-                borderColor: isDark ? '#475569' : '#d1d5db',
             };
         }
 
         function updateChartTheme() {
             const colors = getChartColors();
-            chart.applyOptions({
-                layout: {
-                    background: { color: colors.background },
-                    textColor: colors.textColor,
-                },
-                grid: {
-                    vertLines: { color: colors.gridColor },
-                    horzLines: { color: colors.gridColor },
-                },
-                rightPriceScale: {
-                    borderColor: colors.gridColor,
-                },
-                timeScale: {
-                    borderColor: colors.gridColor,
-                },
-            });
+            const opts = {
+                layout: { background: { color: colors.background }, textColor: colors.textColor },
+                grid: { vertLines: { color: colors.gridColor }, horzLines: { color: colors.gridColor } },
+            };
+            klineChart.applyOptions(opts);
+            volumeChart.applyOptions(opts);
         }
 
-        // Calculate Moving Average
+        // Calculations
         function calculateMA(data, period) {
             const result = [];
             for (let i = 0; i < data.length; i++) {
-                if (i < period - 1) {
-                    result.push({ time: data[i].time, value: null });
-                } else {
-                    let sum = 0;
-                    for (let j = 0; j < period; j++) {
-                        sum += data[i - j].close;
-                    }
-                    result.push({ time: data[i].time, value: sum / period });
-                }
+                if (i < period - 1) continue;
+                let sum = 0;
+                for (let j = 0; j < period; j++) sum += data[i - j].close;
+                result.push({ time: data[i].time, value: sum / period });
             }
-            return result.filter(d => d.value !== null);
+            return result;
         }
 
-        // Calculate Bollinger Bands (20-day, 2 std)
         function calculateBOLL(data, period = 20, multiplier = 2) {
             const upper = [], mid = [], lower = [];
-            for (let i = 0; i < data.length; i++) {
-                if (i < period - 1) continue;
-
+            for (let i = period - 1; i < data.length; i++) {
                 let sum = 0;
-                for (let j = 0; j < period; j++) {
-                    sum += data[i - j].close;
-                }
+                for (let j = 0; j < period; j++) sum += data[i - j].close;
                 const avg = sum / period;
-
                 let variance = 0;
-                for (let j = 0; j < period; j++) {
-                    variance += Math.pow(data[i - j].close - avg, 2);
-                }
+                for (let j = 0; j < period; j++) variance += Math.pow(data[i - j].close - avg, 2);
                 const std = Math.sqrt(variance / period);
-
                 mid.push({ time: data[i].time, value: avg });
                 upper.push({ time: data[i].time, value: avg + multiplier * std });
                 lower.push({ time: data[i].time, value: avg - multiplier * std });
@@ -453,175 +519,151 @@
             return { upper, mid, lower };
         }
 
-        // Calculate MACD (12, 26, 9)
-        function calculateMACD(data, fast = 12, slow = 26, signal = 9) {
-            const dif = [], dea = [], hist = [];
-            let emaFast = null, emaSlow = null, emaDea = null;
-            const alphaFast = 2 / (fast + 1);
-            const alphaSlow = 2 / (slow + 1);
-            const alphaSignal = 2 / (signal + 1);
-
-            for (let i = 0; i < data.length; i++) {
-                const close = data[i].close;
-
-                // Initialize EMAs
-                if (emaFast === null) {
-                    emaFast = close;
-                    emaSlow = close;
-                } else {
-                    emaFast = close * alphaFast + emaFast * (1 - alphaFast);
-                    emaSlow = close * alphaSlow + emaSlow * (1 - alphaSlow);
-                }
-
-                const difValue = emaFast - emaSlow;
-
-                if (emaDea === null) {
-                    emaDea = difValue;
-                } else {
-                    emaDea = difValue * alphaSignal + emaDea * (1 - alphaSignal);
-                }
-
-                const histValue = (difValue - emaDea) * 2;  // Histogram
-
-                if (i >= slow - 1) {
-                    dif.push({ time: data[i].time, value: difValue });
-                    dea.push({ time: data[i].time, value: emaDea });
-                    hist.push({
-                        time: data[i].time,
-                        value: histValue,
-                        color: histValue >= 0 ? 'rgba(239,68,68,0.8)' : 'rgba(34,197,94,0.8)'
-                    });
-                }
-            }
-            return { dif, dea, hist };
-        }
-
-        // Detect trading signals
         function detectSignals(data) {
             const signals = [];
             const ma5 = calculateMA(data, 5);
             const ma10 = calculateMA(data, 10);
-            const macd = calculateMACD(data);
-            const boll = calculateBOLL(data);
 
-            // Find indices where MAs are valid
             for (let i = 1; i < data.length; i++) {
                 const time = data[i].time;
-                const price = data[i].close;
-                const low = data[i].low;
-                const high = data[i].high;
-
-                // Get MA values for current and previous day
+                const prevTime = data[i - 1].time;
                 const ma5Curr = ma5.find(m => m.time === time)?.value;
                 const ma10Curr = ma10.find(m => m.time === time)?.value;
-                const prevTime = data[i - 1].time;
                 const ma5Prev = ma5.find(m => m.time === prevTime)?.value;
                 const ma10Prev = ma10.find(m => m.time === prevTime)?.value;
 
                 if (ma5Curr && ma10Curr && ma5Prev && ma10Prev) {
-                    // Golden Cross: MA5 crosses above MA10
                     if (ma5Prev <= ma10Prev && ma5Curr > ma10Curr) {
-                        signals.push({
-                            time: time,
-                            position: 'belowBar',
-                            color: '#ef4444',
-                            shape: 'arrowUp',
-                            text: '金叉'
-                        });
+                        signals.push({ time, position: 'belowBar', color: '#ef4444', shape: 'arrowUp', text: '金叉' });
                     }
-                    // Death Cross: MA5 crosses below MA10
                     if (ma5Prev >= ma10Prev && ma5Curr < ma10Curr) {
-                        signals.push({
-                            time: time,
-                            position: 'aboveBar',
-                            color: '#22c55e',
-                            shape: 'arrowDown',
-                            text: '死叉'
-                        });
-                    }
-                }
-
-                // MACD Golden/Death Cross
-                const difCurr = macd.dif.find(m => m.time === time)?.value;
-                const deaCurr = macd.dea.find(m => m.time === time)?.value;
-                const difPrev = macd.dif.find(m => m.time === prevTime)?.value;
-                const deaPrev = macd.dea.find(m => m.time === prevTime)?.value;
-
-                if (difCurr !== undefined && deaCurr !== undefined && difPrev !== undefined && deaPrev !== undefined) {
-                    // MACD Golden Cross (DIF crosses above DEA)
-                    if (difPrev <= deaPrev && difCurr > deaCurr) {
-                        signals.push({
-                            time: time,
-                            position: 'belowBar',
-                            color: '#f97316',
-                            shape: 'circle',
-                            text: 'M金'
-                        });
-                    }
-                    // MACD Death Cross
-                    if (difPrev >= deaPrev && difCurr < deaCurr) {
-                        signals.push({
-                            time: time,
-                            position: 'aboveBar',
-                            color: '#8b5cf6',
-                            shape: 'circle',
-                            text: 'M死'
-                        });
-                    }
-                }
-
-                // BOLL breakthrough signals
-                const bollUpper = boll.upper.find(b => b.time === time)?.value;
-                const bollLower = boll.lower.find(b => b.time === time)?.value;
-                const prevClose = data[i - 1].close;
-                const bollUpperPrev = boll.upper.find(b => b.time === prevTime)?.value;
-                const bollLowerPrev = boll.lower.find(b => b.time === prevTime)?.value;
-
-                if (bollUpper && bollLower && bollUpperPrev && bollLowerPrev) {
-                    // Price breaks above upper band (overbought warning)
-                    if (prevClose <= bollUpperPrev && price > bollUpper) {
-                        signals.push({
-                            time: time,
-                            position: 'aboveBar',
-                            color: '#f59e0b',
-                            shape: 'square',
-                            text: '超买'
-                        });
-                    }
-                    // Price breaks below lower band (oversold opportunity)
-                    if (prevClose >= bollLowerPrev && price < bollLower) {
-                        signals.push({
-                            time: time,
-                            position: 'belowBar',
-                            color: '#06b6d4',
-                            shape: 'square',
-                            text: '超卖'
-                        });
+                        signals.push({ time, position: 'aboveBar', color: '#22c55e', shape: 'arrowDown', text: '死叉' });
                     }
                 }
             }
-
             return signals;
         }
 
-        // Calculate support and resistance levels
-        function calculateTrendLevels(data) {
-            if (data.length < 5) return { support: null, resistance: null };
+        // Chip Distribution Calculation (based on volume-weighted price distribution)
+        function calculateChipDistribution(data, upToIndex) {
+            if (!data || data.length === 0) return { distribution: [], avgCost: 0, profitRatio: 0, concentration: 0 };
 
-            // Find recent swing highs and lows
-            const lookback = Math.min(20, data.length);
-            const recentData = data.slice(-lookback);
+            const endIndex = upToIndex >= 0 ? upToIndex : data.length - 1;
+            const currentPrice = data[endIndex].close;
 
-            // Simple method: use recent high and low as resistance/support
-            let resistance = -Infinity;
-            let support = Infinity;
+            // Use last 60 days of data for chip calculation
+            const lookback = Math.min(60, endIndex + 1);
+            const startIndex = endIndex - lookback + 1;
 
-            for (const d of recentData) {
-                if (d.high > resistance) resistance = d.high;
-                if (d.low < support) support = d.low;
+            // Find price range
+            let minPrice = Infinity, maxPrice = -Infinity;
+            let totalVolume = 0;
+
+            for (let i = startIndex; i <= endIndex; i++) {
+                if (data[i].low < minPrice) minPrice = data[i].low;
+                if (data[i].high > maxPrice) maxPrice = data[i].high;
+                totalVolume += data[i].volume;
             }
 
-            return { support, resistance };
+            // Add padding
+            const padding = (maxPrice - minPrice) * 0.1;
+            minPrice = Math.max(0, minPrice - padding);
+            maxPrice = maxPrice + padding;
+
+            // Create price buckets
+            const numBuckets = 20;
+            const bucketSize = (maxPrice - minPrice) / numBuckets;
+            const buckets = new Array(numBuckets).fill(0);
+
+            // Distribute volume into buckets based on price range
+            for (let i = startIndex; i <= endIndex; i++) {
+                const d = data[i];
+                const avgPrice = (d.high + d.low + d.close) / 3;
+                const decayFactor = 1 - (endIndex - i) * 0.01; // Recent days have more weight
+                const adjustedVolume = d.volume * Math.max(0.3, decayFactor);
+
+                // Distribute across touched price range
+                const lowBucket = Math.floor((d.low - minPrice) / bucketSize);
+                const highBucket = Math.floor((d.high - minPrice) / bucketSize);
+
+                for (let b = lowBucket; b <= highBucket && b < numBuckets; b++) {
+                    if (b >= 0) buckets[b] += adjustedVolume / (highBucket - lowBucket + 1);
+                }
+            }
+
+            // Normalize and create distribution
+            const maxBucket = Math.max(...buckets);
+            const distribution = [];
+            let profitVolume = 0, lossVolume = 0;
+            let weightedSum = 0, totalBucketVolume = 0;
+
+            for (let i = 0; i < numBuckets; i++) {
+                const price = minPrice + (i + 0.5) * bucketSize;
+                const percentage = maxBucket > 0 ? (buckets[i] / maxBucket) * 100 : 0;
+                const isProfit = price <= currentPrice;
+
+                distribution.push({ price, percentage, isProfit });
+
+                if (buckets[i] > 0) {
+                    if (isProfit) profitVolume += buckets[i];
+                    else lossVolume += buckets[i];
+                    weightedSum += price * buckets[i];
+                    totalBucketVolume += buckets[i];
+                }
+            }
+
+            const avgCost = totalBucketVolume > 0 ? weightedSum / totalBucketVolume : currentPrice;
+            const profitRatio = (profitVolume + lossVolume) > 0
+                ? (profitVolume / (profitVolume + lossVolume)) * 100 : 0;
+
+            // Concentration: measure how spread out the chips are
+            const topBuckets = buckets.slice().sort((a, b) => b - a).slice(0, 5);
+            const topSum = topBuckets.reduce((a, b) => a + b, 0);
+            const totalSum = buckets.reduce((a, b) => a + b, 0);
+            const concentration = totalSum > 0 ? (topSum / totalSum) * 100 : 0;
+
+            return { distribution: distribution.reverse(), avgCost, profitRatio, concentration, currentPrice };
+        }
+
+        function renderChipDistribution(dayIndex) {
+            const displayData = rawData.slice(-currentDays);
+            const actualIndex = dayIndex >= 0 ? dayIndex : displayData.length - 1;
+            const chips = calculateChipDistribution(displayData, actualIndex);
+
+            const container = document.getElementById('chip-chart');
+            container.innerHTML = '';
+
+            const dateStr = displayData[actualIndex]?.time || '--';
+            document.getElementById('chipDate').textContent = dateStr;
+            document.getElementById('profitRatio').textContent = chips.profitRatio.toFixed(1) + '%';
+            document.getElementById('avgCost').textContent = chips.avgCost.toFixed(2);
+            document.getElementById('concentration').textContent = chips.concentration.toFixed(1) + '%';
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'chip-bar-container';
+
+            chips.distribution.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'chip-bar-row';
+
+                const priceLabel = document.createElement('span');
+                priceLabel.className = 'chip-price';
+                priceLabel.textContent = item.price.toFixed(1);
+
+                const barWrapper = document.createElement('div');
+                barWrapper.className = 'chip-bar-wrapper';
+
+                const bar = document.createElement('div');
+                bar.className = 'chip-bar ' + (item.isProfit ? 'profit' : 'loss');
+                bar.style.width = item.percentage + '%';
+
+                barWrapper.appendChild(bar);
+                row.appendChild(priceLabel);
+                row.appendChild(barWrapper);
+                wrapper.appendChild(row);
+            });
+
+            container.appendChild(wrapper);
         }
 
         async function loadChart() {
@@ -630,10 +672,7 @@
                 if (!response.ok) throw new Error('Failed to load data');
 
                 const result = await response.json();
-
-                if (!result.data || result.data.length === 0) {
-                    throw new Error('No data available');
-                }
+                if (!result.data || result.data.length === 0) throw new Error('No data available');
 
                 rawData = result.data;
 
@@ -641,7 +680,6 @@
                 document.getElementById('stockName').textContent = result.name || code;
                 document.getElementById('stockCode').textContent = code;
 
-                // Get latest price info
                 const latest = rawData[rawData.length - 1];
                 const prev = rawData.length > 1 ? rawData[rawData.length - 2] : latest;
                 const change = ((latest.close - prev.close) / prev.close * 100);
@@ -651,116 +689,104 @@
                 changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
                 changeEl.className = `stock-change ${change > 0 ? 'up' : change < 0 ? 'down' : 'flat'}`;
 
-                // Hide loading
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('legend').style.display = 'block';
 
-                // Create chart
-                const container = document.getElementById('chart-container');
-                if (chart) chart.remove();
-
-                const colors = getChartColors();
-                chart = LightweightCharts.createChart(container, {
-                    width: container.clientWidth,
-                    height: container.clientHeight,
-                    layout: {
-                        background: { color: colors.background },
-                        textColor: colors.textColor,
-                    },
-                    grid: {
-                        vertLines: { color: colors.gridColor },
-                        horzLines: { color: colors.gridColor },
-                    },
-                    crosshair: {
-                        mode: LightweightCharts.CrosshairMode.Normal,
-                    },
-                    rightPriceScale: {
-                        borderColor: colors.gridColor,
-                    },
-                    timeScale: {
-                        borderColor: colors.gridColor,
-                        timeVisible: true,
-                    },
-                });
-
-                // Candlestick series
-                candleSeries = chart.addCandlestickSeries({
-                    upColor: '#ef4444',
-                    downColor: '#22c55e',
-                    borderUpColor: '#ef4444',
-                    borderDownColor: '#22c55e',
-                    wickUpColor: '#ef4444',
-                    wickDownColor: '#22c55e',
-                });
-
-                // Volume series
-                volumeSeries = chart.addHistogramSeries({
-                    color: '#22c55e',
-                    priceFormat: { type: 'volume' },
-                    priceScaleId: 'volume',
-                    scaleMargins: { top: 0.85, bottom: 0 },
-                });
-
-                // MA series
-                ma5Series = chart.addLineSeries({ color: '#fbbf24', lineWidth: 1, priceScaleId: 'right' });
-                ma10Series = chart.addLineSeries({ color: '#ec4899', lineWidth: 1, priceScaleId: 'right' });
-                ma20Series = chart.addLineSeries({ color: '#3b82f6', lineWidth: 1, priceScaleId: 'right' });
-                ma60Series = chart.addLineSeries({ color: '#a855f7', lineWidth: 1, priceScaleId: 'right' });
-
-                bollUpperSeries = chart.addLineSeries({ color: '#f97316', lineWidth: 1, priceScaleId: 'right', lineStyle: 2 });
-                bollMidSeries = chart.addLineSeries({ color: '#3b82f6', lineWidth: 1, priceScaleId: 'right' });
-                bollLowerSeries = chart.addLineSeries({ color: '#22c55e', lineWidth: 1, priceScaleId: 'right', lineStyle: 2 });
-
-                // Trend lines
-                supportLine = chart.addLineSeries({ color: '#22c55e', lineWidth: 2, priceScaleId: 'right', lineStyle: 1 });
-                resistanceLine = chart.addLineSeries({ color: '#ef4444', lineWidth: 2, priceScaleId: 'right', lineStyle: 1 });
-
-                // MACD series (separate scale at bottom)
-                macdHistSeries = chart.addHistogramSeries({
-                    color: '#22c55e',
-                    priceScaleId: 'macd',
-                    scaleMargins: { top: 0.85, bottom: 0.02 },
-                });
-                macdDifSeries = chart.addLineSeries({
-                    color: '#fbbf24',
-                    lineWidth: 1,
-                    priceScaleId: 'macd',
-                });
-                macdDeaSeries = chart.addLineSeries({
-                    color: '#a855f7',
-                    lineWidth: 1,
-                    priceScaleId: 'macd',
-                });
-
-                // Set data
+                createCharts();
                 updateChartData();
-
-                // Crosshair move handler
-                chart.subscribeCrosshairMove(handleCrosshair);
-
-                // Fit content
-                chart.timeScale().fitContent();
-
-                // Resize handler
-                window.addEventListener('resize', () => {
-                    chart.resize(container.clientWidth, container.clientHeight);
-                });
+                renderChipDistribution(-1);
 
             } catch (error) {
                 document.getElementById('loading').innerHTML = `<div class="error">❌ ${error.message}</div>`;
             }
         }
 
+        function createCharts() {
+            const klineContainer = document.getElementById('kline-container');
+            const volumeContainer = document.getElementById('volume-container');
+
+            if (klineChart) klineChart.remove();
+            if (volumeChart) volumeChart.remove();
+
+            const colors = getChartColors();
+            const chartOpts = {
+                layout: { background: { color: colors.background }, textColor: colors.textColor },
+                grid: { vertLines: { color: colors.gridColor }, horzLines: { color: colors.gridColor } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                rightPriceScale: { borderColor: colors.gridColor },
+                timeScale: { borderColor: colors.gridColor, timeVisible: true },
+            };
+
+            klineChart = LightweightCharts.createChart(klineContainer, {
+                ...chartOpts,
+                width: klineContainer.clientWidth,
+                height: klineContainer.clientHeight,
+            });
+
+            volumeChart = LightweightCharts.createChart(volumeContainer, {
+                ...chartOpts,
+                width: volumeContainer.clientWidth,
+                height: volumeContainer.clientHeight,
+            });
+
+            candleSeries = klineChart.addCandlestickSeries({
+                upColor: '#ef4444', downColor: '#22c55e',
+                borderUpColor: '#ef4444', borderDownColor: '#22c55e',
+                wickUpColor: '#ef4444', wickDownColor: '#22c55e',
+            });
+
+            volumeSeries = volumeChart.addHistogramSeries({
+                color: '#22c55e',
+                priceFormat: { type: 'volume' },
+            });
+
+            ma5Series = klineChart.addLineSeries({ color: '#fbbf24', lineWidth: 1 });
+            ma10Series = klineChart.addLineSeries({ color: '#ec4899', lineWidth: 1 });
+            ma20Series = klineChart.addLineSeries({ color: '#3b82f6', lineWidth: 1 });
+
+            bollUpperSeries = klineChart.addLineSeries({ color: '#f97316', lineWidth: 1, lineStyle: 2 });
+            bollMidSeries = klineChart.addLineSeries({ color: '#3b82f6', lineWidth: 1 });
+            bollLowerSeries = klineChart.addLineSeries({ color: '#22c55e', lineWidth: 1, lineStyle: 2 });
+
+            // Sync time scales
+            klineChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+                if (range) volumeChart.timeScale().setVisibleLogicalRange(range);
+            });
+            volumeChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+                if (range) klineChart.timeScale().setVisibleLogicalRange(range);
+            });
+
+            // Crosshair sync and click handler
+            klineChart.subscribeCrosshairMove(param => {
+                handleCrosshair(param);
+                if (param.time) {
+                    volumeChart.setCrosshairPosition(param.point?.y || 0, param.time, volumeSeries);
+                }
+            });
+
+            // Click to select day for chip distribution
+            klineChart.subscribeClick(param => {
+                if (param.time) {
+                    const displayData = rawData.slice(-currentDays);
+                    const idx = displayData.findIndex(d => d.time === param.time);
+                    if (idx >= 0) {
+                        selectedDayIndex = idx;
+                        renderChipDistribution(idx);
+                    }
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                klineChart.resize(klineContainer.clientWidth, klineContainer.clientHeight);
+                volumeChart.resize(volumeContainer.clientWidth, volumeContainer.clientHeight);
+            });
+        }
+
         function updateChartData() {
-            // Slice data to current days (use last N days)
             const displayData = rawData.slice(-currentDays);
 
             const candleData = displayData.map(d => ({
-                time: d.time,
-                open: d.open,
-                high: d.high,
-                low: d.low,
-                close: d.close,
+                time: d.time, open: d.open, high: d.high, low: d.low, close: d.close,
             }));
 
             const volumeData = displayData.map(d => ({
@@ -770,126 +796,56 @@
             }));
 
             candleSeries.setData(candleData);
+            volumeSeries.setData(volumeData);
 
-            // Volume
-            if (showVolume) {
-                volumeSeries.setData(volumeData);
-            } else {
-                volumeSeries.setData([]);
-            }
-
-            // MA indicators (calculated on full data for accuracy)
             if (showMA) {
                 ma5Series.setData(calculateMA(rawData, 5).slice(-currentDays));
                 ma10Series.setData(calculateMA(rawData, 10).slice(-currentDays));
                 ma20Series.setData(calculateMA(rawData, 20).slice(-currentDays));
-                ma60Series.setData(calculateMA(rawData, 60).slice(-currentDays));
                 document.getElementById('maLegend').style.display = 'flex';
             } else {
                 ma5Series.setData([]);
                 ma10Series.setData([]);
                 ma20Series.setData([]);
-                ma60Series.setData([]);
                 document.getElementById('maLegend').style.display = 'none';
             }
 
-            // BOLL
             if (showBOLL) {
                 const boll = calculateBOLL(rawData);
                 bollUpperSeries.setData(boll.upper.slice(-currentDays));
                 bollMidSeries.setData(boll.mid.slice(-currentDays));
                 bollLowerSeries.setData(boll.lower.slice(-currentDays));
-                document.getElementById('bollLegend').style.display = 'flex';
             } else {
                 bollUpperSeries.setData([]);
                 bollMidSeries.setData([]);
                 bollLowerSeries.setData([]);
-                document.getElementById('bollLegend').style.display = 'none';
             }
 
-            // MACD
-            if (showMACD) {
-                const macd = calculateMACD(rawData);
-                macdDifSeries.setData(macd.dif.slice(-currentDays));
-                macdDeaSeries.setData(macd.dea.slice(-currentDays));
-                macdHistSeries.setData(macd.hist.slice(-currentDays));
-            } else {
-                macdDifSeries.setData([]);
-                macdDeaSeries.setData([]);
-                macdHistSeries.setData([]);
-            }
-
-            // Signals
             if (showSignals) {
                 const signals = detectSignals(rawData);
-                const displaySignals = signals.filter(s => {
-                    const displayTimes = displayData.map(d => d.time);
-                    return displayTimes.includes(s.time);
-                });
+                const displaySignals = signals.filter(s => displayData.some(d => d.time === s.time));
                 candleSeries.setMarkers(displaySignals);
             } else {
                 candleSeries.setMarkers([]);
             }
 
-            // Trend lines
-            if (showTrend) {
-                const levels = calculateTrendLevels(displayData);
-                if (levels.support && levels.resistance) {
-                    const startTime = displayData[0].time;
-                    const endTime = displayData[displayData.length - 1].time;
-                    supportLine.setData([
-                        { time: startTime, value: levels.support },
-                        { time: endTime, value: levels.support }
-                    ]);
-                    resistanceLine.setData([
-                        { time: startTime, value: levels.resistance },
-                        { time: endTime, value: levels.resistance }
-                    ]);
-                }
-            } else {
-                supportLine.setData([]);
-                resistanceLine.setData([]);
-            }
-
-            chart.timeScale().fitContent();
+            klineChart.timeScale().fitContent();
+            volumeChart.timeScale().fitContent();
         }
 
         function handleCrosshair(param) {
             if (!param.time || !param.seriesData) return;
-
             const candle = param.seriesData.get(candleSeries);
-            const vol = param.seriesData.get(volumeSeries);
-
             if (candle) {
                 document.getElementById('legO').textContent = candle.open?.toFixed(2) || '--';
                 document.getElementById('legH').textContent = candle.high?.toFixed(2) || '--';
                 document.getElementById('legL').textContent = candle.low?.toFixed(2) || '--';
                 document.getElementById('legC').textContent = candle.close?.toFixed(2) || '--';
             }
-            if (vol) {
-                document.getElementById('legVol').textContent = formatVolume(vol.value);
-            }
-
-            // MA values
             if (showMA) {
-                const ma5 = param.seriesData.get(ma5Series);
-                const ma10 = param.seriesData.get(ma10Series);
-                const ma20 = param.seriesData.get(ma20Series);
-                const ma60 = param.seriesData.get(ma60Series);
-                document.getElementById('legMA5').textContent = ma5?.value?.toFixed(2) || '--';
-                document.getElementById('legMA10').textContent = ma10?.value?.toFixed(2) || '--';
-                document.getElementById('legMA20').textContent = ma20?.value?.toFixed(2) || '--';
-                document.getElementById('legMA60').textContent = ma60?.value?.toFixed(2) || '--';
-            }
-
-            // BOLL values
-            if (showBOLL) {
-                const bu = param.seriesData.get(bollUpperSeries);
-                const bm = param.seriesData.get(bollMidSeries);
-                const bl = param.seriesData.get(bollLowerSeries);
-                document.getElementById('legBollUp').textContent = bu?.value?.toFixed(2) || '--';
-                document.getElementById('legBollMid').textContent = bm?.value?.toFixed(2) || '--';
-                document.getElementById('legBollLow').textContent = bl?.value?.toFixed(2) || '--';
+                document.getElementById('legMA5').textContent = param.seriesData.get(ma5Series)?.value?.toFixed(2) || '--';
+                document.getElementById('legMA10').textContent = param.seriesData.get(ma10Series)?.value?.toFixed(2) || '--';
+                document.getElementById('legMA20').textContent = param.seriesData.get(ma20Series)?.value?.toFixed(2) || '--';
             }
         }
 
@@ -905,27 +861,9 @@
             updateChartData();
         }
 
-        function toggleVolume() {
-            showVolume = !showVolume;
-            document.getElementById('btnVol').classList.toggle('active', showVolume);
-            updateChartData();
-        }
-
-        function toggleMACD() {
-            showMACD = !showMACD;
-            document.getElementById('btnMACD').classList.toggle('active', showMACD);
-            updateChartData();
-        }
-
         function toggleSignals() {
             showSignals = !showSignals;
             document.getElementById('btnSignals').classList.toggle('active', showSignals);
-            updateChartData();
-        }
-
-        function toggleTrend() {
-            showTrend = !showTrend;
-            document.getElementById('btnTrend').classList.toggle('active', showTrend);
             updateChartData();
         }
 
@@ -933,34 +871,23 @@
             currentPeriod = period;
             document.getElementById('btnDaily').classList.toggle('active', period === 'daily');
             document.getElementById('btnWeekly').classList.toggle('active', period === 'weekly');
-            document.getElementById('btnMonthly').classList.toggle('active', period === 'monthly');
             loadChart();
         }
 
         function setDays(days) {
             currentDays = days;
             document.querySelectorAll('.toolbar-btn').forEach(btn => {
-                const text = btn.textContent;
-                if (['30', '60', '120'].includes(text)) {
-                    btn.classList.toggle('active', text === String(days));
+                if (['30', '60', '120'].includes(btn.textContent)) {
+                    btn.classList.toggle('active', btn.textContent === String(days));
                 }
             });
             updateChartData();
+            renderChipDistribution(selectedDayIndex);
         }
 
-        function formatVolume(vol) {
-            if (vol >= 100000000) return (vol / 100000000).toFixed(2) + '亿';
-            if (vol >= 10000) return (vol / 10000).toFixed(0) + '万';
-            return vol.toString();
-        }
-
-        // Initialize theme first
         initTheme();
-
-        // Initialize chart
         loadChart();
 
-        // Telegram WebApp integration
         if (window.Telegram?.WebApp) {
             Telegram.WebApp.ready();
             Telegram.WebApp.expand();
