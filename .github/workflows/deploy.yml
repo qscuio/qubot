@@ -470,6 +470,7 @@ jobs:
             printf 'GIT_SSH_COMMAND=%s\n' '${{ secrets.GIT_SSH_COMMAND }}' >> .env
             printf 'API_ENABLED=%s\n' '${{ secrets.API_ENABLED }}' >> .env
             printf 'WEBFRONT_URL=%s\n' '${{ secrets.WEBFRONT_URL }}' >> .env
+            printf 'CRAWLER_BOT_USERNAME=%s\n' '${{ secrets.CRAWLER_BOT_USERNAME }}' >> .env
             printf 'RATE_LIMIT_MS=%s\n' '${{ secrets.RATE_LIMIT_MS }}' >> .env
             printf 'LOG_LEVEL=%s\n' '${{ secrets.LOG_LEVEL }}' >> .env
             printf 'TWITTER_ACCOUNTS=%s\n' '${{ secrets.TWITTER_ACCOUNTS }}' >> .env
