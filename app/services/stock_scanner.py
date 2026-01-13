@@ -183,23 +183,13 @@ class StockScanner:
                 logger.warn("💡 Suggestion: Run /dbsync to sync stock history data")
                 return signals
             
-            # Get stock codes and names from local database
-            # Join with user_watchlist or limit_up_stock for names if available
+            # Get stock codes from stock_history only (no dependency on other tables)
+            # Names will just use code as fallback
             rows = await db.pool.fetch("""
-                WITH recent_stocks AS (
-                    SELECT DISTINCT code 
-                    FROM stock_history 
-                    WHERE date >= $2::date - INTERVAL '7 days'
-                ),
-                stock_names AS (
-                    SELECT code, name FROM user_watchlist GROUP BY code, name
-                    UNION
-                    SELECT code, name FROM limit_up_stock GROUP BY code, name
-                )
-                SELECT rs.code, sn.name
-                FROM recent_stocks rs
-                LEFT JOIN stock_names sn ON rs.code = sn.code
-                WHERE rs.code ~ '^[036]'
+                SELECT DISTINCT code
+                FROM stock_history 
+                WHERE date >= $2::date - INTERVAL '7 days'
+                  AND code ~ '^[036]'
                 LIMIT $1
             """, limit, today)
             

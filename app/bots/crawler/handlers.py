@@ -84,11 +84,12 @@ async def cmd_start(message: types.Message):
     builder = InlineKeyboardBuilder()
     builder.button(text="🕷️ 网站爬虫", callback_data="crawler:main")
     builder.button(text="📈 涨停追踪", callback_data="lu:main")
+    builder.button(text=" 信号扫描", callback_data="scanner:main")
     builder.button(text="📊 板块分析", callback_data="sector:main")
     builder.button(text="📋 市场报告", callback_data="report:main")
     builder.button(text="⭐ 自选列表", callback_data="watch:list")
     builder.button(text="💰 模拟交易", callback_data="sim:main")
-    builder.adjust(2, 2, 2)
+    builder.adjust(2, 2, 2, 1)
     
     await message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
 
@@ -139,10 +140,12 @@ async def cb_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     builder.button(text="🕷️ 网站爬虫", callback_data="crawler:main")
     builder.button(text="📈 涨停追踪", callback_data="lu:main")
-    builder.button(text="📊 板块分析", callback_data="sector:main")
+    builder.button(text="� 信号扫描", callback_data="scanner:main")
+    builder.button(text="�📊 板块分析", callback_data="sector:main")
     builder.button(text="📋 市场报告", callback_data="report:main")
     builder.button(text="⭐ 自选列表", callback_data="watch:list")
-    builder.adjust(2, 2, 1)
+    builder.button(text="💰 模拟交易", callback_data="sim:main")
+    builder.adjust(2, 2, 2, 1)
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -393,14 +396,13 @@ async def cb_lu_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     builder.button(text="📈 今日涨停", callback_data="lu:today")
     builder.button(text="🆕 首板", callback_data="lu:first")
-    builder.button(text="� 曾涨停", callback_data="lu:burst")
-    builder.button(text="�🔥 连板榜", callback_data="lu:streak")
+    builder.button(text="💥 曾涨停", callback_data="lu:burst")
+    builder.button(text="🔥 连板榜", callback_data="lu:streak")
     builder.button(text="💪 强势股", callback_data="lu:strong")
     builder.button(text="👀 启动追踪", callback_data="lu:watch")
-    builder.button(text="🔍 信号扫描", callback_data="lu:scan")
-    builder.button(text="🔄 同步涨停", callback_data="lu:sync")
+    builder.button(text=" 同步涨停", callback_data="lu:sync")
     builder.button(text="◀️ 返回", callback_data="main")
-    builder.adjust(2, 2, 2, 2, 1)
+    builder.adjust(2, 2, 2, 2)
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -874,6 +876,149 @@ SIGNAL_ICONS = {
 }
 
 
+@router.callback_query(F.data == "scanner:main")
+async def cb_scanner_main(callback: types.CallbackQuery):
+    """Signal scanner main menu (independent from limit-up tracking)."""
+    await safe_answer(callback)
+    
+    # Get database stats for display
+    from app.services.stock_history import stock_history_service
+    stats = await stock_history_service.get_stats()
+    
+    stock_count = stats.get('stock_count', 0) if stats else 0
+    max_date = stats.get('max_date', 'N/A') if stats else 'N/A'
+    
+    text = (
+        "🔍 <b>信号扫描</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 本地数据: <b>{stock_count}</b> 只股票\n"
+        f"📅 数据日期: <b>{max_date}</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "<i>基于本地历史K线数据扫描技术信号</i>\n\n"
+        "📌 <b>信号类型:</b>\n"
+        "  🔺 突破信号 - 收盘突破20日高点\n"
+        "  📊 放量信号 - 成交量>5日均量×2\n"
+        "  📈 多头排列 - MA5>MA10>MA20金叉\n"
+        "  🌅 底部5小阳 - 底部连续5个小阳线\n"
+        "  🚀 量价启动 - 专业量价关系分析\n"
+    )
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔍 开始扫描", callback_data="scanner:scan")
+    builder.button(text="📊 数据库状态", callback_data="scanner:dbcheck")
+    builder.button(text="🔄 同步数据", callback_data="scanner:dbsync")
+    builder.button(text="◀️ 返回", callback_data="main")
+    builder.adjust(1, 2, 1)
+    
+    try:
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+    except:
+        pass
+
+
+@router.callback_query(F.data == "scanner:scan")
+async def cb_scanner_scan(callback: types.CallbackQuery):
+    """Trigger stock signal scan."""
+    await safe_answer(callback, "扫描中...")
+    
+    # Create a mock message object for cmd_scan
+    class MockMessage:
+        def __init__(self, msg):
+            self.from_user = callback.from_user
+            self._msg = msg
+        
+        async def answer(self, text, **kwargs):
+            try:
+                await self._msg.edit_text(text, **kwargs)
+            except:
+                pass
+            return self._msg
+    
+    mock_msg = MockMessage(callback.message)
+    await cmd_scan(mock_msg)
+
+
+@router.callback_query(F.data == "scanner:dbcheck")
+async def cb_scanner_dbcheck(callback: types.CallbackQuery):
+    """Show database status from scanner menu."""
+    await safe_answer(callback)
+    
+    from app.services.stock_history import stock_history_service
+    
+    try:
+        stats = await stock_history_service.get_stats()
+        
+        if not stats:
+            await callback.message.edit_text("❌ 数据库未连接")
+            return
+        
+        total_records = stats.get('total_records', 0)
+        stock_count = stats.get('stock_count', 0)
+        min_date = stats.get('min_date')
+        max_date = stats.get('max_date')
+        
+        today = china_today()
+        days_old = (today - max_date).days if max_date else 999
+        freshness = "✅ 最新" if days_old <= 1 else f"⚠️ {days_old}天前"
+        
+        recent_count = 0
+        if db.pool:
+            recent_count = await db.pool.fetchval("""
+                SELECT COUNT(DISTINCT code) 
+                FROM stock_history 
+                WHERE date >= $1::date - INTERVAL '7 days'
+            """, today) or 0
+        
+        text = (
+            "📊 <b>stock_history 数据库状态</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📁 总记录数: <b>{total_records:,}</b>\n"
+            f"📈 股票数量: <b>{stock_count}</b>\n"
+            f"📅 数据范围: {min_date} ~ {max_date}\n"
+            f"🕐 数据新鲜度: {freshness}\n"
+            f"⏱️ 近7天数据: <b>{recent_count}</b> 只股票\n"
+        )
+        
+        if recent_count == 0:
+            text += "\n⚠️ <b>问题:</b> 近7天无数据，信号扫描将无法工作"
+            text += "\n💡 <b>建议:</b> 点击同步数据"
+        elif days_old > 3:
+            text += "\n⚠️ <b>建议:</b> 数据较旧，建议同步"
+        else:
+            text += "\n✅ 数据库状态良好"
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 同步数据", callback_data="scanner:dbsync")
+        builder.button(text="◀️ 返回", callback_data="scanner:main")
+        builder.adjust(2)
+        
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 检查失败: {e}")
+
+
+@router.callback_query(F.data == "scanner:dbsync")
+async def cb_scanner_dbsync(callback: types.CallbackQuery):
+    """Trigger database sync from scanner menu."""
+    if not await is_allowed(callback.from_user.id):
+        await safe_answer(callback, "无权限")
+        return
+    
+    await safe_answer(callback)
+    
+    import asyncio
+    from app.services.stock_history import stock_history_service
+    
+    try:
+        await callback.message.edit_text("⏳ 正在后台同步数据，这可能需要几分钟...\n\n请稍后点击数据库状态查看进度")
+        
+        asyncio.create_task(stock_history_service.update_all_stocks())
+        
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 同步失败: {e}")
+
+
 @router.message(Command("dbcheck"))
 async def cmd_dbcheck(message: types.Message):
     """Check stock_history database status (non-blocking)."""
@@ -946,15 +1091,31 @@ async def cmd_dbcheck(message: types.Message):
         await status.edit_text(f"❌ 检查失败: {e}")
 
 
+@router.message(Command("dbsync"))
+async def cmd_dbsync(message: types.Message):
+    """Sync stock history data to local database."""
+    if not await is_allowed(message.from_user.id):
+        return
+    
+    import asyncio
+    from app.services.stock_history import stock_history_service
+    
+    await message.answer("⏳ 正在后台同步数据，这可能需要几分钟...\n\n请稍后使用 /dbcheck 查看进度")
+    
+    # Trigger update in background
+    asyncio.create_task(stock_history_service.update_all_stocks())
+
+
 @router.callback_query(F.data == "db:sync")
 async def cb_db_sync(callback: types.CallbackQuery):
-    """Trigger database sync."""
+    """Trigger database sync (callback version)."""
     if not await is_allowed(callback.from_user.id):
         await safe_answer(callback, "无权限")
         return
     
     await safe_answer(callback)
     
+    import asyncio
     from app.services.stock_history import stock_history_service
     
     try:
@@ -1243,8 +1404,8 @@ async def cb_scan_back(callback: types.CallbackQuery):
         if stocks:
             name = SIGNAL_NAMES.get(signal_type, signal_type)
             builder.button(text=f"📋 {name}全部", callback_data=f"scan:list:{signal_type}:0")
-    builder.button(text="🔄 重新扫描", callback_data="lu:scan")
-    builder.button(text="◀️ 返回", callback_data="lu:main")
+    builder.button(text="🔄 重新扫描", callback_data="scanner:scan")
+    builder.button(text="◀️ 返回", callback_data="scanner:main")
     builder.adjust(2, 2, 2)
     
     try:
