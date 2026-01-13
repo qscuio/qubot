@@ -91,7 +91,23 @@ async def lifespan(app: FastAPI):
 
     # Trading Simulator (模拟交易)
     if settings.ENABLE_TRADING_SIM:
+        # Set up notification callback to send to report channel
+        async def sim_notify_callback(message: str):
+            from app.bots.registry import get_bot
+            bot = get_bot("crawler")
+            if bot and settings.REPORT_TARGET_CHANNEL:
+                try:
+                    await bot.send_message(
+                        int(settings.REPORT_TARGET_CHANNEL),
+                        f"🤖 <b>模拟交易</b>\n{message}",
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.warn(f"Failed to send sim notification: {e}")
+        
+        trading_simulator.set_notify_callback(sim_notify_callback)
         await trading_simulator.start()
+
 
     # AI Service doesn't need explicit start but is ready
     if ai_service.is_available():

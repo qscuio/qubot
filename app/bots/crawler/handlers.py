@@ -732,41 +732,68 @@ async def get_strong_ui():
 # Startup Watchlist (启动追踪)
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.message(Command("watch"))
-async def cmd_watch(message: types.Message):
+# Startup Watchlist UI accessible via callback "lu:watch" from the menu
+# Also accessible via /startup command
+
+@router.message(Command("startup"))
+async def cmd_startup(message: types.Message):
+    """View limit-up startup watchlist (启动追踪)."""
     if not await is_allowed(message.from_user.id):
         return
     text, markup = await get_watch_ui()
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
 
 
-@router.callback_query(F.data == "lu:watch")
+@router.callback_query(F.data.startswith("lu:watch"))
 async def cb_watch(callback: types.CallbackQuery):
     await safe_answer(callback)
-    text, markup = await get_watch_ui()
+    parts = callback.data.split(":")
+    page = int(parts[2]) if len(parts) > 2 else 1
+    text, markup = await get_watch_ui(page)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except:
         pass
 
 
-async def get_watch_ui():
+async def get_watch_ui(page: int = 1):
     """Get startup watchlist (一个月内涨停一次的股票)."""
+    PAGE_SIZE = 30
     watchlist = await limit_up_service.get_startup_watchlist()
     
     if not watchlist:
         text = "👀 <b>启动追踪</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无观察股\n\n<i>一个月内涨停一次的股票会加入观察</i>"
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 刷新", callback_data="lu:watch")
+        builder.button(text="◀️ 返回", callback_data="lu:main")
+        builder.adjust(2)
+        return text, builder.as_markup()
+        
+    total = len(watchlist)
+    total_pages = (total + PAGE_SIZE - 1) // PAGE_SIZE if total > 0 else 1
+    page = max(1, min(page, total_pages))
+    
+    start_idx = (page - 1) * PAGE_SIZE
+    end_idx = start_idx + PAGE_SIZE
+    rows = watchlist[start_idx:end_idx]
+    
+    if not rows:
+        text = "👀 <b>启动追踪</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无数据"
     else:
-        text = f"👀 <b>启动追踪</b> ({len(watchlist)})\n━━━━━━━━━━━━━━━━━━━━━\n<i>一个月涨停一次，再次涨停将剔除</i>\n\n"
-        for i, w in enumerate(watchlist, 1):
+        text = f"👀 <b>启动追踪</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n<i>一个月涨停一次，再次涨停将剔除</i>\n\n"
+        for i, w in enumerate(rows, start_idx + 1):
             chart_url = get_chart_url(w['code'], w.get('name'))
             limit_date = w['first_limit_date'].strftime('%m/%d') if w['first_limit_date'] else ''
             text += f"{i}. <a href=\"{chart_url}\">{w['name']}</a> ({w['code']}) {limit_date}\n"
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔄 刷新", callback_data="lu:watch")
+    if page > 1:
+        builder.button(text="◀️ 上一页", callback_data=f"lu:watch:{page-1}")
+    builder.button(text="🔄 刷新", callback_data=f"lu:watch:{page}")
+    if page < total_pages:
+        builder.button(text="下一页 ▶️", callback_data=f"lu:watch:{page+1}")
     builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(2)
+    builder.adjust(3, 1)
     
     return text, builder.as_markup()
 
@@ -1798,18 +1825,15 @@ async def cmd_watch_add(message: types.Message, command: CommandObject):
     
     args = command.args if command else None
     if not args:
-        # Show usage
-        text = (
-            "⭐ <b>自选列表</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━\n\n"
-            "用法:\n"
-            "• <code>/watch 600519</code> - 添加股票\n"
-            "• <code>/unwatch 600519</code> - 删除股票\n"
-            "• <code>/mywatch</code> - 查看自选列表\n\n"
-            "<i>每天下午17:00自动发送自选报告</i>"
-        )
-        await message.answer(text, parse_mode="HTML")
+        # Show user's watchlist
+        status = await message.answer("⏳ 正在加载自选列表...")
+        try:
+            text, markup = await get_watchlist_ui(message.from_user.id)
+            await status.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+        except Exception as e:
+            await status.edit_text(f"❌ 加载失败: {e}")
         return
+
     
     parts = args.split(maxsplit=1)
     code = parts[0].strip()
