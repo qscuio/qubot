@@ -79,11 +79,12 @@ async def lifespan(app: FastAPI):
         await market_report_service.initialize()
         await market_report_service.start()
 
-    # Stock History Service (A股历史数据)
+    # Stock History Service (A股历史数据) - initialize in background to avoid blocking startup
     if settings.ENABLE_STOCK_HISTORY:
         from app.services.stock_history import stock_history_service
-        await stock_history_service.initialize()
         await stock_history_service.start()
+        # Run initialization in background to avoid blocking (takes ~3 minutes for API call)
+        asyncio.create_task(stock_history_service.initialize())
 
     # Watchlist Service (用户自选列表)
     await watchlist_service.start()
