@@ -126,11 +126,10 @@ class StockScanner:
     async def scan_all_stocks(self, limit: int = 500) -> Dict[str, List[Dict]]:
         """Scan stocks for all signal types.
         
-        Uses local stock_history database first for much faster scanning.
-        Falls back to AkShare API only if local data is missing/stale.
+        Uses local stock_history database ONLY for maximum speed.
         """
-        ak, pd = self._get_libs()
-        if not ak or not pd:
+        _, pd = self._get_libs()
+        if not pd:
             return {}
         
         signals = {
@@ -142,45 +141,57 @@ class StockScanner:
             "multi_signal": [],  # 多信号共振(满足≥3个信号)
         }
         
+        if not db.pool:
+            logger.warn("Database not connected, cannot scan")
+            return signals
+        
         try:
-            # Get stock list
-            stock_list = await asyncio.to_thread(ak.stock_zh_a_spot_em)
-            if stock_list is None or stock_list.empty:
+            # Get stock codes and names from local database
+            # Join with user_watchlist or limit_up_stock for names if available
+            rows = await db.pool.fetch("""
+                WITH recent_stocks AS (
+                    SELECT DISTINCT code 
+                    FROM stock_history 
+                    WHERE date >= CURRENT_DATE - INTERVAL '7 days'
+                ),
+                stock_names AS (
+                    SELECT code, name FROM user_watchlist GROUP BY code, name
+                    UNION
+                    SELECT code, name FROM limit_up_stock GROUP BY code, name
+                )
+                SELECT rs.code, sn.name
+                FROM recent_stocks rs
+                LEFT JOIN stock_names sn ON rs.code = sn.code
+                WHERE rs.code ~ '^[036]'
+                LIMIT $1
+            """, limit)
+            
+            if not rows:
+                logger.warn("No stocks found in local database")
                 return signals
             
-            # Filter main board stocks (exclude ST, new stocks)
-            stocks = stock_list[
-                ~stock_list['名称'].str.contains('ST|退', na=False) &
-                (stock_list['代码'].str.match(r'^[036]'))
-            ].head(limit)
+            codes = [r['code'] for r in rows]
+            code_name_map = {r['code']: r['name'] or r['code'] for r in rows}
             
-            codes = stocks['代码'].tolist()
-            names = stocks['名称'].tolist()
-            code_name_map = dict(zip(codes, names))
+            logger.info(f"Found {len(codes)} stocks in local DB, starting scan...")
             
-            # Try to fetch history from local database
+            # Fetch history from local database
             local_data = await self._get_local_history_batch(codes)
+            
+            if not local_data:
+                logger.warn("No history data available")
+                return signals
             
             checked = 0
             for code in codes:
                 name = code_name_map.get(code, code)
                 
                 try:
-                    # Use local data if available
-                    if code in local_data and len(local_data[code]) >= 21:
-                        hist = local_data[code]
-                    else:
-                        # Fallback to API for missing data
-                        hist = await asyncio.to_thread(
-                            ak.stock_zh_a_hist, 
-                            symbol=code, 
-                            period="daily",
-                            adjust="qfq"
-                        )
-                        if hist is None or len(hist) < 21:
-                            continue
-                        hist = hist.tail(21)
+                    # Use local data only
+                    if code not in local_data or len(local_data[code]) < 21:
+                        continue
                     
+                    hist = local_data[code]
                     stock_info = {"code": code, "name": name}
                     
                     # Check signals
@@ -216,21 +227,18 @@ class StockScanner:
                         })
                     
                     checked += 1
-                    
-                    # Rate limit only for API calls
-                    if code not in local_data and checked % 50 == 0:
-                        logger.info(f"Scanned {checked} stocks (API fallback)...")
-                        await asyncio.sleep(1)
                         
                 except Exception as e:
                     continue
             
-            logger.info(f"Scan complete: {checked} stocks, found {sum(len(v) for v in signals.values())} signals")
+            total_signals = sum(len(v) for v in signals.values())
+            logger.info(f"Scan complete: {checked} stocks, found {total_signals} signals")
             return signals
             
         except Exception as e:
             logger.error(f"Scan failed: {e}")
             return signals
+
     
     async def _get_local_history_batch(self, codes: List[str]) -> Dict[str, any]:
         """Fetch recent history for multiple stocks from local database.
