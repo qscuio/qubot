@@ -296,35 +296,34 @@ class StockScanner:
         if not pd:
             return {}
         
-        result = {}
-        
         try:
-            # Calculate China date for correct timezone
-            from app.core.timezone import china_today
-            today = china_today()
-            
-            # Fetch last 30 days of data for all codes (using China date)
+            min_rows = 21
+            max_rows = 60
+
             rows = await db.pool.fetch("""
                 SELECT code, date, open, high, low, close, volume
-                FROM stock_history
-                WHERE code = ANY($1)
-                  AND date >= $2::date - INTERVAL '30 days'
+                FROM (
+                    SELECT code, date, open, high, low, close, volume,
+                           ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) AS rn
+                    FROM stock_history
+                    WHERE code = ANY($1)
+                ) t
+                WHERE rn <= $2
                 ORDER BY code, date DESC
-            """, codes, today)
-            
+            """, codes, max_rows)
+
             if not rows:
-                logger.warn(f"No history rows found for {len(codes)} codes since {today - __import__('datetime').timedelta(days=30)}")
+                logger.warn(f"No history rows found for {len(codes)} codes (last {max_rows} rows)")
                 return {}
-            
-            # Group by code and convert to DataFrame-like structure
+
             from collections import defaultdict
             by_code = defaultdict(list)
             for row in rows:
                 by_code[row['code']].append(row)
-            
+
+            result = {}
             for code, code_rows in by_code.items():
-                if len(code_rows) >= 21:
-                    # Convert to DataFrame with Chinese column names (for compatibility)
+                if len(code_rows) >= min_rows:
                     df = pd.DataFrame([{
                         '日期': r['date'],
                         '开盘': float(r['open']),
@@ -333,13 +332,12 @@ class StockScanner:
                         '最低': float(r['low']),
                         '成交量': float(r['volume']),
                     } for r in code_rows])
-                    # Sort by date ascending
                     df = df.sort_values('日期').reset_index(drop=True)
-                    result[code] = df.tail(21)
-            
-            logger.info(f"Loaded {len(result)} stocks from local DB")
+                    result[code] = df.tail(min_rows)
+
+            logger.info(f"Loaded {len(result)} stocks from local DB (last {max_rows} rows)")
             return result
-            
+
         except Exception as e:
             logger.warn(f"Failed to load local history: {e}")
             return {}
