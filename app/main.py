@@ -86,6 +86,13 @@ async def lifespan(app: FastAPI):
         # Run initialization in background to avoid blocking (takes ~3 minutes for API call)
         asyncio.create_task(stock_history_service.initialize())
 
+    # Chip Distribution Service (筹码分布) - depends on stock history
+    if settings.ENABLE_STOCK_HISTORY:
+        from app.services.chip_distribution import chip_distribution_service
+        await chip_distribution_service.initialize()
+        await chip_distribution_service.start()
+
+
     # Watchlist Service (用户自选列表)
     await watchlist_service.start()
 

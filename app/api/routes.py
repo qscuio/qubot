@@ -219,3 +219,31 @@ async def chart_data(code: str, days: int = 60, period: str = "daily"):
         "data": data,
     }
 
+
+@chart_router.get("/chart/chips/{code}")
+async def chart_chips(code: str, date: str = None):
+    """Get chip distribution data for a stock.
+    
+    Args:
+        code: Stock code (e.g., 600519)
+        date: Target date (YYYY-MM-DD), defaults to today
+    """
+    from datetime import date as date_type
+    from app.services.chip_distribution import chip_distribution_service
+    
+    try:
+        target_date = None
+        if date:
+            target_date = date_type.fromisoformat(date)
+        
+        result = await chip_distribution_service.get_chip_distribution(code, target_date)
+        
+        if not result or not result.get('distribution'):
+            raise HTTPException(status_code=404, detail=f"No chip data for {code}")
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

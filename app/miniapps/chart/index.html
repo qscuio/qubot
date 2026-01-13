@@ -625,24 +625,46 @@
             return { distribution: distribution.reverse(), avgCost, profitRatio, concentration, currentPrice };
         }
 
-        function renderChipDistribution(dayIndex) {
+        async function fetchChipDistribution(targetDate) {
+            try {
+                const dateParam = targetDate ? `?date=${targetDate}` : '';
+                const response = await fetch(`${API_BASE}/api/chart/chips/${code}${dateParam}`);
+                if (!response.ok) return null;
+                return await response.json();
+            } catch (e) {
+                console.warn('Failed to fetch chips from API:', e);
+                return null;
+            }
+        }
+
+        async function renderChipDistribution(dayIndex) {
             const displayData = rawData.slice(-currentDays);
             const actualIndex = dayIndex >= 0 ? dayIndex : displayData.length - 1;
-            const chips = calculateChipDistribution(displayData, actualIndex);
+            const targetDate = displayData[actualIndex]?.time;
 
             const container = document.getElementById('chip-chart');
+            container.innerHTML = '<div class="loading" style="font-size:10px;padding:10px;">加载中...</div>';
+
+            // Try to fetch from backend API first
+            let chips = await fetchChipDistribution(targetDate);
+
+            // Fallback to local calculation if API fails
+            if (!chips || !chips.distribution) {
+                chips = calculateChipDistribution(displayData, actualIndex);
+            }
+
             container.innerHTML = '';
 
-            const dateStr = displayData[actualIndex]?.time || '--';
+            const dateStr = targetDate || '--';
             document.getElementById('chipDate').textContent = dateStr;
-            document.getElementById('profitRatio').textContent = chips.profitRatio.toFixed(1) + '%';
-            document.getElementById('avgCost').textContent = chips.avgCost.toFixed(2);
-            document.getElementById('concentration').textContent = chips.concentration.toFixed(1) + '%';
+            document.getElementById('profitRatio').textContent = (chips.profitRatio || 0).toFixed(1) + '%';
+            document.getElementById('avgCost').textContent = (chips.avgCost || 0).toFixed(2);
+            document.getElementById('concentration').textContent = (chips.concentration || 0).toFixed(1) + '%';
 
             const wrapper = document.createElement('div');
             wrapper.className = 'chip-bar-container';
 
-            chips.distribution.forEach(item => {
+            (chips.distribution || []).forEach(item => {
                 const row = document.createElement('div');
                 row.className = 'chip-bar-row';
 
@@ -694,7 +716,8 @@
 
                 createCharts();
                 updateChartData();
-                renderChipDistribution(-1);
+                await renderChipDistribution(-1);
+
 
             } catch (error) {
                 document.getElementById('loading').innerHTML = `<div class="error">❌ ${error.message}</div>`;

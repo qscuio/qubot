@@ -1918,12 +1918,25 @@ async def cmd_mywatch(message: types.Message):
 
 @router.callback_query(F.data == "watch:list")
 async def cb_watch_list(callback: types.CallbackQuery):
-    """View watchlist."""
+    """View watchlist (cached prices)."""
     await safe_answer(callback)
     
     try:
         await callback.message.edit_text("⏳ 正在加载...", parse_mode="HTML")
-        text, markup = await get_watchlist_ui(callback.from_user.id)
+        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=False)
+        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 加载失败: {e}")
+
+
+@router.callback_query(F.data == "watch:realtime")
+async def cb_watch_realtime(callback: types.CallbackQuery):
+    """View watchlist with real-time prices."""
+    await safe_answer(callback)
+    
+    try:
+        await callback.message.edit_text("⏳ 正在获取实时行情...", parse_mode="HTML")
+        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=True)
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except Exception as e:
         await callback.message.edit_text(f"❌ 加载失败: {e}")
@@ -1946,15 +1959,23 @@ async def cb_watch_del(callback: types.CallbackQuery):
     
     # Refresh list
     try:
-        text, markup = await get_watchlist_ui(callback.from_user.id)
+        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=False)
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except:
         pass
 
 
-async def get_watchlist_ui(user_id: int):
-    """Get watchlist UI with real-time prices."""
-    stocks = await watchlist_service.get_watchlist_with_prices(user_id)
+async def get_watchlist_ui(user_id: int, realtime: bool = False):
+    """Get watchlist UI with prices.
+    
+    Args:
+        user_id: User ID
+        realtime: If True, fetch real-time prices from AkShare
+    """
+    if realtime:
+        stocks = await watchlist_service.get_watchlist_realtime(user_id)
+    else:
+        stocks = await watchlist_service.get_watchlist_with_prices(user_id)
     
     if not stocks:
         text = (
@@ -1970,7 +1991,9 @@ async def get_watchlist_ui(user_id: int):
     # Sort by total change descending
     stocks.sort(key=lambda x: x.get('total_change', 0), reverse=True)
     
-    text = f"⭐ <b>自选列表</b> ({len(stocks)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+    # Header with data source indicator
+    source = "📡 实时" if realtime else "📊 缓存"
+    text = f"⭐ <b>自选列表</b> ({len(stocks)}) {source}\n━━━━━━━━━━━━━━━━━━━━━\n\n"
     
     for s in stocks:
         name = s.get('name', s['code'])
@@ -2006,11 +2029,16 @@ async def get_watchlist_ui(user_id: int):
         name_short = s.get('name', s['code'])[:6]
         builder.button(text=f"❌ {name_short}", callback_data=f"watch:del:{s['code']}")
     
-    builder.button(text="🔄 刷新", callback_data="watch:list")
+    # Toggle between cached and realtime
+    if realtime:
+        builder.button(text="📊 缓存数据", callback_data="watch:list")
+    else:
+        builder.button(text="📡 实时刷新", callback_data="watch:realtime")
     builder.button(text="◀️ 返回", callback_data="main")
     builder.adjust(2, 2, 2, 2, 2)
     
     return text, builder.as_markup()
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════

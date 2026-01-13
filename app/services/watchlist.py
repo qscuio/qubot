@@ -158,7 +158,7 @@ class WatchlistService:
         return [dict(r) for r in rows]
     
     async def get_watchlist_with_prices(self, user_id: int) -> List[Dict]:
-        """Get user's watchlist with current prices and performance."""
+        """Get user's watchlist with prices from local DB (fast, cached)."""
         watchlist = await self.get_watchlist(user_id)
         
         if not watchlist:
@@ -212,6 +212,74 @@ class WatchlistService:
         
         return result
 
+    async def get_watchlist_realtime(self, user_id: int) -> List[Dict]:
+        """Get user's watchlist with real-time prices from AkShare.
+        
+        Only fetches prices for the specific stocks in user's watchlist.
+        """
+        import asyncio
+        
+        watchlist = await self.get_watchlist(user_id)
+        
+        if not watchlist:
+            return []
+        
+        ak = self._get_akshare()
+        if not ak:
+            # Fallback to local DB prices
+            return await self.get_watchlist_with_prices(user_id)
+        
+        result = []
+        
+        # Fetch all A-share real-time data once (more efficient than individual calls)
+        # This is acceptable because it's only called on explicit refresh
+        try:
+            df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+            
+            if df is None or df.empty:
+                return await self.get_watchlist_with_prices(user_id)
+            
+            # Build lookup map
+            price_map = {}
+            for _, row in df.iterrows():
+                code = str(row.get('代码', ''))
+                price_map[code] = {
+                    'current_price': float(row.get('最新价', 0) or 0),
+                    'today_change': float(row.get('涨跌幅', 0) or 0),
+                    'name': str(row.get('名称', '')),
+                }
+            
+            for stock in watchlist:
+                code = stock['code']
+                add_price = float(stock.get('add_price') or 0)
+                
+                info = price_map.get(code, {})
+                current_price = info.get('current_price', 0)
+                today_change = info.get('today_change', 0)
+                stock_name = info.get('name') or stock.get('name') or code
+                
+                # Calculate performance since added
+                if add_price > 0 and current_price > 0:
+                    total_change = ((current_price - add_price) / add_price) * 100
+                else:
+                    total_change = 0
+                
+                result.append({
+                    'code': code,
+                    'name': stock_name,
+                    'add_price': add_price,
+                    'add_date': stock.get('add_date'),
+                    'current_price': current_price,
+                    'today_change': today_change,
+                    'total_change': total_change,
+                    'realtime': True,  # Flag to indicate real-time data
+                })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Failed to get real-time prices: {e}")
+            return await self.get_watchlist_with_prices(user_id)
 
     
     # ─────────────────────────────────────────────────────────────────────────
