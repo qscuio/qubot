@@ -641,7 +641,7 @@
 
         <button class="t-btn xs active" onclick="toggleSignals()" id="btn-signals">Signals</button>
         <button class="t-btn xs active" onclick="togglePriceLines()" id="btn-lines" data-action="lines">Lines</button>
-        <button class="t-btn xs active" onclick="toggleChipOverlay()" id="btn-chips">Chips</button>
+        <button class="t-btn xs active" onclick="toggleChipsPanel()" id="btn-chips">Chips</button>
 
         <div class="spacer"></div>
         <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">🌙</button>
@@ -673,9 +673,7 @@
                         <span class="leg-item c-ma20">MA20:<span class="leg-val c-ma20" id="l-ma20">--</span></span>
                     </div>
                 </div>
-                <!-- Chip distribution canvas overlay -->
-                <canvas id="chip-overlay"
-                    style="position:absolute; right:50px; top:0; pointer-events:none; z-index:5;"></canvas>
+
             </div>
 
             <div id="sub-chart">
@@ -695,7 +693,10 @@
                 <span id="chip-date" style="font-weight: 400; color: var(--text-muted);">--</span>
                 <button class="close-btn" onclick="toggleChipsPanel()">×</button>
             </div>
-            <div id="chip-chart-area"></div>
+            <div id="chip-chart-area" style="flex: 1; position: relative; overflow: hidden;">
+                <canvas id="chip-canvas"
+                    style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
+            </div>
             <div class="chip-stats">
                 <div class="chip-row">
                     <span style="color:var(--text-muted)">Profit Ratio</span>
@@ -744,17 +745,15 @@
         // Price lines (support, resistance, trend)
         let priceLines = [];  // Store created price lines for cleanup
 
-        // Debounce for chip distribution updates
         let chipDebounceTimer = null;
         let lastChipIdx = -1;
         function debouncedRenderChips(idx) {
-            if (idx === lastChipIdx) return;  // Skip if same index
+            if (idx === lastChipIdx && idx !== -1) return;
             lastChipIdx = idx;
             if (chipDebounceTimer) clearTimeout(chipDebounceTimer);
             chipDebounceTimer = setTimeout(() => {
-                renderChipDistribution(idx);
-                drawChipOverlay(idx);  // Also update overlay on K-line
-            }, 50);  // 50ms debounce
+                renderSidePanelChips(idx);
+            }, 20);
         }
 
         // --- Support/Resistance/Trend Line Functions ---
@@ -868,121 +867,7 @@
             if (btn) btn.classList.toggle('active', showPriceLines);
         }
 
-        // --- Chip Overlay on K-line Chart ---
-        function drawChipOverlay(dayIndex = -1) {
-            const canvas = document.getElementById('chip-overlay');
-            if (!canvas || !chartMain || !sCandle || !rawData.length) return;
 
-            const ctx = canvas.getContext('2d');
-            const container = document.getElementById('main-chart');
-            if (!container) return;
-
-            // Get chart dimensions
-            const chartHeight = container.clientHeight;
-            const chartWidth = container.clientWidth;
-            const overlayWidth = 80;  // Width of chip overlay area
-
-            // Set canvas size
-            canvas.width = overlayWidth;
-            canvas.height = chartHeight;
-            canvas.style.height = chartHeight + 'px';
-            canvas.style.width = overlayWidth + 'px';
-
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            if (!showChipOverlay) return;
-
-            const idx = dayIndex >= 0 ? dayIndex : rawData.length - 1;
-            if (!rawData[idx]) return;
-
-            // Calculate chip distribution
-            const lookback = Math.min(60, idx + 1);
-            const startIdx = idx - lookback + 1;
-            const currentPrice = rawData[idx].close;
-
-            // Get price range from chart's price scale
-            // Use coordinateToPrice to get min/max prices at chart boundaries
-            const topPrice = sCandle.coordinateToPrice(0);
-            const bottomPrice = sCandle.coordinateToPrice(chartHeight);
-
-            if (topPrice === null || bottomPrice === null) return;
-
-            const minPrice = Math.min(topPrice, bottomPrice);
-            const maxPrice = Math.max(topPrice, bottomPrice);
-            const priceRange = maxPrice - minPrice;
-
-            if (priceRange <= 0) return;
-
-            // Calculate chip distribution within visible price range
-            const numBuckets = Math.floor(chartHeight / 8);  // ~8px per bucket
-            const bucketSize = priceRange / numBuckets;
-            const buckets = new Array(numBuckets).fill(0);
-
-            for (let i = startIdx; i <= idx; i++) {
-                const d = rawData[i];
-                if (!d) continue;
-                const decay = 1 - (idx - i) * 0.015;
-                const vol = d.volume * Math.max(0.1, decay);
-
-                // Map high/low to bucket indices
-                const lowBucket = Math.floor((d.low - minPrice) / bucketSize);
-                const highBucket = Math.floor((d.high - minPrice) / bucketSize);
-
-                for (let b = Math.max(0, lowBucket); b <= Math.min(numBuckets - 1, highBucket); b++) {
-                    buckets[b] += vol / (highBucket - lowBucket + 1);
-                }
-            }
-
-            const maxBucket = Math.max(...buckets);
-            if (maxBucket <= 0) return;
-
-            // Draw chips (horizontal bars from right edge)
-            const barMaxWidth = overlayWidth - 5;
-            const barHeight = chartHeight / numBuckets;
-
-            for (let i = 0; i < numBuckets; i++) {
-                const pct = buckets[i] / maxBucket;
-                if (pct < 0.01) continue;
-
-                const barWidth = pct * barMaxWidth;
-                const bucketPrice = minPrice + (i + 0.5) * bucketSize;
-
-                // Y position: use priceToCoordinate for accurate mapping
-                const y = sCandle.priceToCoordinate(bucketPrice);
-                if (y === null || y < 0 || y > chartHeight) continue;
-
-                // Color: profit (below current price) = red, loss = green
-                const isProfit = bucketPrice <= currentPrice;
-                ctx.fillStyle = isProfit
-                    ? `rgba(239, 68, 68, ${0.3 + pct * 0.5})` // Red (profit in China)
-                    : `rgba(34, 197, 94, ${0.3 + pct * 0.5})`; // Green (loss)
-
-                // Draw bar from right edge
-                ctx.fillRect(overlayWidth - barWidth, y - barHeight / 2, barWidth, barHeight - 1);
-            }
-
-            // Draw current price marker line
-            const currentY = sCandle.priceToCoordinate(currentPrice);
-            if (currentY !== null && currentY >= 0 && currentY <= chartHeight) {
-                ctx.strokeStyle = '#fbbf24';
-                ctx.lineWidth = 1;
-                ctx.setLineDash([2, 2]);
-                ctx.beginPath();
-                ctx.moveTo(0, currentY);
-                ctx.lineTo(overlayWidth, currentY);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
-        }
-
-        function toggleChipOverlay() {
-            showChipOverlay = !showChipOverlay;
-            drawChipOverlay();
-            // Update button state
-            const btn = document.getElementById('btn-chips');
-            if (btn) btn.classList.toggle('active', showChipOverlay);
-        }
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
@@ -1000,7 +885,7 @@
             if (chartMain) chartMain.resize(0, 0); // Auto-resize check
             if (chartSub) chartSub.resize(0, 0);
             // Redraw chip overlay on resize
-            setTimeout(() => drawChipOverlay(), 100);
+            setTimeout(() => renderSidePanelChips(lastChipIdx), 100);
         });
 
         // --- Theme Logic ---
@@ -1079,8 +964,15 @@
             sVol = chartSub.addHistogramSeries({ priceFormat: { type: 'volume' } });
 
             // Sync
-            chartMain.timeScale().subscribeVisibleLogicalRangeChange(r => chartSub.timeScale().setVisibleLogicalRange(r));
-            chartSub.timeScale().subscribeVisibleLogicalRangeChange(r => chartMain.timeScale().setVisibleLogicalRange(r));
+            chartMain.timeScale().subscribeVisibleLogicalRangeChange(r => {
+                chartSub.timeScale().setVisibleLogicalRange(r);
+                // Sync side panel chips on scroll/zoom
+                requestAnimationFrame(() => renderSidePanelChips(lastChipIdx));
+            });
+            chartSub.timeScale().subscribeVisibleLogicalRangeChange(r => {
+                chartMain.timeScale().setVisibleLogicalRange(r);
+                requestAnimationFrame(() => renderSidePanelChips(lastChipIdx));
+            });
 
             // Legend Sync + Chip Distribution on Hover
             chartMain.subscribeCrosshairMove(param => {
@@ -1114,7 +1006,10 @@
             chartMain.subscribeClick(param => {
                 if (param.time) {
                     const idx = rawData.findIndex(d => d.time === param.time);
-                    if (idx !== -1) renderChipDistribution(idx);
+                    if (idx !== -1) {
+                        lastChipIdx = idx;
+                        renderSidePanelChips(idx);
+                    }
                 }
             });
 
@@ -1163,7 +1058,7 @@
 
                 // Reset chip cache and render latest
                 resetChipCache();
-                renderChipDistribution(-1);
+                renderSidePanelChips(-1);
 
             } catch (e) {
                 document.getElementById('loading').innerHTML = `<div class="error">${e.message}</div>`;
@@ -1332,7 +1227,7 @@
             calculateAndDrawPriceLines();
 
             // Draw chip distribution overlay (synced with K-line Y-axis)
-            drawChipOverlay();
+            // drawChipOverlay(); // Removed
         }
 
         function updateActionBanner(ma5, ma10) {
@@ -1666,7 +1561,7 @@
                 maxPrice = chipMaxPrice + padding;
             }
 
-            const numBuckets = 30; // More detail
+            const numBuckets = 120; // Higher resolution for Tongdaxin style
             const bucketSize = (maxPrice - minPrice) / numBuckets;
             const buckets = new Array(numBuckets).fill(0);
 
@@ -1713,92 +1608,138 @@
             };
         }
 
-        // Get K-line chart visible price range from ALL visible data
-        function getKlinePriceRange() {
-            if (!chartMain || !sCandle || !rawData.length) return null;
-            try {
-                // Get visible logical range (bar indices)
-                const visibleRange = chartMain.timeScale().getVisibleLogicalRange();
-                if (!visibleRange) return null;
 
-                // Calculate min/max from ALL visible bars
-                const startIdx = Math.max(0, Math.floor(visibleRange.from));
-                const endIdx = Math.min(rawData.length - 1, Math.ceil(visibleRange.to));
 
-                let min = Infinity, max = -Infinity;
-                for (let i = startIdx; i <= endIdx; i++) {
-                    if (rawData[i]) {
-                        if (rawData[i].low < min) min = rawData[i].low;
-                        if (rawData[i].high > max) max = rawData[i].high;
-                    }
-                }
-
-                if (min === Infinity || max === -Infinity) return null;
-
-                // Add padding to match chart's auto-scale behavior (~10%)
-                const range = max - min;
-                const padding = range * 0.1;
-                return {
-                    min: Math.max(0, min - padding),
-                    max: max + padding
-                };
-            } catch (e) {
-                console.error('getKlinePriceRange error:', e);
-                return null;
-            }
-        }
-
-        async function renderChipDistribution(dayIndex) {
+        async function renderSidePanelChips(dayIndex) {
             const idx = dayIndex >= 0 ? dayIndex : rawData.length - 1;
             const target = rawData[idx];
             if (!target) return;
 
             document.getElementById('chip-date').textContent = target.time;
 
-            // Get K-line chart price range for Y-axis sync
-            const klinePriceRange = getKlinePriceRange();
+            const canvas = document.getElementById('chip-canvas');
+            const container = document.getElementById('chip-chart-area');
+            if (!canvas || !container) return;
 
-            // Calculate chip distribution with synced price range
-            const chips = calculateChipDistribution(rawData, idx, klinePriceRange);
+            // Resize canvas to match container (which should match chart height)
+            const rect = container.getBoundingClientRect();
+            // Ensure canvas resolution matches display size
+            const dpr = window.devicePixelRatio || 1;
 
-            const cont = document.getElementById('chip-chart-area');
-            cont.innerHTML = '';
+            // We want the canvas to exactly match the main chart's height logic
+            // The container is flexed, but we need to ensure it aligns with the chart.
+            // Actually, the side panel covers the whole height including sub-chart? 
+            // No, the side panel is adjacent to .content-area which contains chart-section.
+            // Wait, .content-area contains .chart-section AND .side-panel.
+            // .chart-section contains #main-chart (flex:3) and #sub-chart (flex:1.2).
+            // So the side panel height = main-chart + sub-chart.
+            // BUT we want to sync with MAIN chart.
+            // We need to know where the main chart is relative to the side panel.
 
-            const wrapper = document.createElement('div');
-            wrapper.style.cssText = 'display:flex; flex-direction:column; height:100%; justify-content:flex-start; gap:0; padding: 4px 0;';
+            // Let's just draw relative to the MAIN chart's price scale.
+            // We can get the main chart's height.
+            const mainChartEl = document.getElementById('main-chart');
+            const mainHeight = mainChartEl.clientHeight;
 
-            // Find peak concentration for highlight
-            const peakPct = Math.max(...chips.distribution.map(d => d.percentage));
+            // The side panel canvas should probably only draw where the main chart is?
+            // Or maybe we just draw in the top part corresponding to main chart?
+            // Yes, let's set the canvas height to match the container, but only draw in the main chart area.
+
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            canvas.style.width = rect.width + 'px';
+            canvas.style.height = rect.height + 'px';
+
+            const ctx = canvas.getContext('2d');
+            ctx.scale(dpr, dpr);
+            ctx.clearRect(0, 0, rect.width, rect.height);
+
+            // Calculate chip distribution
+            // We need to calculate based on the visible range or the whole data?
+            // Usually chip distribution is calculated for the specific day (idx).
+            // But the DISPLAY is mapped to the current Y-axis.
+
+            const chips = calculateChipDistribution(rawData, idx); // Use internal range logic
+
+            // Drawing
+            // We need to map price to Y coordinate using sCandle.priceToCoordinate(price)
+            // But sCandle.priceToCoordinate returns coordinate relative to the chart container.
+            // We need to map that to the side panel canvas.
+            // Since side panel is top-aligned with chart section, the Y should match exactly for the main chart part.
+
+            if (!sCandle) return;
+
+            const maxPct = Math.max(...chips.distribution.map(d => d.percentage));
             const currentPrice = chips.currentPrice;
 
-            chips.distribution.forEach((d, i) => {
-                const row = document.createElement('div');
-                row.className = 'chip-bar-row';
+            // Draw bars
+            // We'll iterate through buckets (or distribution items)
+            // Since we want a "histogram" look, we can draw rects for each bucket.
+            // But our calculateChipDistribution returns discrete points.
+            // Let's use the buckets directly if possible, or just draw rects centered on price.
 
-                // Highlight bar at current price level
-                const isCurrentPrice = Math.abs(d.price - currentPrice) < ((chips.distribution[1]?.price - chips.distribution[0]?.price) || 1);
-                const isPeak = d.percentage === peakPct && peakPct > 10;
+            // To make it look like Tongdaxin, we want thin horizontal lines or blocks.
+            // Let's use the distribution data.
 
-                // Color intensity based on percentage
-                const intensity = Math.min(100, 40 + d.percentage * 0.6);
+            // Optimization: Only draw what's visible? 
+            // Canvas is fast enough for this.
 
-                row.innerHTML = `
-                    <div class="chip-price" ${isCurrentPrice ? 'style="font-weight:bold;color:var(--text-primary)"' : ''}>${d.price.toFixed(2)}</div>
-                    <div class="chip-track">
-                        <div class="chip-fill ${d.isProfit ? 'p' : 'l'}" style="width:${d.percentage}%; opacity:${intensity / 100}"></div>
-                        ${isPeak ? '<span class="peak-marker">▶</span>' : ''}
-                    </div>
-                    ${isCurrentPrice ? '<span class="curr-marker">◀</span>' : ''}
-                `;
-                wrapper.appendChild(row);
+            chips.distribution.forEach(d => {
+                const y = sCandle.priceToCoordinate(d.price);
+
+                // If y is null, it's off screen (or invalid). 
+                // Note: priceToCoordinate returns null if off-scale? No, usually returns value, can be outside.
+                if (y === null) return;
+
+                // Check if y is within the main chart area
+                if (y < 0 || y > mainHeight) return;
+
+                const barWidth = (d.percentage / maxPct) * (rect.width - 40); // Leave space for text
+                const barHeight = 2; // Thin lines for high res look
+
+                // Color
+                // Profit (price < current) = Red
+                // Loss (price > current) = Green/Blue
+                // Tongdaxin: Profit=Red, Loss=Blue/Green. 
+                // Let's use variables.
+                const isProfit = d.price <= currentPrice;
+                // Using app colors
+                ctx.fillStyle = isProfit ? '#ef4444' : '#3b82f6'; // Red / Blue
+                ctx.globalAlpha = 0.6;
+
+                // Draw bar from LEFT
+                ctx.fillRect(0, y - barHeight / 2, barWidth, barHeight);
+
+                // Draw Peak Line?
+                if (d.percentage === maxPct) {
+                    ctx.fillStyle = '#f59e0b'; // Orange for peak
+                    ctx.fillRect(0, y - barHeight / 2, barWidth + 2, barHeight);
+                }
             });
-            cont.appendChild(wrapper);
+            ctx.globalAlpha = 1.0;
 
-            // Update stats with colors
+            // Draw Current Price Line
+            const currY = sCandle.priceToCoordinate(currentPrice);
+            if (currY !== null && currY >= 0 && currY <= mainHeight) {
+                ctx.strokeStyle = '#fbbf24'; // Yellow
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 2]);
+                ctx.beginPath();
+                ctx.moveTo(0, currY);
+                ctx.lineTo(rect.width, currY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Label
+                ctx.fillStyle = '#fbbf24';
+                ctx.font = '10px monospace';
+                ctx.fillText(currentPrice.toFixed(2), rect.width - 35, currY - 2);
+            }
+
+            // Update stats text
             const pRatioEl = document.getElementById('p-ratio');
             pRatioEl.textContent = chips.profitRatio.toFixed(1) + '%';
             pRatioEl.style.color = chips.profitRatio >= 50 ? 'var(--up-color)' : 'var(--down-color)';
-
             document.getElementById('avg-cost').textContent = chips.avgCost.toFixed(2);
             document.getElementById('conc').textContent = chips.concentration.toFixed(1) + '%';
         }
