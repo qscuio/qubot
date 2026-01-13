@@ -274,24 +274,24 @@ class ChipDistributionService:
             return
         
         try:
+            # Use SQL NOW() to avoid timezone-aware/naive mismatch
             await db.pool.execute("""
                 INSERT INTO stock_chip_distribution 
                     (code, date, distribution, avg_cost, profit_ratio, concentration, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                VALUES ($1, $2, $3, $4, $5, $6, NOW())
                 ON CONFLICT (code, date) DO UPDATE SET
                     distribution = EXCLUDED.distribution,
                     avg_cost = EXCLUDED.avg_cost,
                     profit_ratio = EXCLUDED.profit_ratio,
                     concentration = EXCLUDED.concentration,
-                    updated_at = EXCLUDED.updated_at
+                    updated_at = NOW()
             """, 
                 data['code'],
                 date.fromisoformat(data['date']),
                 json.dumps(data['distribution']),
                 data['avgCost'],
                 data['profitRatio'],
-                data['concentration'],
-                china_now()
+                data['concentration']
             )
         except Exception as e:
             logger.warn(f"Failed to save chip distribution for {data['code']}: {e}")

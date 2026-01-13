@@ -784,7 +784,17 @@
 
                 if (!json.data || !json.data.length) throw new Error('No Data');
 
-                rawData = json.data;
+                // Filter out invalid data entries (missing OHLCV values)
+                rawData = json.data.filter(d =>
+                    d &&
+                    d.close !== undefined && d.close !== null && !isNaN(d.close) &&
+                    d.open !== undefined && d.open !== null &&
+                    d.high !== undefined && d.high !== null &&
+                    d.low !== undefined && d.low !== null
+                );
+
+                if (rawData.length === 0) throw new Error('No valid data');
+
                 updateStockHeader(json);
                 processData();
                 document.getElementById('loading').style.display = 'none';
@@ -801,18 +811,25 @@
             document.getElementById('name').textContent = data.name || code;
             document.getElementById('code').textContent = code;
 
-            const last = rawData[rawData.length - 1];
-            const prev = rawData[rawData.length > 1 ? rawData[rawData.length - 2] : rawData[0]];
+            // Filter valid data with close values
+            const validData = rawData.filter(d => d && d.close !== undefined && d.close !== null);
+            if (validData.length === 0) {
+                document.getElementById('price').textContent = '--';
+                return;
+            }
+
+            const last = validData[validData.length - 1];
+            const prev = validData[validData.length > 1 ? validData.length - 2 : 0];
 
             document.getElementById('price').textContent = last.close.toFixed(2);
 
-            const pct = ((last.close - prev.close) / prev.close) * 100;
+            const pct = prev.close > 0 ? ((last.close - prev.close) / prev.close) * 100 : 0;
             const chgEl = document.getElementById('change');
             chgEl.textContent = (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
             chgEl.className = `price-change ${pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat'}`;
 
             // Stats
-            const amp = ((last.high - last.low) / prev.close) * 100;
+            const amp = prev.close > 0 ? ((last.high - last.low) / prev.close) * 100 : 0;
             document.getElementById('amplitude').textContent = amp.toFixed(2) + '%';
             document.getElementById('vol-stat').textContent = (last.volume / 100).toFixed(0); // Hands
             // Turnover rate if available? approximate
@@ -821,9 +838,11 @@
 
         // --- Indicator Calculations ---
         function calculateMA(n) {
-            return rawData.map((d, i, arr) => {
+            // Filter out entries with invalid close values first
+            const validData = rawData.filter(d => d && d.close !== undefined && d.close !== null && !isNaN(d.close));
+            return validData.map((d, i, arr) => {
                 if (i < n - 1) return { time: d.time, value: NaN };
-                const sum = arr.slice(i - n + 1, i + 1).reduce((a, b) => a + b.close, 0);
+                const sum = arr.slice(i - n + 1, i + 1).reduce((a, b) => a + (b.close || 0), 0);
                 return { time: d.time, value: sum / n };
             }).filter(d => !isNaN(d.value));
         }
