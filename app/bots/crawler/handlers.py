@@ -16,7 +16,7 @@ from app.services.stock_scanner import stock_scanner
 from app.services.sector import sector_service
 from app.services.market_report import market_report_service
 from app.services.watchlist import watchlist_service
-from app.services.trading_simulator import trading_simulator
+from app.services.trading_simulator import trading_simulator, MAX_POSITIONS
 from app.core.config import settings
 from app.core.database import db
 from app.core.logger import Logger
