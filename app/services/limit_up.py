@@ -314,8 +314,8 @@ class LimitUpService:
         # Get yesterday's limit-up stocks
         yesterday = china_today() - timedelta(days=1)
         # Skip weekends
-        if yesterday.weekday() >= 5:
-            yesterday = yesterday - timedelta(days=yesterday.weekday() - 4)
+        while yesterday.weekday() >= 5:
+            yesterday -= timedelta(days=1)
         
         logger.info(f"Fetching limit-up stocks for {yesterday}")
         
@@ -325,6 +325,25 @@ class LimitUpService:
             WHERE date = $1
             ORDER BY limit_times DESC, close_price DESC
         """, yesterday)
+        
+        # If no data in DB, try to fetch from AkShare in real-time
+        if not stocks:
+            logger.warn(f"No limit-up stocks found in DB for {yesterday}, fetching from AkShare...")
+            date_str = yesterday.strftime("%Y%m%d")
+            try:
+                fetched = await self.get_realtime_limit_ups(date_str)
+                if fetched:
+                    # Save to DB for future use
+                    await self._save_limit_ups(yesterday, fetched)
+                    logger.info(f"Fetched and saved {len(fetched)} limit-up stocks for {yesterday}")
+                    # Convert to format needed
+                    stocks = [
+                        {"code": s["code"], "name": s["name"], 
+                         "close_price": s["close_price"], "limit_times": s.get("limit_times", 1)}
+                        for s in fetched if s.get("is_sealed", True)
+                    ]
+            except Exception as e:
+                logger.error(f"Failed to fetch from AkShare: {e}")
         
         if not stocks:
             logger.warn(f"No limit-up stocks found for {yesterday}")
