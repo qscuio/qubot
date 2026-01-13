@@ -869,6 +869,7 @@ SIGNAL_NAMES = {
     "small_bullish_4_1_bearish": "四阳一阴",
     "small_bullish_5_1_bearish": "五阳一阴",
     "small_bullish_3_1_bearish_1_bullish": "三阳一阴一阳",
+    "strong_first_negative": "强势股首阴",
     "pullback_ma5": "5日线回踩",
     "pullback_ma20": "20日线回踩",
     "pullback_ma30": "30日线回踩",
@@ -886,6 +887,7 @@ SIGNAL_ICONS = {
     "small_bullish_4_1_bearish": "📉",
     "small_bullish_5_1_bearish": "📉",
     "small_bullish_3_1_bearish_1_bullish": "📈",
+    "strong_first_negative": "🟢",
     "pullback_ma5": "↩️",
     "pullback_ma20": "🔄",
     "pullback_ma30": "🔙",
@@ -927,6 +929,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="📉 四阳一阴", callback_data="scanner:scan:small_bullish_4_1_bearish")
     builder.button(text="📉 五阳一阴", callback_data="scanner:scan:small_bullish_5_1_bearish")
     builder.button(text="📈 三阳一阴一阳", callback_data="scanner:scan:small_bullish_3_1_bearish_1_bullish")
+    builder.button(text="🟢 强势股首阴", callback_data="scanner:scan:strong_first_negative")
     builder.button(text="↩️ 5日线回踩", callback_data="scanner:scan:pullback_ma5")
     builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
     builder.button(text="🔙 30日线回踩", callback_data="scanner:scan:pullback_ma30")
@@ -940,7 +943,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="◀️ 返回", callback_data="main")
     
     # Layout: 2 cols for signals, then 2, 2, 1
-    builder.adjust(2, 2, 2, 3, 3, 3, 2, 1)
+    builder.adjust(2, 2, 2, 3, 3, 3, 3, 2, 1)
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())

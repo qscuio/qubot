@@ -153,6 +153,7 @@ class StockScanner:
             "small_bullish_4_1_bearish": [],  # 四阳一阴
             "small_bullish_5_1_bearish": [],  # 五阳一阴
             "small_bullish_3_1_bearish_1_bullish": [],  # 三阳一阴一阳
+            "strong_first_negative": [],  # 强势股首阴
             "pullback_ma5": [],  # 5日线回踩
             "pullback_ma20": [],  # 20日线回踩
             "pullback_ma30": [],  # 30日线回踩
@@ -299,6 +300,9 @@ class StockScanner:
                     if self._check_small_bullish_3_1_bearish_1_bullish(hist, pd):
                         signals["small_bullish_3_1_bearish_1_bullish"].append(stock_info)
 
+                    if self._check_strong_first_negative(hist, pd):
+                        signals["strong_first_negative"].append(stock_info)
+
                     if self._check_ma_pullback(hist, pd, 5):
                         signals["pullback_ma5"].append(stock_info)
 
@@ -322,6 +326,7 @@ class StockScanner:
                         stock_info in signals["small_bullish_4_1_bearish"],
                         stock_info in signals["small_bullish_5_1_bearish"],
                         stock_info in signals["small_bullish_3_1_bearish_1_bullish"],
+                        stock_info in signals["strong_first_negative"],
                         stock_info in signals["pullback_ma5"],
                         stock_info in signals["pullback_ma20"],
                         stock_info in signals["pullback_ma30"],
@@ -831,6 +836,47 @@ class StockScanner:
                 return position < 0.4
             
             return False
+        except:
+            return False
+
+    def _check_strong_first_negative(self, hist, pd) -> bool:
+        """检查强势股首阴信号.
+        
+        条件:
+        1. 强势: 近20日涨幅 > 30%
+        2. 首阴: 昨日(T-1)是阳线, 今日(T)是阴线
+        """
+        try:
+            if len(hist) < 21:
+                return False
+                
+            # 1. Check Strong Trend (Gain > 30% in last 20 days)
+            # Use T-1 close vs T-21 close to avoid today's drop affecting the calculation too much?
+            # Or just use Max High in last 20 days vs Min Low?
+            # Let's use: (Yesterday Close - Close 20 days ago) / Close 20 days ago > 0.3
+            close = hist['收盘']
+            close_yesterday = close.iloc[-2]
+            close_20_ago = close.iloc[-21]
+            
+            if close_20_ago == 0:
+                return False
+                
+            gain_pct = (close_yesterday - close_20_ago) / close_20_ago
+            if gain_pct <= 0.3:
+                return False
+                
+            # 2. Check First Negative
+            # Yesterday (T-1) must be Bullish
+            yesterday = hist.iloc[-2]
+            if yesterday['收盘'] <= yesterday['开盘']:
+                return False
+                
+            # Today (T) must be Bearish
+            today = hist.iloc[-1]
+            if today['收盘'] >= today['开盘']:
+                return False
+                
+            return True
         except:
             return False
 
