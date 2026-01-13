@@ -373,64 +373,128 @@ class StockScanner:
             return False
 
     def _check_volume_price_startup(self, hist, pd) -> bool:
-        """检查量价启动信号 (量增价升，即将启动).
+        """专业量价分析启动信号.
         
-        条件:
-        1. 最近3-5日成交量逐步放大 (量增)
-        2. 同时股价逐步上涨 (价升)
-        3. 今日成交量 > 5日均量 × 1.5
-        4. 收盘价站上10日均线
-        5. 今日收盘在日内高位 (上半部分)
+        使用多维度量价关系分析，判断股票是否即将启动：
+        
+        1. 量比分析 - 当前量比 > 1.5 (活跃度提升)
+        2. OBV趋势 - 能量潮上升且创新高 (资金持续流入)
+        3. 量价配合 - 价升量增的健康形态
+        4. 位置确认 - 站上关键均线且处于合理位置
+        5. 缩量整理后放量 - 典型启动形态
         """
         try:
-            if len(hist) < 10:
+            if len(hist) < 20:
                 return False
             
-            # Get recent 5 days
-            last_5 = hist.tail(5)
+            closes = hist['收盘'].values
+            volumes = hist['成交量'].values
+            highs = hist['最高'].values
+            lows = hist['最低'].values
+            opens = hist['开盘'].values
             
-            # 1. Check volume increasing trend (at least 3 of last 5 days show higher volume)
-            volumes = last_5['成交量'].values
-            vol_increasing = 0
-            for i in range(1, len(volumes)):
-                if volumes[i] > volumes[i-1]:
-                    vol_increasing += 1
-            if vol_increasing < 2:  # At least 2 increases in last 5 days
+            # ═══════════════════════════════════════════════════════════
+            # 1. 量比分析 (Volume Ratio)
+            # ═══════════════════════════════════════════════════════════
+            vol_today = volumes[-1]
+            vol_avg5 = volumes[-6:-1].mean()
+            vol_avg10 = volumes[-11:-1].mean()
+            
+            volume_ratio = vol_today / vol_avg5 if vol_avg5 > 0 else 0
+            
+            # 量比需要 > 1.5 表示活跃度提升
+            if volume_ratio < 1.5:
                 return False
             
-            # 2. Check price increasing trend (at least 3 of last 5 days are up)
-            closes = last_5['收盘'].values
-            price_up_days = 0
-            for i in range(1, len(closes)):
-                if closes[i] > closes[i-1]:
-                    price_up_days += 1
-            if price_up_days < 2:  # At least 2 up days
+            # ═══════════════════════════════════════════════════════════
+            # 2. OBV (能量潮) 趋势分析
+            # ═══════════════════════════════════════════════════════════
+            obv = self._calculate_obv(closes, volumes)
+            obv_ma5 = pd.Series(obv).rolling(5).mean().iloc[-1]
+            obv_ma10 = pd.Series(obv).rolling(10).mean().iloc[-1]
+            
+            # OBV需要上升趋势 (OBV > OBV_MA5 > OBV_MA10)
+            obv_bullish = obv[-1] > obv_ma5 > obv_ma10
+            
+            # OBV创5日新高 (资金持续流入)
+            obv_new_high = obv[-1] >= max(obv[-5:])
+            
+            if not (obv_bullish or obv_new_high):
                 return False
             
-            # 3. Today's volume > 5-day avg × 1.5
-            vol_today = hist['成交量'].iloc[-1]
-            vol_avg5 = hist['成交量'].iloc[-6:-1].mean()
-            if vol_today < vol_avg5 * 1.5:
-                return False
+            # ═══════════════════════════════════════════════════════════
+            # 3. 价格趋势确认
+            # ═══════════════════════════════════════════════════════════
+            close_today = closes[-1]
+            ma5 = pd.Series(closes).rolling(5).mean().iloc[-1]
+            ma10 = pd.Series(closes).rolling(10).mean().iloc[-1]
+            ma20 = pd.Series(closes).rolling(20).mean().iloc[-1]
             
-            # 4. Close above 10-day MA
-            close_today = hist['收盘'].iloc[-1]
-            ma10 = hist['收盘'].rolling(10).mean().iloc[-1]
+            # 价格需站上MA10
             if close_today < ma10:
                 return False
             
-            # 5. Close in upper half of today's range
-            high_today = hist['最高'].iloc[-1]
-            low_today = hist['最低'].iloc[-1]
-            range_today = high_today - low_today
-            if range_today > 0:
-                position = (close_today - low_today) / range_today
-                if position < 0.5:  # Not closing in upper half
+            # ═══════════════════════════════════════════════════════════
+            # 4. 量价配合检测 (近5日)
+            # ═══════════════════════════════════════════════════════════
+            # 统计量价同向的天数
+            vol_price_sync = 0
+            for i in range(-5, 0):
+                price_up = closes[i] > closes[i-1]
+                vol_up = volumes[i] > volumes[i-1]
+                # 价涨量增 或 价跌量缩 都是健康形态
+                if (price_up and vol_up) or (not price_up and not vol_up):
+                    vol_price_sync += 1
+            
+            # 至少3天量价配合良好
+            if vol_price_sync < 3:
+                return False
+            
+            # ═══════════════════════════════════════════════════════════
+            # 5. 缩量整理后放量启动 (经典形态)
+            # ═══════════════════════════════════════════════════════════
+            # 检查前5-10日是否有缩量整理
+            vol_prev_5_10 = volumes[-10:-5].mean()
+            vol_recent = volumes[-3:].mean()
+            
+            # 近期量能放大 (相比前期整理期)
+            volume_expansion = vol_recent > vol_prev_5_10 * 1.3
+            
+            # ═══════════════════════════════════════════════════════════
+            # 6. K线形态确认
+            # ═══════════════════════════════════════════════════════════
+            # 今日实体在日内上半部分
+            body_top = max(opens[-1], close_today)
+            body_bottom = min(opens[-1], close_today)
+            day_range = highs[-1] - lows[-1]
+            if day_range > 0:
+                body_position = (body_bottom - lows[-1]) / day_range
+                # 实体应在中上部位置
+                if body_position < 0.3:
                     return False
             
-            return True
+            # 今日应为阳线或十字星
+            is_bullish = close_today >= opens[-1]
+            
+            # ═══════════════════════════════════════════════════════════
+            # 综合判断: 满足以上条件
+            # ═══════════════════════════════════════════════════════════
+            return is_bullish and (volume_expansion or volume_ratio > 2)
+            
         except:
             return False
+    
+    def _calculate_obv(self, closes, volumes) -> list:
+        """计算OBV (On-Balance Volume 能量潮)."""
+        obv = [0]
+        for i in range(1, len(closes)):
+            if closes[i] > closes[i-1]:
+                obv.append(obv[-1] + volumes[i])
+            elif closes[i] < closes[i-1]:
+                obv.append(obv[-1] - volumes[i])
+            else:
+                obv.append(obv[-1])
+        return obv
 
 
 # Singleton
