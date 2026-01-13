@@ -863,8 +863,13 @@ SIGNAL_NAMES = {
     "breakout": "突破信号",
     "volume": "放量信号", 
     "ma_bullish": "多头排列",
-    "small_bullish_5": "底部5小阳",
+    "small_bullish_5": "底部5连阳",
     "volume_price": "量价启动",
+    "small_bullish_4": "底部四连阳",
+    "small_bullish_4_1_bearish": "四阳一阴",
+    "pullback_ma5": "5日线回踩",
+    "pullback_ma20": "20日线回踩",
+    "pullback_ma30": "30日线回踩",
     "multi_signal": "多信号共振"
 }
 
@@ -874,6 +879,11 @@ SIGNAL_ICONS = {
     "ma_bullish": "📈",
     "small_bullish_5": "🌅",
     "volume_price": "🚀",
+    "small_bullish_4": "🔥",
+    "small_bullish_4_1_bearish": "📉",
+    "pullback_ma5": "↩️",
+    "pullback_ma20": "🔄",
+    "pullback_ma30": "🔙",
     "multi_signal": "⭐"
 }
 
@@ -896,22 +906,32 @@ async def cb_scanner_main(callback: types.CallbackQuery):
         f"📊 本地数据: <b>{stock_count}</b> 只股票\n"
         f"📅 数据日期: <b>{max_date}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "<i>基于本地历史K线数据扫描技术信号</i>\n\n"
-        "📌 <b>信号类型:</b>\n"
-        "  🔺 突破信号 - 收盘突破20日高点\n"
-        "  📊 放量信号 - 成交量>5日均量×2\n"
-        "  📈 多头排列 - MA5>MA10>MA20金叉\n"
-        "  🌅 底部5小阳 - 底部连续5个小阳线\n"
-        "  🚀 量价启动 - 专业量价关系分析\n"
+        "<i>基于本地历史K线数据扫描技术信号</i>\n"
     )
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔍 开始扫描", callback_data="scanner:scan")
+    # 2 columns for signals
+    builder.button(text="🔺 突破信号", callback_data="scanner:scan:breakout")
+    builder.button(text="📊 放量信号", callback_data="scanner:scan:volume")
+    builder.button(text="📈 多头排列", callback_data="scanner:scan:ma_bullish")
+    builder.button(text="🌅 底部5连阳", callback_data="scanner:scan:small_bullish_5")
+    builder.button(text="🚀 量价启动", callback_data="scanner:scan:volume_price")
+    builder.button(text="⭐ 多信号共振", callback_data="scanner:scan:multi_signal")
+    builder.button(text="🔥 底部四连阳", callback_data="scanner:scan:small_bullish_4")
+    builder.button(text="📉 四阳一阴", callback_data="scanner:scan:small_bullish_4_1_bearish")
+    builder.button(text="↩️ 5日线回踩", callback_data="scanner:scan:pullback_ma5")
+    builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
+    builder.button(text="🔙 30日线回踩", callback_data="scanner:scan:pullback_ma30")
+    
+    # Control buttons
+    builder.button(text="🔍 全部扫描", callback_data="scanner:scan:all")
     builder.button(text="⚡ 强制扫描", callback_data="scanner:scan:force")
     builder.button(text="📊 数据库状态", callback_data="scanner:dbcheck")
     builder.button(text="🔄 同步数据", callback_data="scanner:dbsync")
     builder.button(text="◀️ 返回", callback_data="main")
-    builder.adjust(1, 2, 1, 1)
+    
+    # Layout: 2 cols for signals, then 2, 2, 1
+    builder.adjust(2, 2, 2, 2, 3, 2, 2, 1)
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
@@ -919,7 +939,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
         pass
 
 
-async def _run_scan_from_callback(callback: types.CallbackQuery, force: bool = False):
+async def _run_scan_from_callback(callback: types.CallbackQuery, force: bool = False, signal_type: str = "all"):
     """Trigger stock signal scan from callback."""
     await safe_answer(callback, "扫描中...")
 
@@ -940,13 +960,26 @@ async def _run_scan_from_callback(callback: types.CallbackQuery, force: bool = F
             return await self._msg.answer(text, **kwargs)
 
     mock_msg = MockMessage(callback.message)
-    await cmd_scan(mock_msg, force=force)
+    await cmd_scan(mock_msg, force=force, signal_type=signal_type)
 
 
-@router.callback_query(F.data == "scanner:scan")
+@router.callback_query(F.data.startswith("scanner:scan"))
 async def cb_scanner_scan(callback: types.CallbackQuery):
-    """Trigger stock signal scan."""
-    await _run_scan_from_callback(callback, force=False)
+    """Trigger stock signal scan (specific or all)."""
+    # Parse signal type from callback data
+    # scanner:scan (default all)
+    # scanner:scan:breakout
+    # scanner:scan:all
+    # scanner:scan:force
+    
+    parts = callback.data.split(":")
+    signal_type = parts[2] if len(parts) > 2 else "all"
+    force = signal_type == "force"
+    
+    if signal_type == "force":
+        signal_type = "all"
+        
+    await _run_scan_from_callback(callback, force=force, signal_type=signal_type)
 
 
 @router.callback_query(F.data == "scanner:scan:force")
@@ -1146,7 +1179,7 @@ async def cb_db_sync(callback: types.CallbackQuery):
 
 
 @router.message(Command("scan"))
-async def cmd_scan(message: types.Message, command: CommandObject = None, force: bool = False):
+async def cmd_scan(message: types.Message, command: CommandObject = None, force: bool = False, signal_type: str = "all"):
     if not await is_allowed(message.from_user.id):
         return
     
@@ -1157,7 +1190,7 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
         arg = command.args.strip().lower()
         force = arg in ("force", "f", "强制")
 
-    status = await message.answer("🔍 正在扫描全A股启动信号...\n\n⏳ 需要几分钟，请稍候")
+    status = await message.answer(f"🔍 正在扫描... ({SIGNAL_NAMES.get(signal_type, '全部')})\n\n⏳ 请稍候")
     sender = status
     
     try:
@@ -1209,24 +1242,32 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
             "━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"{cache_note}"
         )
-        for signal_type, stocks in signals.items():
+        for sig_type, stocks in signals.items():
+            # Filter if specific type requested
+            if signal_type != "all" and sig_type != signal_type:
+                continue
+                
             if stocks:
-                icon = SIGNAL_ICONS.get(signal_type, "•")
-                name = SIGNAL_NAMES.get(signal_type, signal_type)
+                icon = SIGNAL_ICONS.get(sig_type, "•")
+                name = SIGNAL_NAMES.get(sig_type, sig_type)
                 summary += f"{icon} {name}: <b>{len(stocks)}只</b>\n"
         summary += f"\n共 <b>{total_signals}</b> 个信号"
         
         await status.edit_text(summary, parse_mode="HTML")
         
         # Send complete list for each signal type
-        for signal_type, stocks in signals.items():
+        for sig_type, stocks in signals.items():
+            # Filter if specific type requested
+            if signal_type != "all" and sig_type != signal_type:
+                continue
+                
             if stocks:
-                icon = SIGNAL_ICONS.get(signal_type, "•")
-                name = SIGNAL_NAMES.get(signal_type, signal_type)
+                icon = SIGNAL_ICONS.get(sig_type, "•")
+                name = SIGNAL_NAMES.get(sig_type, sig_type)
                 await send_signal_list(
                     f"{icon} <b>{name}</b> ({len(stocks)}只)", 
                     stocks, 
-                    context=f"scanner_{signal_type}"
+                    context=f"scanner_{sig_type}"
                 )
             
     except Exception as e:

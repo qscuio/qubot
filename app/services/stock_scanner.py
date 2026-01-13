@@ -149,6 +149,11 @@ class StockScanner:
             "ma_bullish": [],
             "small_bullish_5": [],  # 底部连续5个小阳线
             "volume_price": [],  # 量价启动信号
+            "small_bullish_4": [],  # 底部四连阳
+            "small_bullish_4_1_bearish": [],  # 四阳一阴
+            "pullback_ma5": [],  # 5日线回踩
+            "pullback_ma20": [],  # 20日线回踩
+            "pullback_ma30": [],  # 30日线回踩
             "multi_signal": [],  # 多信号共振(满足≥3个信号)
         }
         
@@ -278,6 +283,21 @@ class StockScanner:
                     
                     if self._check_volume_price_startup(hist, pd):
                         signals["volume_price"].append(stock_info)
+
+                    if self._check_small_bullish_4(hist, pd):
+                        signals["small_bullish_4"].append(stock_info)
+
+                    if self._check_small_bullish_4_1_bearish(hist, pd):
+                        signals["small_bullish_4_1_bearish"].append(stock_info)
+
+                    if self._check_ma_pullback(hist, pd, 5):
+                        signals["pullback_ma5"].append(stock_info)
+
+                    if self._check_ma_pullback(hist, pd, 20):
+                        signals["pullback_ma20"].append(stock_info)
+
+                    if self._check_ma_pullback(hist, pd, 30):
+                        signals["pullback_ma30"].append(stock_info)
                     
                     # Count how many signals this stock has
                     signal_count = sum([
@@ -286,6 +306,11 @@ class StockScanner:
                         stock_info in signals["ma_bullish"],
                         stock_info in signals["small_bullish_5"],
                         stock_info in signals["volume_price"],
+                        stock_info in signals["small_bullish_4"],
+                        stock_info in signals["small_bullish_4_1_bearish"],
+                        stock_info in signals["pullback_ma5"],
+                        stock_info in signals["pullback_ma20"],
+                        stock_info in signals["pullback_ma30"],
                     ])
                     
                     # Add to multi-signal list if 3+ signals
@@ -587,6 +612,146 @@ class StockScanner:
             else:
                 obv.append(obv[-1])
         return obv
+
+    def _check_small_bullish_4(self, hist, pd) -> bool:
+        """检查底部四连阳信号.
+        
+        条件:
+        1. 最近4日都是小阳线 (收盘 > 开盘, 实体0.5%-3%)
+        2. 股价在近60日低位 (底部)
+        """
+        try:
+            # Get last 4 days
+            last_4 = hist.tail(4)
+            
+            if len(last_4) < 4:
+                return False
+            
+            # Check all 4 days are small bullish
+            for i in range(4):
+                row = last_4.iloc[i]
+                open_price = row['开盘']
+                close = row['收盘']
+                
+                # Must be bullish
+                if close <= open_price:
+                    return False
+                    
+                # Calculate body percentage
+                body_pct = (close - open_price) / open_price * 100
+                
+                # Small bullish: 0.5% - 3%
+                if body_pct < 0.5 or body_pct > 3.0:
+                    return False
+            
+            # Check if at bottom (current price in lower 40% of 60-day range)
+            # Note: hist might be shorter than 60 days, use what we have
+            close_current = hist['收盘'].iloc[-1]
+            high_60 = hist['最高'].max()
+            low_60 = hist['最低'].min()
+            range_60 = high_60 - low_60
+            
+            if range_60 > 0:
+                position = (close_current - low_60) / range_60
+                return position < 0.4
+            
+            return False
+        except:
+            return False
+
+    def _check_small_bullish_4_1_bearish(self, hist, pd) -> bool:
+        """检查四阳一阴信号.
+        
+        条件:
+        1. 前4日(T-4到T-1)都是小阳线 (实体0.5%-3%)
+        2. 今日(T)是阴线
+        3. 股价在近60日低位
+        """
+        try:
+            # Get last 5 days
+            last_5 = hist.tail(5)
+            
+            if len(last_5) < 5:
+                return False
+            
+            # Check first 4 days are small bullish
+            for i in range(4):
+                row = last_5.iloc[i]
+                open_price = row['开盘']
+                close = row['收盘']
+                
+                # Must be bullish
+                if close <= open_price:
+                    return False
+                    
+                # Calculate body percentage
+                body_pct = (close - open_price) / open_price * 100
+                
+                # Small bullish: 0.5% - 3%
+                if body_pct < 0.5 or body_pct > 3.0:
+                    return False
+            
+            # Check today is bearish
+            today = last_5.iloc[-1]
+            if today['收盘'] >= today['开盘']:
+                return False
+            
+            # Check if at bottom
+            close_current = hist['收盘'].iloc[-1]
+            high_60 = hist['最高'].max()
+            low_60 = hist['最低'].min()
+            range_60 = high_60 - low_60
+            
+            if range_60 > 0:
+                position = (close_current - low_60) / range_60
+                return position < 0.4
+            
+            return False
+            return False
+        except:
+            return False
+
+    def _check_ma_pullback(self, hist, pd, window: int) -> bool:
+        """检查均线回踩确认信号.
+        
+        条件:
+        1. 均线趋势向上 (当前MA > 5日前MA)
+        2. 回踩: 最低价 <= MA * 1.01 (触及或接近均线)
+        3. 支撑: 收盘价 > MA (未有效跌破)
+        4. 确认: 收盘价 > 开盘价 (阳线确认)
+        """
+        try:
+            if len(hist) < window + 5:
+                return False
+                
+            close = hist['收盘']
+            ma = close.rolling(window).mean()
+            
+            ma_curr = ma.iloc[-1]
+            ma_prev_5 = ma.iloc[-6]
+            
+            # 1. Trend is rising
+            if ma_curr <= ma_prev_5:
+                return False
+                
+            # 2. Pullback (Low touches MA or within 1%)
+            low_curr = hist['最低'].iloc[-1]
+            if low_curr > ma_curr * 1.01:
+                return False
+                
+            # 3. Support (Close above MA)
+            close_curr = close.iloc[-1]
+            if close_curr <= ma_curr:
+                return False
+                
+            # 4. Confirmation (Bullish candle)
+            open_curr = hist['开盘'].iloc[-1]
+            if close_curr <= open_curr:
+                return False
+                
+            return True
+        except:
+            return False
 
 
 # Singleton
