@@ -843,7 +843,7 @@ class StockHistoryService:
         # Query database
         rows = await db.pool.fetch("""
             SELECT code, date, open, high, low, close, volume, 
-                   turnover, change_pct, turnover_rate
+                   turnover, change_pct, turnover_rate, amplitude
             FROM stock_history
             WHERE code = $1
             ORDER BY date DESC
@@ -858,7 +858,7 @@ class StockHistoryService:
             if record.get('date'):
                 record['date'] = record['date'].isoformat()
             # Convert Decimal to float
-            for key in ['open', 'high', 'low', 'close', 'turnover', 'change_pct', 'turnover_rate']:
+            for key in ['open', 'high', 'low', 'close', 'turnover', 'change_pct', 'turnover_rate', 'amplitude']:
                 if record.get(key) is not None:
                     record[key] = float(record[key])
             result.append(record)
