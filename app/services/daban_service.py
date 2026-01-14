@@ -975,6 +975,19 @@ class DabanService:
     async def _notify(self, message: str):
         """Send notification."""
         logger.info(f"[SIGNAL] {message}")
+        
+        # Send to Telegram Target Channel
+        try:
+            if settings.REPORT_TARGET_CHANNEL:
+                from app.core.bot import telegram_service
+                await telegram_service.send_message(
+                    settings.REPORT_TARGET_CHANNEL, 
+                    message, 
+                    parse_mode="HTML"
+                )
+        except Exception as e:
+            logger.error(f"Failed to send signal to Telegram: {e}")
+
         if self._notify_callback:
             try:
                 await self._notify_callback(message)
