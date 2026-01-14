@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     TARGET_CHANNEL: Optional[str] = None
     VIP_TARGET_CHANNEL: Optional[str] = None  # Separate channel for VIP user messages
     REPORT_TARGET_CHANNEL: Optional[str] = None  # Separate channel for daily reports
+    DABAN_CHANNEL: Optional[str] = None  # Specific channel for Daban signals
     STOCK_ALERT_CHANNEL: Optional[str] = None  # Channel for limit-up stock alerts
     ALERT_CHANNEL: Optional[str] = None  # Channel for security alerts
     

@@ -565,14 +565,15 @@ class DabanService:
             from app.bots.registry import get_bot
             bot = get_bot("crawler")
             
-            if bot and settings.REPORT_TARGET_CHANNEL:
+            target_channel = settings.DABAN_CHANNEL or settings.REPORT_TARGET_CHANNEL
+            if bot and target_channel:
                 report = await self.generate_daban_report()
                 await bot.send_message(
-                    int(settings.REPORT_TARGET_CHANNEL),
+                    int(target_channel),
                     report,
                     parse_mode="HTML"
                 )
-                logger.info("打板复盘 report sent")
+                logger.info(f"打板复盘 report sent to {target_channel}")
         except Exception as e:
             logger.error(f"Failed to send 打板 report: {e}")
     
@@ -983,10 +984,11 @@ class DabanService:
         
         # Send to Telegram Target Channel
         try:
-            if settings.REPORT_TARGET_CHANNEL:
+            target_channel = settings.DABAN_CHANNEL or settings.REPORT_TARGET_CHANNEL
+            if target_channel:
                 from app.core.bot import telegram_service
                 await telegram_service.send_message(
-                    settings.REPORT_TARGET_CHANNEL, 
+                    target_channel, 
                     message, 
                     parse_mode="HTML"
                 )
