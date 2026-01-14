@@ -459,9 +459,12 @@ jobs:
             
             # Add non-sensitive config to .env
             printf 'SOURCE_CHANNELS=%s\n' '${{ secrets.SOURCE_CHANNELS }}' >> .env
+            printf 'TARGET_GROUP=%s\n' '${{ secrets.TARGET_GROUP }}' >> .env
             printf 'TARGET_CHANNEL=%s\n' '${{ secrets.TARGET_CHANNEL }}' >> .env
             printf 'VIP_TARGET_CHANNEL=%s\n' '${{ secrets.VIP_TARGET_CHANNEL }}' >> .env
+            printf 'REPORT_TARGET_GROUP=%s\n' '${{ secrets.REPORT_TARGET_GROUP }}' >> .env
             printf 'REPORT_TARGET_CHANNEL=%s\n' '${{ secrets.REPORT_TARGET_CHANNEL }}' >> .env
+            printf 'DABAN_GROUP=%s\n' '${{ secrets.DABAN_GROUP }}' >> .env
             printf 'DABAN_CHANNEL=%s\n' '${{ secrets.DABAN_CHANNEL }}' >> .env
             printf 'KEYWORDS=%s\n' '${{ secrets.KEYWORDS }}' >> .env
             printf 'FROM_USERS=%s\n' '${{ secrets.FROM_USERS }}' >> .env

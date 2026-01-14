@@ -565,7 +565,7 @@ class DabanService:
             from app.bots.registry import get_bot
             bot = get_bot("crawler")
             
-            target_channel = settings.DABAN_CHANNEL or settings.REPORT_TARGET_CHANNEL
+            target_channel = settings.DABAN_GROUP or settings.DABAN_CHANNEL
             if bot and target_channel:
                 report = await self.generate_daban_report()
                 await bot.send_message(
@@ -977,29 +977,90 @@ class DabanService:
     def set_notify_callback(self, callback):
         """Set callback for sending signal notifications."""
         self._notify_callback = callback
+
+    def _normalize_webapp_base(self, value: str, source: str) -> Optional[str]:
+        if not value:
+            return None
+        try:
+            from urllib.parse import urlparse
+            raw_value = value
+            if not raw_value.startswith("http://") and not raw_value.startswith("https://"):
+                raw_value = f"https://{raw_value}"
+            parsed = urlparse(raw_value)
+            if not parsed.scheme or not parsed.netloc:
+                logger.warn(f"Webapp base parse failed from {source}: {value}")
+                return None
+            normalized = f"{parsed.scheme}://{parsed.netloc}"
+            return normalized.rstrip("/")
+        except Exception as exc:
+            logger.warn(f"Webapp base normalize failed from {source}: {exc}")
+            return None
+
+    def _resolve_webapp_base(self) -> Optional[str]:
+        base = (settings.WEBFRONT_URL or "").strip()
+        if base:
+            normalized = self._normalize_webapp_base(base, "WEBFRONT_URL")
+            if normalized:
+                return normalized
+
+        domain = (settings.DOMAIN or "").strip()
+        if domain:
+            normalized = self._normalize_webapp_base(domain, "DOMAIN")
+            if normalized:
+                return normalized
+
+        webhook = (settings.WEBHOOK_URL or "").strip()
+        if webhook:
+            normalized = self._normalize_webapp_base(webhook, "WEBHOOK_URL")
+            if normalized:
+                return normalized
+
+        logger.info(
+            "Signal alert webapp base unavailable: "
+            f"WEBFRONT_URL={bool(settings.WEBFRONT_URL)} "
+            f"DOMAIN={bool(settings.DOMAIN)} "
+            f"WEBHOOK_URL={bool(settings.WEBHOOK_URL)}"
+        )
+        return None
     
-    async def _notify(self, message: str):
+    async def _notify(self, message: str, buttons: Optional[List[Dict]] = None):
         """Send notification."""
         logger.info(f"[SIGNAL] {message}")
-        
-        # Send to Telegram Target Channel
-        try:
-            target_channel = settings.DABAN_CHANNEL or settings.REPORT_TARGET_CHANNEL
-            if target_channel:
-                from app.core.bot import telegram_service
-                await telegram_service.send_message(
-                    target_channel, 
-                    message, 
-                    parse_mode="HTML"
-                )
-        except Exception as e:
-            logger.error(f"Failed to send signal to Telegram: {e}")
 
+        sent_via_callback = False
         if self._notify_callback:
             try:
-                await self._notify_callback(message)
+                import inspect
+                params = inspect.signature(self._notify_callback).parameters
+                if "buttons" in params:
+                    result = await self._notify_callback(message, buttons=buttons)
+                else:
+                    result = await self._notify_callback(message)
+                if result is True:
+                    sent_via_callback = True
+                elif result is False:
+                    logger.warn("Signal notification callback reported failure")
+                else:
+                    logger.warn("Signal notification callback returned no status")
             except Exception as e:
                 logger.error(f"Signal notification failed: {e}")
+        else:
+            logger.warn("Signal notification callback not set; using userbot fallback")
+
+        # Send to Telegram Target Channel (fallback if callback not used)
+        if not sent_via_callback:
+            logger.warn("Signal notification falling back to userbot; web_app buttons unavailable")
+            try:
+                target_channel = settings.DABAN_GROUP or settings.DABAN_CHANNEL
+                if target_channel:
+                    from app.core.bot import telegram_service
+                    await telegram_service.send_message(
+                        target_channel,
+                        message,
+                        parse_mode="HTML"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to send signal to Telegram: {e}")
     
     def _is_market_hours(self) -> bool:
         """Check if currently in A-share market hours."""
@@ -1168,21 +1229,69 @@ class DabanService:
         
         # Group alerts
         alert_lines = []
+        buttons = []
+        webapp_base = self._resolve_webapp_base()
+        use_buttons = bool(webapp_base)
+        logger.info(
+            f"Signal alert link mode={'web_app' if use_buttons else 'link'} base={webapp_base or 'none'}"
+        )
         for sig in signals:
-            chart_url = get_chart_url(sig['code'], sig['name'], context="daban_signal")
-            alert_lines.append(
-                f"{sig['emoji']} <b><a href=\"{chart_url}\">{sig['name']}</a></b> ({sig['code']})\n"
-                f"   {sig['msg']} @ {sig['time']}\n"
-            )
-        
-        if alert_lines:
-            now = china_now()
-            message = (
-                f"🎯 <b>打板实时信号</b>\n"
-                f"<i>{now.strftime('%H:%M:%S')}</i>\n\n" +
-                "".join(alert_lines)
-            )
-            await self._notify(message)
+            if use_buttons:
+                miniapp_url = get_chart_url(sig['code'], sig['name'], context="daban_signal")
+                alert_lines.append(
+                    f"{sig['emoji']} <b><a href=\"{miniapp_url}\">{sig['name']}</a></b> ({sig['code']})\n"
+                    f"   {sig['msg']} @ {sig['time']}\n"
+                )
+                buttons.append([{
+                    "text": f"{sig['emoji']} {sig['name']}",
+                    "url": miniapp_url,
+                    "web_app_url": f"{webapp_base}/miniapp/chart/?code={sig['code']}&context=daban_signal",
+                    "web_app": True,
+                }])
+            else:
+                chart_url = get_chart_url(sig['code'], sig['name'], context="daban_signal")
+                alert_lines.append(
+                    f"{sig['emoji']} <b><a href=\"{chart_url}\">{sig['name']}</a></b> ({sig['code']})\n"
+                    f"   {sig['msg']} @ {sig['time']}\n"
+                )
+
+        if not alert_lines:
+            return
+
+        now = china_now()
+        header = (
+            f"🎯 <b>打板实时信号</b>\n"
+            f"<i>{now.strftime('%H:%M:%S')}</i>\n\n"
+        )
+
+        max_chars = 3400
+        max_button_rows = 80
+        batches = []
+        current_lines = []
+        current_buttons = []
+        current_len = len(header)
+        for idx, line in enumerate(alert_lines):
+            next_len = current_len + len(line)
+            next_buttons = len(current_buttons) + 1 if use_buttons else 0
+            if current_lines and (next_len > max_chars or (use_buttons and next_buttons > max_button_rows)):
+                batches.append((current_lines, current_buttons))
+                current_lines = []
+                current_buttons = []
+                current_len = len(header)
+            current_lines.append(line)
+            if use_buttons:
+                current_buttons.append(buttons[idx])
+            current_len += len(line)
+
+        if current_lines:
+            batches.append((current_lines, current_buttons))
+
+        total_batches = len(batches)
+        for batch_idx, (lines, batch_buttons) in enumerate(batches, start=1):
+            suffix = f" ({batch_idx}/{total_batches})" if total_batches > 1 else ""
+            message = header.replace("信号</b>", f"信号</b>{suffix}")
+            message += "".join(lines)
+            await self._notify(message, buttons=batch_buttons if use_buttons else None)
     
     async def _intraday_loop(self):
         """Intraday polling loop - runs every 60 seconds during market hours."""
@@ -1291,5 +1400,3 @@ class DabanService:
 
 # Singleton
 daban_service = DabanService()
-
-

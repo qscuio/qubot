@@ -1,7 +1,8 @@
 from aiogram.types import BotCommand
 
 from app.bots.bot_spec import BotSpec
-from app.core.config import settings
+
+
 
 CRAWLER_BOT_COMMANDS = [
     BotCommand(command="start", description="主菜单"),

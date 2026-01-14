@@ -722,7 +722,7 @@ async def cmd_tool_exec(message: types.Message, command: CommandObject):
             try:
                 import json
                 kwargs[key] = json.loads(value)
-            except:
+            except Exception:
                 kwargs[key] = value
     
     status = await message.answer(f"⏳ Executing <code>{tool_name}</code>...", parse_mode="HTML")

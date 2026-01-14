@@ -68,9 +68,13 @@ class MonitorService:
         self.is_running = False
         # Changed from list of strings to dict: channel_id -> {id, name, enabled}
         self.channels: Dict[str, dict] = {}
-        self.target_channel = settings.TARGET_CHANNEL
+        self.target_channel = settings.TARGET_GROUP or settings.TARGET_CHANNEL
         self.vip_target_channel = settings.VIP_TARGET_CHANNEL  # Separate channel for VIP
-        self.report_target_channel = settings.REPORT_TARGET_CHANNEL or settings.TARGET_CHANNEL  # For daily reports
+        self.report_target_channel = (
+            settings.REPORT_TARGET_GROUP
+            or settings.REPORT_TARGET_CHANNEL
+            or self.target_channel
+        )  # For daily reports
         # Deduplication cache: stores (chat_id, message_id) tuples
         # Using OrderedDict to maintain insertion order for LRU eviction
         self._processed_messages = OrderedDict()

@@ -5,10 +5,12 @@ Telegram bot interface for web crawler and limit-up stock tracking.
 """
 
 from aiogram import Router, F, types
+from typing import Optional
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest
-from datetime import date, datetime
+
+
 
 from app.services.crawler import crawler_service
 from app.services.limit_up import limit_up_service
@@ -59,6 +61,74 @@ async def is_allowed(user_id: int) -> bool:
     if not allowed_users:
         return True
     return user_id in allowed_users
+
+
+def _resolve_webapp_base() -> Optional[str]:
+    base = (settings.WEBFRONT_URL or "").strip()
+    if base:
+        return base.rstrip("/")
+
+    domain = (settings.DOMAIN or "").strip()
+    if domain:
+        if domain.startswith("http://") or domain.startswith("https://"):
+            return domain.rstrip("/")
+        return f"https://{domain.rstrip('/')}"
+
+    webhook = (settings.WEBHOOK_URL or "").strip()
+    if webhook:
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(webhook)
+            if parsed.scheme and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}"
+        except Exception:
+            return None
+    return None
+
+
+def _allow_webapp_buttons(chat_type) -> bool:
+    if not chat_type:
+        return False
+    return str(chat_type) in ("private", "group", "supergroup")
+
+
+def _get_webapp_base(chat_type: Optional[str]) -> Optional[str]:
+    if not _allow_webapp_buttons(chat_type):
+        return None
+    return _resolve_webapp_base()
+
+
+def _format_button_text(
+    name: str,
+    code: str,
+    suffix: Optional[str] = None,
+    prefix: Optional[str] = None,
+    max_len: int = 64,
+) -> str:
+    parts = []
+    if prefix:
+        parts.append(prefix)
+    parts.append(name)
+    parts.append(f"({code})")
+    if suffix:
+        parts.append(suffix)
+    text = " ".join(parts)
+    if len(text) > max_len:
+        text = text[: max_len - 3] + "..."
+    return text
+
+
+def _build_webapp_button(
+    name: str,
+    code: str,
+    context: str,
+    webapp_base: str,
+    suffix: Optional[str] = None,
+    prefix: Optional[str] = None,
+) -> types.InlineKeyboardButton:
+    url = f"{webapp_base}/miniapp/chart/?code={code}&context={context}"
+    text = _format_button_text(name, code, suffix=suffix, prefix=prefix)
+    return types.InlineKeyboardButton(text=text, web_app=types.WebAppInfo(url=url))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -121,7 +191,7 @@ async def cb_crawler_main(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -151,7 +221,7 @@ async def cb_main(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -219,7 +289,7 @@ async def cb_list(callback: types.CallbackQuery):
     text, markup = await get_sources_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
-    except:
+    except Exception:
         pass
 
 
@@ -271,7 +341,7 @@ async def cb_delete(callback: types.CallbackQuery):
         text, markup = await get_sources_ui()
         try:
             await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
-        except:
+        except Exception:
             pass
     else:
         await safe_answer(callback, "❌ 删除失败")
@@ -347,7 +417,7 @@ async def cb_recent(callback: types.CallbackQuery):
     text, markup = await get_recent_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
-    except:
+    except Exception:
         pass
 
 
@@ -408,7 +478,7 @@ async def cb_lu_main(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -420,7 +490,7 @@ async def cb_lu_main(callback: types.CallbackQuery):
 async def cmd_today(message: types.Message):
     if not await is_allowed(message.from_user.id):
         return
-    text, markup = await get_today_ui()
+    text, markup = await get_today_ui(chat_type=message.chat.type)
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
 
 
@@ -430,21 +500,23 @@ async def cb_today(callback: types.CallbackQuery):
     # Parse page from callback data (format: lu:today or lu:today:1)
     parts = callback.data.split(":")
     page = int(parts[2]) if len(parts) > 2 else 1
-    text, markup = await get_today_ui(page)
+    text, markup = await get_today_ui(page, chat_type=callback.message.chat.type if callback.message else None)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
-    except:
+    except Exception:
         pass
 
 
-async def get_today_ui(page: int = 1):
+async def get_today_ui(page: int = 1, chat_type: Optional[str] = None):
     PAGE_SIZE = 30
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
     
     if not db.pool:
         return "❌ 数据库未连接", None
     
     # Use China timezone for date calculation
-    today = china_today()
+    # today = china_today()
     
     # 🌟 Real-time fetch from AkShare
     try:
@@ -474,21 +546,50 @@ async def get_today_ui(page: int = 1):
         text = "📈 <b>今日涨停</b> (实时)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无数据\n\n<i>数据源: 东方财富</i>"
     else:
         text = f"📈 <b>今日涨停</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-        for i, r in enumerate(rows, start_idx + 1):
-            lt = r.get('limit_times', 1)
-            streak = f" [{lt}板]" if lt > 1 else ""
-            chart_url = get_chart_url(r['code'], r.get('name'), context="limit_up")
-            text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}){streak}\n"
+        if use_webapp_buttons:
+            text += "<i>点击下方按钮查看K线</i>\n"
+        else:
+            for i, r in enumerate(rows, start_idx + 1):
+                lt = r.get('limit_times', 1)
+                streak = f" [{lt}板]" if lt > 1 else ""
+                name = r.get('name') or r.get('code')
+                chart_url = get_chart_url(r['code'], name, context="limit_up")
+                text += f"{i}. <a href=\"{chart_url}\">{name}</a> ({r['code']}){streak}\n"
     
     builder = InlineKeyboardBuilder()
-    # Pagination buttons
-    if page > 1:
-        builder.button(text="◀️ 上一页", callback_data=f"lu:today:{page-1}")
-    builder.button(text="🔄 刷新", callback_data=f"lu:today:{page}")
-    if page < total_pages:
-        builder.button(text="下一页 ▶️", callback_data=f"lu:today:{page+1}")
-    builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(3, 1)
+    if use_webapp_buttons:
+        if rows:
+            for i, r in enumerate(rows, start_idx + 1):
+                lt = r.get('limit_times', 1)
+                suffix = f"{lt}板" if lt > 1 else "首板"
+                builder.row(
+                    _build_webapp_button(
+                        r.get('name') or r['code'],
+                        r['code'],
+                        "limit_up",
+                        webapp_base,
+                        suffix=suffix,
+                        prefix=f"{i}."
+                    )
+                )
+        nav_buttons = []
+        if page > 1:
+            nav_buttons.append(types.InlineKeyboardButton(text="◀️ 上一页", callback_data=f"lu:today:{page-1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="🔄 刷新", callback_data=f"lu:today:{page}"))
+        if page < total_pages:
+            nav_buttons.append(types.InlineKeyboardButton(text="下一页 ▶️", callback_data=f"lu:today:{page+1}"))
+        if nav_buttons:
+            builder.row(*nav_buttons)
+        builder.row(types.InlineKeyboardButton(text="◀️ 返回", callback_data="lu:main"))
+    else:
+        # Pagination buttons
+        if page > 1:
+            builder.button(text="◀️ 上一页", callback_data=f"lu:today:{page-1}")
+        builder.button(text="🔄 刷新", callback_data=f"lu:today:{page}")
+        if page < total_pages:
+            builder.button(text="下一页 ▶️", callback_data=f"lu:today:{page+1}")
+        builder.button(text="◀️ 返回", callback_data="lu:main")
+        builder.adjust(3, 1)
     
     return text, builder.as_markup()
 
@@ -501,7 +602,7 @@ async def get_today_ui(page: int = 1):
 async def cmd_first(message: types.Message):
     if not await is_allowed(message.from_user.id):
         return
-    text, markup = await get_first_ui()
+    text, markup = await get_first_ui(chat_type=message.chat.type)
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
 
 
@@ -510,22 +611,24 @@ async def cb_first(callback: types.CallbackQuery):
     await safe_answer(callback)
     parts = callback.data.split(":")
     page = int(parts[2]) if len(parts) > 2 else 1
-    text, markup = await get_first_ui(page)
+    text, markup = await get_first_ui(page, chat_type=callback.message.chat.type if callback.message else None)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
-    except:
+    except Exception:
         pass
 
 
-async def get_first_ui(page: int = 1):
+async def get_first_ui(page: int = 1, chat_type: Optional[str] = None):
     """Get today's first-time limit-up stocks (首板 - 收盘涨停 limit_times=1)."""
     PAGE_SIZE = 30
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
     
     if not db.pool:
         return "❌ 数据库未连接", None
     
     # Use China timezone for date calculation
-    today = china_today()
+    # today = china_today()
     
     # 🌟 Real-time fetch
     try:
@@ -556,20 +659,49 @@ async def get_first_ui(page: int = 1):
         text = "🆕 <b>首板</b> (实时)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无首板数据"
     else:
         text = f"🆕 <b>首板</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-        for i, r in enumerate(rows, start_idx + 1):
-            chart_url = get_chart_url(r['code'], r.get('name'), context="limit_up_first")
-            tr = r.get('turnover_rate', 0)
-            turnover = f"换手{tr:.1f}%" if tr else ""
-            text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {turnover}\n"
+        if use_webapp_buttons:
+            text += "<i>点击下方按钮查看K线</i>\n"
+        else:
+            for i, r in enumerate(rows, start_idx + 1):
+                name = r.get('name') or r.get('code')
+                tr = r.get('turnover_rate', 0)
+                turnover = f"换手{tr:.1f}%" if tr else ""
+                chart_url = get_chart_url(r['code'], name, context="limit_up_first")
+                text += f"{i}. <a href=\"{chart_url}\">{name}</a> ({r['code']}) {turnover}\n"
     
     builder = InlineKeyboardBuilder()
-    if page > 1:
-        builder.button(text="◀️ 上一页", callback_data=f"lu:first:{page-1}")
-    builder.button(text="🔄 刷新", callback_data=f"lu:first:{page}")
-    if page < total_pages:
-        builder.button(text="下一页 ▶️", callback_data=f"lu:first:{page+1}")
-    builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(3, 1)
+    if use_webapp_buttons:
+        if rows:
+            for i, r in enumerate(rows, start_idx + 1):
+                tr = r.get('turnover_rate', 0)
+                suffix = f"换手{tr:.1f}%" if tr else None
+                builder.row(
+                    _build_webapp_button(
+                        r.get('name') or r['code'],
+                        r['code'],
+                        "limit_up_first",
+                        webapp_base,
+                        suffix=suffix,
+                        prefix=f"{i}."
+                    )
+                )
+        nav_buttons = []
+        if page > 1:
+            nav_buttons.append(types.InlineKeyboardButton(text="◀️ 上一页", callback_data=f"lu:first:{page-1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="🔄 刷新", callback_data=f"lu:first:{page}"))
+        if page < total_pages:
+            nav_buttons.append(types.InlineKeyboardButton(text="下一页 ▶️", callback_data=f"lu:first:{page+1}"))
+        if nav_buttons:
+            builder.row(*nav_buttons)
+        builder.row(types.InlineKeyboardButton(text="◀️ 返回", callback_data="lu:main"))
+    else:
+        if page > 1:
+            builder.button(text="◀️ 上一页", callback_data=f"lu:first:{page-1}")
+        builder.button(text="🔄 刷新", callback_data=f"lu:first:{page}")
+        if page < total_pages:
+            builder.button(text="下一页 ▶️", callback_data=f"lu:first:{page+1}")
+        builder.button(text="◀️ 返回", callback_data="lu:main")
+        builder.adjust(3, 1)
     
     return text, builder.as_markup()
 
@@ -582,7 +714,7 @@ async def get_first_ui(page: int = 1):
 async def cmd_burst(message: types.Message):
     if not await is_allowed(message.from_user.id):
         return
-    text, markup = await get_burst_ui()
+    text, markup = await get_burst_ui(chat_type=message.chat.type)
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
 
 
@@ -591,22 +723,24 @@ async def cb_burst(callback: types.CallbackQuery):
     await safe_answer(callback)
     parts = callback.data.split(":")
     page = int(parts[2]) if len(parts) > 2 else 1
-    text, markup = await get_burst_ui(page)
+    text, markup = await get_burst_ui(page, chat_type=callback.message.chat.type if callback.message else None)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
-    except:
+    except Exception:
         pass
 
 
-async def get_burst_ui(page: int = 1):
+async def get_burst_ui(page: int = 1, chat_type: Optional[str] = None):
     """Get today's burst limit-up stocks (曾涨停/炸板 - 触及涨停但收盘未封住)."""
     PAGE_SIZE = 30
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
     
     if not db.pool:
         return "❌ 数据库未连接", None
     
     # Use China timezone for date calculation
-    today = china_today()
+    # today = china_today()
     
     # 🌟 Real-time fetch
     try:
@@ -634,20 +768,49 @@ async def get_burst_ui(page: int = 1):
         text = "💥 <b>曾涨停</b> (实时)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无炸板数据"
     else:
         text = f"💥 <b>曾涨停</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n<i>日内涨停但未封住</i>\n\n"
-        for i, r in enumerate(rows, start_idx + 1):
-            chart_url = get_chart_url(r['code'], r.get('name'), context="limit_up_burst")
-            cp = r.get('change_pct', 0)
-            change = f"{cp:.1f}%" if cp else ""
-            text += f"{i}. <a href=\"{chart_url}\">{r['name']}</a> ({r['code']}) {change}\n"
+        if use_webapp_buttons:
+            text += "<i>点击下方按钮查看K线</i>\n"
+        else:
+            for i, r in enumerate(rows, start_idx + 1):
+                name = r.get('name') or r.get('code')
+                cp = r.get('change_pct', 0)
+                change = f"{cp:.1f}%" if cp else ""
+                chart_url = get_chart_url(r['code'], name, context="limit_up_burst")
+                text += f"{i}. <a href=\"{chart_url}\">{name}</a> ({r['code']}) {change}\n"
     
     builder = InlineKeyboardBuilder()
-    if page > 1:
-        builder.button(text="◀️ 上一页", callback_data=f"lu:burst:{page-1}")
-    builder.button(text="🔄 刷新", callback_data=f"lu:burst:{page}")
-    if page < total_pages:
-        builder.button(text="下一页 ▶️", callback_data=f"lu:burst:{page+1}")
-    builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(3, 1)
+    if use_webapp_buttons:
+        if rows:
+            for i, r in enumerate(rows, start_idx + 1):
+                cp = r.get('change_pct', 0)
+                suffix = f"{cp:+.1f}%" if cp else None
+                builder.row(
+                    _build_webapp_button(
+                        r.get('name') or r['code'],
+                        r['code'],
+                        "limit_up_burst",
+                        webapp_base,
+                        suffix=suffix,
+                        prefix=f"{i}."
+                    )
+                )
+        nav_buttons = []
+        if page > 1:
+            nav_buttons.append(types.InlineKeyboardButton(text="◀️ 上一页", callback_data=f"lu:burst:{page-1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="🔄 刷新", callback_data=f"lu:burst:{page}"))
+        if page < total_pages:
+            nav_buttons.append(types.InlineKeyboardButton(text="下一页 ▶️", callback_data=f"lu:burst:{page+1}"))
+        if nav_buttons:
+            builder.row(*nav_buttons)
+        builder.row(types.InlineKeyboardButton(text="◀️ 返回", callback_data="lu:main"))
+    else:
+        if page > 1:
+            builder.button(text="◀️ 上一页", callback_data=f"lu:burst:{page-1}")
+        builder.button(text="🔄 刷新", callback_data=f"lu:burst:{page}")
+        if page < total_pages:
+            builder.button(text="下一页 ▶️", callback_data=f"lu:burst:{page+1}")
+        builder.button(text="◀️ 返回", callback_data="lu:main")
+        builder.adjust(3, 1)
     
     return text, builder.as_markup()
 
@@ -660,35 +823,60 @@ async def get_burst_ui(page: int = 1):
 async def cmd_streak(message: types.Message):
     if not await is_allowed(message.from_user.id):
         return
-    text, markup = await get_streak_ui()
+    text, markup = await get_streak_ui(chat_type=message.chat.type)
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
 
 
 @router.callback_query(F.data == "lu:streak")
 async def cb_streak(callback: types.CallbackQuery):
     await safe_answer(callback)
-    text, markup = await get_streak_ui()
+    text, markup = await get_streak_ui(chat_type=callback.message.chat.type if callback.message else None)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         pass
 
 
-async def get_streak_ui():
+async def get_streak_ui(chat_type: Optional[str] = None):
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
     streaks = await limit_up_service.get_streak_leaders()
     
     if not streaks:
         text = "🔥 <b>连板榜</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无连板股"
     else:
         text = f"🔥 <b>连板榜</b> ({len(streaks)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-        for i, s in enumerate(streaks, 1):
-            chart_url = get_chart_url(s['code'], s.get('name'), context="limit_up_streak")
-            text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - <b>{s['streak_count']}连板</b>\n"
+        if use_webapp_buttons:
+            text += "<i>点击下方按钮查看K线</i>\n"
+        else:
+            for i, s in enumerate(streaks, 1):
+                name = s.get('name') or s.get('code')
+                chart_url = get_chart_url(s['code'], name, context="limit_up_streak")
+                text += f"{i}. <a href=\"{chart_url}\">{name}</a> ({s['code']}) - <b>{s['streak_count']}连板</b>\n"
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔄 刷新", callback_data="lu:streak")
-    builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(2)
+    if use_webapp_buttons and streaks:
+        for i, s in enumerate(streaks, 1):
+            suffix = f"{s['streak_count']}连板"
+            builder.row(
+                _build_webapp_button(
+                    s.get('name') or s['code'],
+                    s['code'],
+                    "limit_up_streak",
+                    webapp_base,
+                    suffix=suffix,
+                    prefix=f"{i}."
+                )
+            )
+    if use_webapp_buttons:
+        builder.row(
+            types.InlineKeyboardButton(text="🔄 刷新", callback_data="lu:streak"),
+            types.InlineKeyboardButton(text="◀️ 返回", callback_data="lu:main")
+        )
+    else:
+        builder.button(text="🔄 刷新", callback_data="lu:streak")
+        builder.button(text="◀️ 返回", callback_data="lu:main")
+        builder.adjust(2)
     
     return text, builder.as_markup()
 
@@ -701,35 +889,60 @@ async def get_streak_ui():
 async def cmd_strong(message: types.Message):
     if not await is_allowed(message.from_user.id):
         return
-    text, markup = await get_strong_ui()
+    text, markup = await get_strong_ui(chat_type=message.chat.type)
     await message.answer(text, parse_mode="HTML", reply_markup=markup)
 
 
 @router.callback_query(F.data == "lu:strong")
 async def cb_strong(callback: types.CallbackQuery):
     await safe_answer(callback)
-    text, markup = await get_strong_ui()
+    text, markup = await get_strong_ui(chat_type=callback.message.chat.type if callback.message else None)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         pass
 
 
-async def get_strong_ui():
+async def get_strong_ui(chat_type: Optional[str] = None):
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
     strong = await limit_up_service.get_strong_stocks()
     
     if not strong:
         text = "💪 <b>强势股</b> (7日)\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无强势股"
     else:
         text = f"💪 <b>强势股</b> (7日, {len(strong)})\n━━━━━━━━━━━━━━━━━━━━━\n\n"
-        for i, s in enumerate(strong, 1):
-            chart_url = get_chart_url(s['code'], s.get('name'), context="limit_up_strong")
-            text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']}) - {s['limit_count']}次涨停\n"
+        if use_webapp_buttons:
+            text += "<i>点击下方按钮查看K线</i>\n"
+        else:
+            for i, s in enumerate(strong, 1):
+                name = s.get('name') or s.get('code')
+                chart_url = get_chart_url(s['code'], name, context="limit_up_strong")
+                text += f"{i}. <a href=\"{chart_url}\">{name}</a> ({s['code']}) - {s['limit_count']}次涨停\n"
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔄 刷新", callback_data="lu:strong")
-    builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(2)
+    if use_webapp_buttons and strong:
+        for i, s in enumerate(strong, 1):
+            suffix = f"{s['limit_count']}次涨停"
+            builder.row(
+                _build_webapp_button(
+                    s.get('name') or s['code'],
+                    s['code'],
+                    "limit_up_strong",
+                    webapp_base,
+                    suffix=suffix,
+                    prefix=f"{i}."
+                )
+            )
+    if use_webapp_buttons:
+        builder.row(
+            types.InlineKeyboardButton(text="🔄 刷新", callback_data="lu:strong"),
+            types.InlineKeyboardButton(text="◀️ 返回", callback_data="lu:main")
+        )
+    else:
+        builder.button(text="🔄 刷新", callback_data="lu:strong")
+        builder.button(text="◀️ 返回", callback_data="lu:main")
+        builder.adjust(2)
     
     return text, builder.as_markup()
 
@@ -746,7 +959,7 @@ async def cmd_startup(message: types.Message):
     """View limit-up startup watchlist (启动追踪)."""
     if not await is_allowed(message.from_user.id):
         return
-    text, markup = await get_watch_ui()
+    text, markup = await get_watch_ui(chat_type=message.chat.type)
     await message.answer(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
 
 
@@ -755,24 +968,32 @@ async def cb_watch(callback: types.CallbackQuery):
     await safe_answer(callback)
     parts = callback.data.split(":")
     page = int(parts[2]) if len(parts) > 2 else 1
-    text, markup = await get_watch_ui(page)
+    text, markup = await get_watch_ui(page, chat_type=callback.message.chat.type if callback.message else None)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
-    except:
+    except Exception:
         pass
 
 
-async def get_watch_ui(page: int = 1):
+async def get_watch_ui(page: int = 1, chat_type: Optional[str] = None):
     """Get startup watchlist (一个月内涨停一次的股票)."""
     PAGE_SIZE = 30
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
     watchlist = await limit_up_service.get_startup_watchlist()
     
     if not watchlist:
         text = "👀 <b>启动追踪</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无观察股\n\n<i>一个月内涨停一次的股票会加入观察</i>"
         builder = InlineKeyboardBuilder()
-        builder.button(text="🔄 刷新", callback_data="lu:watch")
-        builder.button(text="◀️ 返回", callback_data="lu:main")
-        builder.adjust(2)
+        if use_webapp_buttons:
+            builder.row(
+                types.InlineKeyboardButton(text="🔄 刷新", callback_data="lu:watch"),
+                types.InlineKeyboardButton(text="◀️ 返回", callback_data="lu:main")
+            )
+        else:
+            builder.button(text="🔄 刷新", callback_data="lu:watch")
+            builder.button(text="◀️ 返回", callback_data="lu:main")
+            builder.adjust(2)
         return text, builder.as_markup()
         
     total = len(watchlist)
@@ -787,19 +1008,47 @@ async def get_watch_ui(page: int = 1):
         text = "👀 <b>启动追踪</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 暂无数据"
     else:
         text = f"👀 <b>启动追踪</b> ({start_idx+1}-{start_idx+len(rows)}/{total})\n━━━━━━━━━━━━━━━━━━━━━\n<i>一个月涨停一次，再次涨停将剔除</i>\n\n"
-        for i, w in enumerate(rows, start_idx + 1):
-            chart_url = get_chart_url(w['code'], w.get('name'), context="limit_up_watch")
-            limit_date = w['first_limit_date'].strftime('%m/%d') if w['first_limit_date'] else ''
-            text += f"{i}. <a href=\"{chart_url}\">{w['name']}</a> ({w['code']}) {limit_date}\n"
+        if use_webapp_buttons:
+            text += "<i>点击下方按钮查看K线</i>\n"
+        else:
+            for i, w in enumerate(rows, start_idx + 1):
+                name = w.get('name') or w.get('code')
+                limit_date = w['first_limit_date'].strftime('%m/%d') if w['first_limit_date'] else ''
+                chart_url = get_chart_url(w['code'], name, context="limit_up_watch")
+                text += f"{i}. <a href=\"{chart_url}\">{name}</a> ({w['code']}) {limit_date}\n"
     
     builder = InlineKeyboardBuilder()
-    if page > 1:
-        builder.button(text="◀️ 上一页", callback_data=f"lu:watch:{page-1}")
-    builder.button(text="🔄 刷新", callback_data=f"lu:watch:{page}")
-    if page < total_pages:
-        builder.button(text="下一页 ▶️", callback_data=f"lu:watch:{page+1}")
-    builder.button(text="◀️ 返回", callback_data="lu:main")
-    builder.adjust(3, 1)
+    if use_webapp_buttons:
+        if rows:
+            for i, w in enumerate(rows, start_idx + 1):
+                limit_date = w['first_limit_date'].strftime('%m/%d') if w['first_limit_date'] else None
+                builder.row(
+                    _build_webapp_button(
+                        w.get('name') or w['code'],
+                        w['code'],
+                        "limit_up_watch",
+                        webapp_base,
+                        suffix=limit_date,
+                        prefix=f"{i}."
+                    )
+                )
+        nav_buttons = []
+        if page > 1:
+            nav_buttons.append(types.InlineKeyboardButton(text="◀️ 上一页", callback_data=f"lu:watch:{page-1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="🔄 刷新", callback_data=f"lu:watch:{page}"))
+        if page < total_pages:
+            nav_buttons.append(types.InlineKeyboardButton(text="下一页 ▶️", callback_data=f"lu:watch:{page+1}"))
+        if nav_buttons:
+            builder.row(*nav_buttons)
+        builder.row(types.InlineKeyboardButton(text="◀️ 返回", callback_data="lu:main"))
+    else:
+        if page > 1:
+            builder.button(text="◀️ 上一页", callback_data=f"lu:watch:{page-1}")
+        builder.button(text="🔄 刷新", callback_data=f"lu:watch:{page}")
+        if page < total_pages:
+            builder.button(text="下一页 ▶️", callback_data=f"lu:watch:{page+1}")
+        builder.button(text="◀️ 返回", callback_data="lu:main")
+        builder.adjust(3, 1)
     
     return text, builder.as_markup()
 
@@ -869,6 +1118,7 @@ SIGNAL_NAMES = {
     "small_bullish_4_1_bearish": "四阳一阴",
     "small_bullish_5_1_bearish": "五阳一阴",
     "small_bullish_3_1_bearish_1_bullish": "三阳一阴一阳",
+    "small_bullish_5_in_7": "低位七天五阳",
     "strong_first_negative": "强势股首阴",
     "broken_limit_up_streak": "连板断板",
     "pullback_ma5": "5日线回踩",
@@ -888,6 +1138,7 @@ SIGNAL_ICONS = {
     "small_bullish_4_1_bearish": "📉",
     "small_bullish_5_1_bearish": "📉",
     "small_bullish_3_1_bearish_1_bullish": "📈",
+    "small_bullish_5_in_7": "🌤️",
     "strong_first_negative": "🟢",
     "broken_limit_up_streak": "💔",
     "pullback_ma5": "↩️",
@@ -931,6 +1182,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="📉 四阳一阴", callback_data="scanner:scan:small_bullish_4_1_bearish")
     builder.button(text="📉 五阳一阴", callback_data="scanner:scan:small_bullish_5_1_bearish")
     builder.button(text="📈 三阳一阴一阳", callback_data="scanner:scan:small_bullish_3_1_bearish_1_bullish")
+    builder.button(text="🌤️ 七天五阳", callback_data="scanner:scan:small_bullish_5_in_7")
     builder.button(text="🟢 强势股首阴", callback_data="scanner:scan:strong_first_negative")
     builder.button(text="💔 连板断板", callback_data="scanner:scan:broken_limit_up_streak")
     builder.button(text="↩️ 5日线回踩", callback_data="scanner:scan:pullback_ma5")
@@ -950,7 +1202,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     
     try:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -962,6 +1214,7 @@ async def _run_scan_from_callback(callback: types.CallbackQuery, force: bool = F
         def __init__(self, msg):
             self.from_user = callback.from_user
             self._msg = msg
+            self.chat = msg.chat if msg else None
 
         async def answer(self, text, **kwargs):
             return await self._msg.answer(text, **kwargs)
@@ -1100,7 +1353,7 @@ async def cmd_dbcheck(message: types.Message):
         max_date = stats.get('max_date')
         
         # Use local database count (no external API call)
-        total_available = stock_count  # What we have is what we show
+        # total_available = stock_count  # What we have is what we show
         
         # Check freshness
         today = china_today()
@@ -1130,8 +1383,8 @@ async def cmd_dbcheck(message: types.Message):
         if recent_count == 0:
             text += "\n⚠️ <b>问题:</b> 近7天无数据，信号扫描将无法工作"
             text += "\n💡 <b>建议:</b> 执行 /dbsync 同步数据"
-        elif coverage < 50:
-            text += "\n⚠️ <b>建议:</b> 执行 /dbsync 填充缺失数据"
+        # elif coverage < 50:
+        #     text += "\n⚠️ <b>建议:</b> 执行 /dbsync 填充缺失数据"
         elif days_old > 3:
             text += "\n⚠️ <b>建议:</b> 执行 /dbsync 更新陈旧数据"
         else:
@@ -1192,6 +1445,7 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
     
     user_id = message.from_user.id if hasattr(message, 'from_user') else 0
     _scan_results_cache.pop(user_id, None)
+    chat_type = message.chat.type if message.chat else None
 
     if not force and command and command.args:
         arg = command.args.strip().lower()
@@ -1221,24 +1475,48 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
             total_pages = (total_stocks + page_size - 1) // page_size
             
             # Ensure page is valid
-            if page < 1: page = 1
-            if page > total_pages: page = total_pages
+            if page < 1:
+                page = 1
+            if page > total_pages:
+                page = total_pages
             
             start_idx = (page - 1) * page_size
             end_idx = start_idx + page_size
             current_page_stocks = stocks[start_idx:end_idx]
             
+            webapp_base = _get_webapp_base(chat_type)
+            use_webapp_buttons = bool(webapp_base)
+
             # Build message text
             lines = [f"{title} (第 {page}/{total_pages} 页)", ""]
-            for i, s in enumerate(current_page_stocks, start_idx + 1):
-                chart_url = get_chart_url(s['code'], s.get('name'), context=context)
-                line = f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})"
-                lines.append(line)
+            if use_webapp_buttons:
+                lines.append("<i>点击下方按钮查看K线</i>")
+            else:
+                for i, s in enumerate(current_page_stocks, start_idx + 1):
+                    name = s.get('name') or s.get('code')
+                    chart_url = get_chart_url(s['code'], name, context=context)
+                    line = f"{i}. <a href=\"{chart_url}\">{name}</a> ({s['code']})"
+                    lines.append(line)
             
             text = "\n".join(lines)
             
             # Build pagination keyboard
             builder = InlineKeyboardBuilder()
+            if use_webapp_buttons:
+                for i, s in enumerate(current_page_stocks, start_idx + 1):
+                    suffix = None
+                    if s.get("signal_count"):
+                        suffix = f"{s['signal_count']}信号"
+                    builder.row(
+                        _build_webapp_button(
+                            s.get('name') or s['code'],
+                            s['code'],
+                            context or "scanner",
+                            webapp_base,
+                            suffix=suffix,
+                            prefix=f"{i}."
+                        )
+                    )
             
             # Navigation buttons
             nav_buttons = []
@@ -1249,9 +1527,6 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
             
             if nav_buttons:
                 builder.row(*nav_buttons)
-            
-            # Back button (if needed, but usually context handles it)
-            # builder.row(InlineKeyboardButton(text="🔙 返回菜单", callback_data="scanner:main"))
             
             builder.row(types.InlineKeyboardButton(text="◀️ 返回菜单", callback_data="scanner:main"))
 
@@ -1343,14 +1618,24 @@ async def cb_scanner_page(callback: types.CallbackQuery):
             stocks,
             context=context,
             page=page,
-            message_to_edit=None
+            message_to_edit=None,
+            chat_type=callback.message.chat.type if callback.message else None
         )
         await callback.answer()
         
     except Exception as e:
         await callback.answer(f"❌ 错误: {e}", show_alert=True)
 
-async def _send_signal_list_paginated(sender_or_message, title: str, stocks: list, context: str = None, page: int = 1, page_size: int = 20, message_to_edit: types.Message = None):
+async def _send_signal_list_paginated(
+    sender_or_message,
+    title: str,
+    stocks: list,
+    context: str = None,
+    page: int = 1,
+    page_size: int = 20,
+    message_to_edit: types.Message = None,
+    chat_type: Optional[str] = None,
+):
     """Send list with pagination (Shared helper)."""
     if not stocks:
         return
@@ -1359,25 +1644,50 @@ async def _send_signal_list_paginated(sender_or_message, title: str, stocks: lis
     total_pages = (total_stocks + page_size - 1) // page_size
     
     # Ensure page is valid
-    if page < 1: page = 1
-    if page > total_pages: page = total_pages
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
     
     start_idx = (page - 1) * page_size
     end_idx = start_idx + page_size
     current_page_stocks = stocks[start_idx:end_idx]
     
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
+
     # Build message text
     lines = [f"{title} (第 {page}/{total_pages} 页)", ""]
-    for i, s in enumerate(current_page_stocks, start_idx + 1):
-        chart_url = get_chart_url(s['code'], s.get('name'), context=context)
-        line = f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})"
-        lines.append(line)
+    if use_webapp_buttons:
+        lines.append("<i>点击下方按钮查看K线</i>")
+    else:
+        for i, s in enumerate(current_page_stocks, start_idx + 1):
+            name = s.get('name') or s.get('code')
+            chart_url = get_chart_url(s['code'], name, context=context)
+            line = f"{i}. <a href=\"{chart_url}\">{name}</a> ({s['code']})"
+            lines.append(line)
     
     text = "\n".join(lines)
     
     # Build pagination keyboard
     builder = InlineKeyboardBuilder()
     
+    if use_webapp_buttons:
+        for i, s in enumerate(current_page_stocks, start_idx + 1):
+            suffix = None
+            if s.get("signal_count"):
+                suffix = f"{s['signal_count']}信号"
+            builder.row(
+                _build_webapp_button(
+                    s.get('name') or s['code'],
+                    s['code'],
+                    context or "scanner",
+                    webapp_base,
+                    suffix=suffix,
+                    prefix=f"{i}."
+                )
+            )
+
     # Navigation buttons
     nav_buttons = []
     if page > 1:
@@ -1434,7 +1744,7 @@ async def cmd_history(message: types.Message, command: CommandObject):
         vol = h['volume'] / 10000  # 万手
         
         # Color for change
-        icon = "🔴" if pct > 0 else "🟢" if pct < 0 else "⚪"
+        # icon = "🔴" if pct > 0 else "🟢" if pct < 0 else "⚪"
         
         text += f"{date_str}  {close:>6.2f}  {pct:>5.2f}%  {vol:>4.0f}万\n"
     
@@ -1523,28 +1833,64 @@ async def cb_scan_list(callback: types.CallbackQuery):
     name = SIGNAL_NAMES.get(signal_type, signal_type)
     
     text = f"{icon} <b>{name}</b> ({len(stocks)}只)\n"
-    text += f"━━━━━━━━━━━━━━━━━━━━━\n"
+    text += "━━━━━━━━━━━━━━━━━━━━━\n"
     text += f"<i>第 {page + 1}/{total_pages} 页</i>\n\n"
-    
-    for i, s in enumerate(page_stocks, start + 1):
-        chart_url = get_chart_url(s['code'], s.get('name'))
-        text += f"{i}. <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
+    chat_type = callback.message.chat.type if callback.message else None
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
+    context = f"scanner_{signal_type}"
+
+    if use_webapp_buttons:
+        text += "<i>点击下方按钮查看K线</i>\n"
+    else:
+        for i, s in enumerate(page_stocks, start + 1):
+            name = s.get('name') or s.get('code')
+            chart_url = get_chart_url(s['code'], name, context=context)
+            text += f"{i}. <a href=\"{chart_url}\">{name}</a> ({s['code']})\n"
     
     builder = InlineKeyboardBuilder()
+    if use_webapp_buttons:
+        for i, s in enumerate(page_stocks, start + 1):
+            suffix = None
+            if s.get("signal_count"):
+                suffix = f"{s['signal_count']}信号"
+            builder.row(
+                _build_webapp_button(
+                    s.get('name') or s['code'],
+                    s['code'],
+                    context,
+                    webapp_base,
+                    suffix=suffix,
+                    prefix=f"{i}."
+                )
+            )
     
     # Pagination buttons
-    if page > 0:
-        builder.button(text="⬅️ 上一页", callback_data=f"scan:list:{signal_type}:{page-1}")
-    if page < total_pages - 1:
-        builder.button(text="➡️ 下一页", callback_data=f"scan:list:{signal_type}:{page+1}")
-    
-    builder.button(text="◀️ 返回扫描", callback_data="scan:back")
-    builder.button(text="◀️ 返回菜单", callback_data="scanner:main")
-    builder.adjust(2, 1, 1)
+    if use_webapp_buttons:
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append(types.InlineKeyboardButton(text="⬅️ 上一页", callback_data=f"scan:list:{signal_type}:{page-1}"))
+        if page < total_pages - 1:
+            nav_buttons.append(types.InlineKeyboardButton(text="➡️ 下一页", callback_data=f"scan:list:{signal_type}:{page+1}"))
+        if nav_buttons:
+            builder.row(*nav_buttons)
+        builder.row(
+            types.InlineKeyboardButton(text="◀️ 返回扫描", callback_data="scan:back"),
+            types.InlineKeyboardButton(text="◀️ 返回菜单", callback_data="scanner:main")
+        )
+    else:
+        if page > 0:
+            builder.button(text="⬅️ 上一页", callback_data=f"scan:list:{signal_type}:{page-1}")
+        if page < total_pages - 1:
+            builder.button(text="➡️ 下一页", callback_data=f"scan:list:{signal_type}:{page+1}")
+        
+        builder.button(text="◀️ 返回扫描", callback_data="scan:back")
+        builder.button(text="◀️ 返回菜单", callback_data="scanner:main")
+        builder.adjust(2, 1, 1)
     
     try:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
-    except:
+    except Exception:
         pass
 
 
@@ -1561,6 +1907,10 @@ async def cb_scan_back(callback: types.CallbackQuery):
         await callback.message.answer("📭 缓存已失效，请重新扫描")
         return
     
+    chat_type = callback.message.chat.type if callback.message else None
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
+
     text = "🔍 <b>启动信号扫描</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
     
     for signal_type, stocks in signals.items():
@@ -1571,12 +1921,17 @@ async def cb_scan_back(callback: types.CallbackQuery):
         name = SIGNAL_NAMES.get(signal_type, signal_type)
         
         text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
-        for s in stocks[:5]:
-            chart_url = get_chart_url(s['code'], s.get('name'))
-            text += f"  • <a href=\"{chart_url}\">{s['name']}</a> ({s['code']})\n"
-        if len(stocks) > 5:
-            text += f"  <i>...及其他 {len(stocks) - 5} 只</i>\n"
+        if not use_webapp_buttons:
+            for s in stocks[:5]:
+                name_label = s.get('name') or s.get('code')
+                chart_url = get_chart_url(s['code'], name_label)
+                text += f"  • <a href=\"{chart_url}\">{name_label}</a> ({s['code']})\n"
+            if len(stocks) > 5:
+                text += f"  <i>...及其他 {len(stocks) - 5} 只</i>\n"
         text += "\n"
+
+    if use_webapp_buttons:
+        text += "<i>点击下方按钮查看对应列表</i>\n"
     
     builder = InlineKeyboardBuilder()
     for signal_type, stocks in signals.items():
@@ -1589,7 +1944,7 @@ async def cb_scan_back(callback: types.CallbackQuery):
     
     try:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
-    except:
+    except Exception:
         pass
 
 
@@ -1623,7 +1978,7 @@ async def cb_sector_main(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -1645,7 +2000,7 @@ async def cb_industry(callback: types.CallbackQuery):
     text, markup = await get_sector_ui("industry")
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         pass
 
 
@@ -1667,7 +2022,7 @@ async def cb_concept(callback: types.CallbackQuery):
     text, markup = await get_sector_ui("concept")
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         pass
 
 
@@ -1743,7 +2098,7 @@ async def cb_hot(callback: types.CallbackQuery):
     text, markup = await get_hot_ui(days)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         pass
 
 
@@ -1804,7 +2159,7 @@ async def cb_weak(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -2015,7 +2370,7 @@ async def cb_userlist(callback: types.CallbackQuery):
     text, markup = await get_userlist_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         pass
 
 
@@ -2034,7 +2389,7 @@ async def cb_user_del(callback: types.CallbackQuery):
         text, markup = await get_userlist_ui()
         try:
             await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-        except:
+        except Exception:
             pass
     except Exception as e:
         await safe_answer(callback, f"❌ 失败: {e}")
@@ -2051,7 +2406,7 @@ async def get_userlist_ui():
                 FROM allowed_users ORDER BY created_at DESC
             """)
             db_users = list(rows)
-        except:
+        except Exception:
             pass
     
     text = "👤 <b>授权用户</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -2118,7 +2473,7 @@ async def cb_report_main(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -2180,7 +2535,7 @@ async def cb_report_weekly(callback: types.CallbackQuery):
     except Exception as e:
         try:
             await callback.message.edit_text(f"❌ 周报生成失败: {e}")
-        except:
+        except Exception:
             pass
 
 
@@ -2212,7 +2567,7 @@ async def cb_report_monthly(callback: types.CallbackQuery):
     except Exception as e:
         try:
             await callback.message.edit_text(f"❌ 月报生成失败: {e}")
-        except:
+        except Exception:
             pass
 
 
@@ -2245,7 +2600,7 @@ async def cb_report_days(callback: types.CallbackQuery):
     except Exception as e:
         try:
             await callback.message.edit_text(f"❌ 报告生成失败: {e}")
-        except:
+        except Exception:
             pass
 
 
@@ -2264,7 +2619,7 @@ async def cmd_watch_add(message: types.Message, command: CommandObject):
         # Show user's watchlist
         status = await message.answer("⏳ 正在加载自选列表...")
         try:
-            text, markup = await get_watchlist_ui(message.from_user.id)
+            text, markup = await get_watchlist_ui(message.from_user.id, chat_type=message.chat.type)
             await status.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
         except Exception as e:
             await status.edit_text(f"❌ 加载失败: {e}")
@@ -2346,7 +2701,7 @@ async def cmd_mywatch(message: types.Message):
     status = await message.answer("⏳ 正在加载自选列表...")
     
     try:
-        text, markup = await get_watchlist_ui(message.from_user.id)
+        text, markup = await get_watchlist_ui(message.from_user.id, chat_type=message.chat.type)
         await status.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except Exception as e:
         await status.edit_text(f"❌ 加载失败: {e}")
@@ -2359,7 +2714,7 @@ async def cb_watch_list(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text("⏳ 正在加载...", parse_mode="HTML")
-        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=False)
+        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=False, chat_type=callback.message.chat.type if callback.message else None)
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except Exception as e:
         await callback.message.edit_text(f"❌ 加载失败: {e}")
@@ -2372,7 +2727,7 @@ async def cb_watch_realtime(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text("⏳ 正在获取实时行情...", parse_mode="HTML")
-        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=True)
+        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=True, chat_type=callback.message.chat.type if callback.message else None)
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except Exception as e:
         await callback.message.edit_text(f"❌ 加载失败: {e}")
@@ -2395,19 +2750,21 @@ async def cb_watch_del(callback: types.CallbackQuery):
     
     # Refresh list
     try:
-        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=False)
+        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=False, chat_type=callback.message.chat.type if callback.message else None)
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
-    except:
+    except Exception:
         pass
 
 
-async def get_watchlist_ui(user_id: int, realtime: bool = False):
+async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Optional[str] = None):
     """Get watchlist UI with prices.
     
     Args:
         user_id: User ID
         realtime: If True, fetch real-time prices from AkShare
     """
+    webapp_base = _get_webapp_base(chat_type)
+    use_webapp_buttons = bool(webapp_base)
     if realtime:
         stocks = await watchlist_service.get_watchlist_realtime(user_id)
     else:
@@ -2430,8 +2787,10 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False):
     # Header with data source indicator
     source = "📡 实时" if realtime else "📊 缓存"
     text = f"⭐ <b>自选列表</b> ({len(stocks)}) {source}\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+    if use_webapp_buttons:
+        text += "<i>点击下方按钮查看K线</i>\n"
     
-    for s in stocks:
+    for idx, s in enumerate(stocks, 1):
         name = s.get('name', s['code'])
         code = s['code']
         current = s.get('current_price', 0)
@@ -2448,6 +2807,9 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False):
             icon = "⬇️"  # Small loss
         else:
             icon = "🔴"  # Big loss
+
+        if use_webapp_buttons:
+            continue
         
         chart_url = get_chart_url(code, name)
         date_str = add_date.strftime('%m/%d') if add_date else ""
@@ -2459,6 +2821,36 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False):
         )
     
     builder = InlineKeyboardBuilder()
+
+    if use_webapp_buttons:
+        max_buttons = 70
+        for idx, s in enumerate(stocks[:max_buttons], 1):
+            name = s.get('name', s['code'])
+            code = s['code']
+            current = s.get('current_price', 0)
+            today = s.get('today_change', 0)
+            total = s.get('total_change', 0)
+            if total > 5:
+                icon = "🟢"
+            elif total > 0:
+                icon = "⬆️"
+            elif total > -5:
+                icon = "⬇️"
+            else:
+                icon = "🔴"
+            suffix = f"{current:.2f} {today:+.2f}% T{total:+.2f}%"
+            builder.row(
+                _build_webapp_button(
+                    name,
+                    code,
+                    "watchlist",
+                    webapp_base,
+                    suffix=suffix,
+                    prefix=f"{icon}{idx}."
+                )
+            )
+        if len(stocks) > max_buttons:
+            text += f"\n<i>仅显示前 {max_buttons} 只按钮，列表过长请分批查看</i>\n"
     
     # Add delete buttons for each stock (limit to 8)
     for s in stocks[:8]:
@@ -2466,12 +2858,21 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False):
         builder.button(text=f"❌ {name_short}", callback_data=f"watch:del:{s['code']}")
     
     # Toggle between cached and realtime
-    if realtime:
-        builder.button(text="📊 缓存数据", callback_data="watch:list")
+    if use_webapp_buttons:
+        builder.row(
+            types.InlineKeyboardButton(
+                text="📊 缓存数据" if realtime else "📡 实时刷新",
+                callback_data="watch:list" if realtime else "watch:realtime"
+            ),
+            types.InlineKeyboardButton(text="◀️ 返回", callback_data="main")
+        )
     else:
-        builder.button(text="📡 实时刷新", callback_data="watch:realtime")
-    builder.button(text="◀️ 返回", callback_data="main")
-    builder.adjust(2, 2, 2, 2, 2)
+        if realtime:
+            builder.button(text="📊 缓存数据", callback_data="watch:list")
+        else:
+            builder.button(text="📡 实时刷新", callback_data="watch:realtime")
+        builder.button(text="◀️ 返回", callback_data="main")
+        builder.adjust(2, 2, 2, 2, 2)
     
     return text, builder.as_markup()
 
@@ -2508,7 +2909,7 @@ async def cb_sim_main(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -2611,7 +3012,7 @@ async def cb_trades(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -2884,7 +3285,7 @@ async def cb_daban_portfolio(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 
@@ -2902,7 +3303,7 @@ async def cb_daban_stats(callback: types.CallbackQuery):
     
     try:
         await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
-    except:
+    except Exception:
         pass
 
 

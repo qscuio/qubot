@@ -153,6 +153,7 @@ class StockScanner:
             "small_bullish_4_1_bearish": [],  # 四阳一阴
             "small_bullish_5_1_bearish": [],  # 五阳一阴
             "small_bullish_3_1_bearish_1_bullish": [],  # 三阳一阴一阳
+            "small_bullish_5_in_7": [],  # 地位七天五阳
             "strong_first_negative": [],  # 强势股首阴
             "broken_limit_up_streak": [],  # 连板断板
             "pullback_ma5": [],  # 5日线回踩
@@ -301,6 +302,9 @@ class StockScanner:
                     if self._check_small_bullish_3_1_bearish_1_bullish(hist, pd):
                         signals["small_bullish_3_1_bearish_1_bullish"].append(stock_info)
 
+                    if self._check_small_bullish_5_in_7(hist, pd):
+                        signals["small_bullish_5_in_7"].append(stock_info)
+
                     if self._check_strong_first_negative(hist, pd):
                         signals["strong_first_negative"].append(stock_info)
 
@@ -330,6 +334,7 @@ class StockScanner:
                         stock_info in signals["small_bullish_4_1_bearish"],
                         stock_info in signals["small_bullish_5_1_bearish"],
                         stock_info in signals["small_bullish_3_1_bearish_1_bullish"],
+                        stock_info in signals["small_bullish_5_in_7"],
                         stock_info in signals["strong_first_negative"],
                         stock_info in signals["broken_limit_up_streak"],
                         stock_info in signals["pullback_ma5"],
@@ -831,6 +836,59 @@ class StockScanner:
                 return False
             
             # 4. Check if at bottom
+            close_current = hist['收盘'].iloc[-1]
+            high_60 = hist['最高'].max()
+            low_60 = hist['最低'].min()
+            range_60 = high_60 - low_60
+            
+            if range_60 > 0:
+                position = (close_current - low_60) / range_60
+                return position < 0.4
+            
+            return False
+        except:
+            return False
+
+    def _check_small_bullish_5_in_7(self, hist, pd) -> bool:
+        """检查地位七天五阳信号.
+        
+        条件:
+        1. 最近7日中至少有5日是小阳线
+           小阳线定义: 收盘 > 开盘 且 实体涨幅在 0.5% - 3.0% 之间
+        2. 股价在近60日低位 (区间下部40%)
+        """
+        try:
+            # Get last 7 days
+            last_7 = hist.tail(7)
+            
+            if len(last_7) < 7:
+                return False
+            
+            small_bullish_count = 0
+            
+            # Check for small bullish candles
+            for i in range(len(last_7)):
+                row = last_7.iloc[i]
+                open_price = row['开盘']
+                close = row['收盘']
+                
+                # Must be bullish
+                if close <= open_price:
+                    continue
+                    
+                # Calculate body percentage
+                if open_price > 0:
+                    body_pct = (close - open_price) / open_price * 100
+                    
+                    # Small bullish: 0.5% - 3%
+                    if 0.5 <= body_pct <= 3.0:
+                        small_bullish_count += 1
+            
+            # Condition 1: At least 5 small bullish candles
+            if small_bullish_count < 5:
+                return False
+            
+            # Condition 2: Check if at bottom (current price in lower 40% of 60-day range)
             close_current = hist['收盘'].iloc[-1]
             high_60 = hist['最高'].max()
             low_60 = hist['最低'].min()

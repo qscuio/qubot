@@ -55,9 +55,12 @@ class Settings(BaseSettings):
     # Monitoring - stored as comma-separated strings to avoid pydantic-settings JSON parsing
     SOURCE_CHANNELS: Optional[str] = None
     TARGET_CHANNEL: Optional[str] = None
+    TARGET_GROUP: Optional[str] = None
     VIP_TARGET_CHANNEL: Optional[str] = None  # Separate channel for VIP user messages
     REPORT_TARGET_CHANNEL: Optional[str] = None  # Separate channel for daily reports
+    REPORT_TARGET_GROUP: Optional[str] = None
     DABAN_CHANNEL: Optional[str] = None  # Specific channel for Daban signals
+    DABAN_GROUP: Optional[str] = None
     STOCK_ALERT_CHANNEL: Optional[str] = None  # Channel for limit-up stock alerts
     ALERT_CHANNEL: Optional[str] = None  # Channel for security alerts
     

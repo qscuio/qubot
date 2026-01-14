@@ -724,8 +724,10 @@ async def cmd_test(message: types.Message):
     
     # All target channels to test
     channels = {
+        "TARGET_GROUP": settings.TARGET_GROUP,
         "TARGET_CHANNEL": settings.TARGET_CHANNEL,
         "VIP_TARGET_CHANNEL": settings.VIP_TARGET_CHANNEL,
+        "REPORT_TARGET_GROUP": settings.REPORT_TARGET_GROUP,
         "REPORT_TARGET_CHANNEL": settings.REPORT_TARGET_CHANNEL,
         "STOCK_ALERT_CHANNEL": settings.STOCK_ALERT_CHANNEL,
         "ALERT_CHANNEL": settings.ALERT_CHANNEL,
@@ -1128,4 +1130,3 @@ async def cb_dedup_clear(callback: types.CallbackQuery):
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
     except:
         pass
-

@@ -102,10 +102,11 @@ async def lifespan(app: FastAPI):
         async def sim_notify_callback(message: str):
             from app.bots.registry import get_bot
             bot = get_bot("crawler")
-            if bot and settings.REPORT_TARGET_CHANNEL:
+            report_target = settings.REPORT_TARGET_GROUP or settings.REPORT_TARGET_CHANNEL
+            if bot and report_target:
                 try:
                     await bot.send_message(
-                        int(settings.REPORT_TARGET_CHANNEL),
+                        int(report_target),
                         f"🤖 <b>模拟交易</b>\n{message}",
                         parse_mode="HTML"
                     )
@@ -120,18 +121,83 @@ async def lifespan(app: FastAPI):
     from app.services.daban_simulator import daban_simulator
     
     # Set up notification callback for daban_service (real-time signals)
-    async def daban_signal_callback(message: str):
+    async def daban_signal_callback(message: str, buttons=None):
         from app.bots.registry import get_bot
         bot = get_bot("crawler")
-        if bot and settings.REPORT_TARGET_CHANNEL:
+        target_channel = settings.DABAN_GROUP or settings.DABAN_CHANNEL
+        if not bot:
+            logger.warn("Daban signal bot not available; cannot send via bot")
+            return False
+        if not target_channel:
+            logger.warn("Daban signal target channel not set; cannot send via bot")
+            return False
+
+        def build_reply_markup(use_web_app: bool):
+            if not buttons:
+                return None, 0
+            from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+            rows = []
+            webapp_count = 0
+            for row in buttons:
+                button_row = []
+                for btn in row:
+                    text = btn.get("text", "打开")
+                    url = btn.get("url")
+                    web_app_url = btn.get("web_app_url")
+                    if use_web_app and btn.get("web_app") and web_app_url:
+                        button_row.append(
+                            InlineKeyboardButton(text=text, web_app=WebAppInfo(url=web_app_url))
+                        )
+                        webapp_count += 1
+                    elif url:
+                        button_row.append(InlineKeyboardButton(text=text, url=url))
+                if button_row:
+                    rows.append(button_row)
+            if rows:
+                return InlineKeyboardMarkup(inline_keyboard=rows), webapp_count
+            return None, 0
+
+        try:
+            allow_web_app = True
             try:
-                await bot.send_message(
-                    int(settings.REPORT_TARGET_CHANNEL),
-                    message,
-                    parse_mode="HTML"
+                chat = await bot.get_chat(int(target_channel))
+                if getattr(chat, "type", None) == "channel":
+                    allow_web_app = False
+                    logger.info("Daban signal target is channel; skip WebApp buttons")
+            except Exception as chat_err:
+                logger.warn(f"Failed to resolve daban signal target chat type: {chat_err}")
+
+            reply_markup, webapp_count = build_reply_markup(use_web_app=allow_web_app)
+            if reply_markup:
+                logger.info(
+                    f"Daban signal buttons ready: rows={len(reply_markup.inline_keyboard)} "
+                    f"webapp={webapp_count}"
                 )
-            except Exception as e:
+            await bot.send_message(
+                int(target_channel),
+                message,
+                parse_mode="HTML",
+                reply_markup=reply_markup
+            )
+            return True
+        except Exception as e:
+            err_text = str(e)
+            if "BUTTON_TYPE_INVALID" in err_text and buttons:
+                logger.warn("WebApp button invalid for target; retrying with URL buttons")
+                try:
+                    reply_markup, webapp_count = build_reply_markup(use_web_app=False)
+                    await bot.send_message(
+                        int(target_channel),
+                        message,
+                        parse_mode="HTML",
+                        reply_markup=reply_markup
+                    )
+                    return True
+                except Exception as retry_exc:
+                    logger.warn(f"Failed to send daban signal after URL fallback: {retry_exc}")
+            else:
                 logger.warn(f"Failed to send daban signal: {e}")
+            return False
     
     daban_service.set_notify_callback(daban_signal_callback)
     await daban_service.start()
@@ -140,10 +206,11 @@ async def lifespan(app: FastAPI):
     async def daban_notify_callback(message: str):
         from app.bots.registry import get_bot
         bot = get_bot("crawler")
-        if bot and settings.REPORT_TARGET_CHANNEL:
+        report_target = settings.REPORT_TARGET_GROUP or settings.REPORT_TARGET_CHANNEL
+        if bot and report_target:
             try:
                 await bot.send_message(
-                    int(settings.REPORT_TARGET_CHANNEL),
+                    int(report_target),
                     f"🎯 <b>打板模拟</b>\n{message}",
                     parse_mode="HTML"
                 )

@@ -48,8 +48,9 @@ class MarketReportService:
         if self.is_running:
             return
         
-        if not settings.REPORT_TARGET_CHANNEL:
-            logger.warn("REPORT_TARGET_CHANNEL not configured, market reports disabled")
+        report_target = settings.REPORT_TARGET_GROUP or settings.REPORT_TARGET_CHANNEL
+        if not report_target:
+            logger.warn("REPORT_TARGET_GROUP/REPORT_TARGET_CHANNEL not configured, market reports disabled")
             return
         
         self.is_running = True
@@ -505,13 +506,14 @@ class MarketReportService:
         """Send weekly report to Telegram."""
         from app.core.bot import telegram_service
         
-        if not settings.REPORT_TARGET_CHANNEL:
+        report_target = settings.REPORT_TARGET_GROUP or settings.REPORT_TARGET_CHANNEL
+        if not report_target:
             return
         
         report = await self.generate_weekly_report()
         
         await telegram_service.send_message(
-            settings.REPORT_TARGET_CHANNEL, report,
+            report_target, report,
             parse_mode="html",
             link_preview=False
         )
@@ -521,13 +523,14 @@ class MarketReportService:
         """Send monthly report to Telegram."""
         from app.core.bot import telegram_service
         
-        if not settings.REPORT_TARGET_CHANNEL:
+        report_target = settings.REPORT_TARGET_GROUP or settings.REPORT_TARGET_CHANNEL
+        if not report_target:
             return
         
         report = await self.generate_monthly_report()
         
         await telegram_service.send_message(
-            settings.REPORT_TARGET_CHANNEL, report,
+            report_target, report,
             parse_mode="html",
             link_preview=False
         )

@@ -282,9 +282,13 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `SOURCE_CHANNELS` | Channels to monitor | `-1001234567890,-1009876543210` |
-| `TARGET_CHANNEL` | Forward destination | `-1001111111111` |
+| `TARGET_GROUP` | Forward destination (preferred) | `-1001111111111` |
+| `TARGET_CHANNEL` | Forward destination (fallback) | `-1001111111111` |
 | `VIP_TARGET_CHANNEL` | VIP user messages destination | `-1002222222222` |
-| `REPORT_TARGET_CHANNEL` | Daily reports destination | `-1003333333333` |
+| `REPORT_TARGET_GROUP` | Daily reports destination (preferred) | `-1003333333333` |
+| `REPORT_TARGET_CHANNEL` | Daily reports destination (fallback) | `-1003333333333` |
+| `DABAN_GROUP` | Daban signals destination (preferred) | `-1003333333333` |
+| `DABAN_CHANNEL` | Daban signals destination (fallback) | `-1003333333333` |
 | `STOCK_ALERT_CHANNEL` | Limit-up stock alerts destination | `-1004444444444` |
 | `BLACKLIST_CHANNELS` | Channels to completely ignore | `@spam,-1009999999999` |
 | `KEYWORDS` | Filter keywords (or `none`) | `bitcoin,crypto` |
@@ -362,9 +366,13 @@ For **each environment**, add these VPS-specific secrets:
 | `TG_SESSIONS_JSON` | Telegram sessions JSON (single line) |
 | `WEBHOOK_URL` | Webhook URL for this VPS |
 | `WEBFRONT_URL` | Web frontend URL (if different per VPS) |
-| `TARGET_CHANNEL` | Target channel for this instance |
+| `TARGET_GROUP` | Target group for this instance (preferred) |
+| `TARGET_CHANNEL` | Target channel for this instance (fallback) |
 | `VIP_TARGET_CHANNEL` | VIP target channel |
-| `REPORT_TARGET_CHANNEL` | Report target channel |
+| `REPORT_TARGET_GROUP` | Report target group (preferred) |
+| `REPORT_TARGET_CHANNEL` | Report target channel (fallback) |
+| `DABAN_GROUP` | Daban signals group (preferred) |
+| `DABAN_CHANNEL` | Daban signals channel (fallback) |
 | Bot tokens | `AI_BOT_TOKEN`, `MONITOR_BOT_TOKEN`, etc. |
 
 #### Step 3: Shared Secrets (Repository Level)

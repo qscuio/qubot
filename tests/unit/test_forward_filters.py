@@ -179,10 +179,8 @@ class TestTimeRestrictionFilter:
     @pytest.mark.unit
     def test_before_noon_continues(self):
         """Before noon should continue."""
-        with patch('app.services.forward_filters.datetime') as mock_dt:
-            mock_now = MagicMock()
-            mock_now.hour = 9
-            mock_dt.now.return_value = mock_now
+        with patch('app.services.forward_filters.china_now') as mock_now:
+            mock_now.return_value.hour = 9
             
             f = TimeRestrictionFilter()
             ctx = FilterContext(message_text="test", message_id=1)
@@ -193,10 +191,8 @@ class TestTimeRestrictionFilter:
     @pytest.mark.unit
     def test_after_noon_blocks(self):
         """After noon should block."""
-        with patch('app.services.forward_filters.datetime') as mock_dt:
-            mock_now = MagicMock()
-            mock_now.hour = 14
-            mock_dt.now.return_value = mock_now
+        with patch('app.services.forward_filters.china_now') as mock_now:
+            mock_now.return_value.hour = 14
             
             f = TimeRestrictionFilter()
             ctx = FilterContext(message_text="test", message_id=1)

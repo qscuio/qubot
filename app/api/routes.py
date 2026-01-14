@@ -133,14 +133,17 @@ async def rss_unsubscribe(source_id: str, user_id: str = Depends(verify_api_key)
 
 chart_router = APIRouter(prefix="/api", tags=["Chart"])
 
+from app.api.auth import verify_api_key, verify_webapp
+
 @chart_router.get("/chart/data/{code}")
-async def chart_data(code: str, days: int = 60, period: str = "daily"):
-    """Get OHLCV data for stock chart Mini App.
+async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: int = Depends(verify_webapp)):
+    """Get OHLCV data for stock chart Mini App (Protected).
     
     Args:
         code: Stock code (e.g., 600519)
         days: Number of periods to return
         period: 'daily', 'weekly', or 'monthly'
+        user_id: Authenticated Telegram User ID
     """
     import asyncio
     from datetime import time as time_type
@@ -290,7 +293,7 @@ async def chart_data(code: str, days: int = 60, period: str = "daily"):
 
 
 @chart_router.get("/chart/chips/{code}")
-async def chart_chips(code: str, date: str = None):
+async def chart_chips(code: str, date: str = None, user_id: int = Depends(verify_webapp)):
     """Get chip distribution data for a stock.
     
     Args:
@@ -323,32 +326,33 @@ async def chart_chips(code: str, date: str = None):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class WatchlistRequest(BaseModel):
-    user_id: int
+    user_id: Optional[int] = None
     code: str
     name: Optional[str] = None
 
 @chart_router.post("/chart/watchlist/add")
-async def chart_watchlist_add(req: WatchlistRequest):
+async def chart_watchlist_add(req: WatchlistRequest, user_id: int = Depends(verify_webapp)):
     """Add stock to watchlist from Mini App."""
     from app.services.watchlist import watchlist_service
     try:
-        result = await watchlist_service.add_stock(req.user_id, req.code, req.name)
+        # Override req.user_id with authenticated user_id
+        result = await watchlist_service.add_stock(user_id, req.code, req.name)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @chart_router.post("/chart/watchlist/remove")
-async def chart_watchlist_remove(req: WatchlistRequest):
+async def chart_watchlist_remove(req: WatchlistRequest, user_id: int = Depends(verify_webapp)):
     """Remove stock from watchlist from Mini App."""
     from app.services.watchlist import watchlist_service
     try:
-        success = await watchlist_service.remove_stock(req.user_id, req.code)
+        success = await watchlist_service.remove_stock(user_id, req.code)
         return {"success": success}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @chart_router.get("/chart/watchlist/status")
-async def chart_watchlist_status(user_id: int, code: str):
+async def chart_watchlist_status(code: str, user_id: int = Depends(verify_webapp)):
     """Check if stock is in watchlist."""
     from app.services.watchlist import watchlist_service
     try:
@@ -360,7 +364,7 @@ async def chart_watchlist_status(user_id: int, code: str):
 
 
 @chart_router.get("/chart/navigation")
-async def get_chart_navigation(code: str, context: str, user_id: int = None):
+async def get_chart_navigation(code: str, context: str, user_id: int = Depends(verify_webapp)):
     """Get previous and next stock codes based on context."""
     from app.services.limit_up import limit_up_service
     from app.services.watchlist import watchlist_service

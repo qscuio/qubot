@@ -187,7 +187,7 @@ class TwitterService:
         """Forward a tweet to VIP channel."""
         from app.core.bot import telegram_service
         
-        target = settings.VIP_TARGET_CHANNEL or settings.TARGET_CHANNEL
+        target = settings.VIP_TARGET_CHANNEL or settings.TARGET_GROUP or settings.TARGET_CHANNEL
         if not target:
             return
         
