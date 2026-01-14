@@ -311,42 +311,46 @@ class LimitUpService:
             logger.warn("get_previous_limit_prices: akshare or db not available")
             return []
         
-        # Get yesterday's limit-up stocks
-        yesterday = china_today() - timedelta(days=1)
-        # Skip weekends
-        while yesterday.weekday() >= 5:
-            yesterday -= timedelta(days=1)
-        
-        logger.info(f"Fetching limit-up stocks for {yesterday}")
-        
-        stocks = await db.pool.fetch("""
-            SELECT code, name, close_price, limit_times
-            FROM limit_up_stocks
-            WHERE date = $1 AND is_sealed = TRUE
-            ORDER BY limit_times DESC, close_price DESC
-        """, yesterday)
-        
-        # If no data in DB, try to fetch from AkShare in real-time
-        if not stocks:
-            logger.warn(f"No limit-up stocks found in DB for {yesterday}, fetching from AkShare...")
-            date_str = yesterday.strftime("%Y%m%d")
+        report_date = await db.pool.fetchval("""
+            SELECT MAX(date) FROM limit_up_stocks
+            WHERE date < $1
+        """, china_today())
+
+        stocks = []
+        if report_date:
+            logger.info(f"Fetching limit-up stocks for {report_date}")
+            stocks = await db.pool.fetch("""
+                SELECT code, name, close_price, limit_times
+                FROM limit_up_stocks
+                WHERE date = $1 AND is_sealed = TRUE
+                ORDER BY limit_times DESC, close_price DESC
+            """, report_date)
+            if not stocks:
+                logger.warn(f"No sealed limit-up stocks found in DB for {report_date}")
+                return []
+        else:
+            # Fallback: best-effort previous trading day, but avoid polluting DB
+            report_date = china_today() - timedelta(days=1)
+            while report_date.weekday() >= 5:
+                report_date -= timedelta(days=1)
+
+            logger.warn(
+                f"No limit-up history found in DB, fetching from AkShare for {report_date}"
+            )
+            date_str = report_date.strftime("%Y%m%d")
             try:
                 fetched = await self.get_realtime_limit_ups(date_str)
                 if fetched:
-                    # Save to DB for future use
-                    await self._save_limit_ups(yesterday, fetched)
-                    logger.info(f"Fetched and saved {len(fetched)} limit-up stocks for {yesterday}")
-                    # Convert to format needed
                     stocks = [
-                        {"code": s["code"], "name": s["name"], 
+                        {"code": s["code"], "name": s["name"],
                          "close_price": s["close_price"], "limit_times": s.get("limit_times", 1)}
                         for s in fetched if s.get("is_sealed", True)
                     ]
             except Exception as e:
                 logger.error(f"Failed to fetch from AkShare: {e}")
-        
+
         if not stocks:
-            logger.warn(f"No limit-up stocks found for {yesterday}")
+            logger.warn(f"No limit-up stocks found for {report_date}")
             return []
         
         try:
