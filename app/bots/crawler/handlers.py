@@ -1190,6 +1190,14 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
     builder.button(text="🔙 30日线回踩", callback_data="scanner:scan:pullback_ma30")
     builder.button(text="📅 5周线回踩", callback_data="scanner:scan:pullback_ma5_weekly")
+
+    # Top Gainers
+    builder.button(text="🔥 每周涨幅", callback_data="scanner:scan:top_gainers_weekly")
+    builder.button(text="🔥 半月涨幅", callback_data="scanner:scan:top_gainers_half_month")
+    builder.button(text="🔥 每月涨幅", callback_data="scanner:scan:top_gainers_monthly")
+    builder.button(text="🛡️ 每周(无板)", callback_data="scanner:scan:top_gainers_weekly_no_lu")
+    builder.button(text="🛡️ 半月(无板)", callback_data="scanner:scan:top_gainers_half_month_no_lu")
+    builder.button(text="🛡️ 月度(无板)", callback_data="scanner:scan:top_gainers_monthly_no_lu")
     
     # Control buttons
     builder.button(text="🔍 全部扫描", callback_data="scanner:scan:all")
@@ -1199,7 +1207,11 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="◀️ 返回", callback_data="main")
     
     # Layout: 2 cols for signals, then 2, 2, 1
-    builder.adjust(2, 2, 2, 3, 3, 3, 3, 2, 1)
+    # Layout: 2 cols for signals, then 2, 2, 1
+    # Original: 2, 2, 2, 3, 3, 3, 3, 2, 1
+    # Added 6 buttons (3 rows of 2 or 2 rows of 3)
+    # Let's use 3 columns for the new ones
+    builder.adjust(2, 2, 2, 3, 3, 3, 3, 3, 3, 2, 1)
     
     try:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())

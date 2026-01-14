@@ -161,6 +161,12 @@ class StockScanner:
             "pullback_ma30": [],  # 30日线回踩
             "pullback_ma5_weekly": [],  # 5周线回踩
             "multi_signal": [],  # 多信号共振(满足≥3个信号)
+            "top_gainers_weekly": [], # 每周涨幅前40
+            "top_gainers_half_month": [], # 每半月涨幅前40
+            "top_gainers_monthly": [], # 每月涨幅前40
+            "top_gainers_weekly_no_lu": [], # 每周涨幅前40 (未涨停)
+            "top_gainers_half_month_no_lu": [], # 每半月涨幅前40 (未涨停)
+            "top_gainers_monthly_no_lu": [], # 每月涨幅前40 (未涨停)
         }
         
         if not db.pool:
@@ -341,7 +347,69 @@ class StockScanner:
                         stock_info in signals["pullback_ma20"],
                         stock_info in signals["pullback_ma30"],
                         stock_info in signals["pullback_ma5_weekly"],
+                        stock_info in signals["pullback_ma5_weekly"],
                     ])
+                    
+                    # ═══════════════════════════════════════════════════════════
+                    # Top Gainers Calculation
+                    # ═══════════════════════════════════════════════════════════
+                    # Calculate gains for 5, 10, 20 days
+                    try:
+                        closes = hist['收盘'].values
+                        highs = hist['最高'].values
+                        
+                        # 5 Days (Weekly)
+                        if len(closes) >= 6:
+                            gain_5d = (closes[-1] - closes[-6]) / closes[-6] * 100
+                            # Check limit up in last 5 days (approx > 9.5%)
+                            # We check daily returns
+                            has_lu_5d = False
+                            for i in range(-5, 0):
+                                if i == -len(closes): break # Safety
+                                prev_c = closes[i-1]
+                                curr_c = closes[i]
+                                if prev_c > 0 and (curr_c - prev_c) / prev_c > 0.095:
+                                    has_lu_5d = True
+                                    break
+                            
+                            signals.setdefault("_temp_gainers_5d", []).append({
+                                **stock_info, "gain": gain_5d, "has_lu": has_lu_5d
+                            })
+                        
+                        # 10 Days (Half-Month)
+                        if len(closes) >= 11:
+                            gain_10d = (closes[-1] - closes[-11]) / closes[-11] * 100
+                            has_lu_10d = False
+                            for i in range(-10, 0):
+                                if i == -len(closes): break
+                                prev_c = closes[i-1]
+                                curr_c = closes[i]
+                                if prev_c > 0 and (curr_c - prev_c) / prev_c > 0.095:
+                                    has_lu_10d = True
+                                    break
+                                    
+                            signals.setdefault("_temp_gainers_10d", []).append({
+                                **stock_info, "gain": gain_10d, "has_lu": has_lu_10d
+                            })
+
+                        # 20 Days (Monthly)
+                        if len(closes) >= 21:
+                            gain_20d = (closes[-1] - closes[-21]) / closes[-21] * 100
+                            has_lu_20d = False
+                            for i in range(-20, 0):
+                                if i == -len(closes): break
+                                prev_c = closes[i-1]
+                                curr_c = closes[i]
+                                if prev_c > 0 and (curr_c - prev_c) / prev_c > 0.095:
+                                    has_lu_20d = True
+                                    break
+                                    
+                            signals.setdefault("_temp_gainers_20d", []).append({
+                                **stock_info, "gain": gain_20d, "has_lu": has_lu_20d
+                            })
+
+                    except Exception as e:
+                        pass # Ignore calculation errors for gainers
                     
                     # Add to multi-signal list if 3+ signals
                     if signal_count >= 3:
@@ -358,6 +426,26 @@ class StockScanner:
             
             if skipped_insufficient > 0:
                 logger.info(f"⏭️ Skipped {skipped_insufficient} stocks with insufficient history (<21 days)")
+            
+            # Process Top Gainers
+            # Weekly
+            temp_5d = signals.pop("_temp_gainers_5d", [])
+            temp_5d.sort(key=lambda x: x["gain"], reverse=True)
+            signals["top_gainers_weekly"] = temp_5d[:40]
+            signals["top_gainers_weekly_no_lu"] = [s for s in temp_5d if not s["has_lu"]][:40]
+            
+            # Half-Month
+            temp_10d = signals.pop("_temp_gainers_10d", [])
+            temp_10d.sort(key=lambda x: x["gain"], reverse=True)
+            signals["top_gainers_half_month"] = temp_10d[:40]
+            signals["top_gainers_half_month_no_lu"] = [s for s in temp_10d if not s["has_lu"]][:40]
+            
+            # Monthly
+            temp_20d = signals.pop("_temp_gainers_20d", [])
+            temp_20d.sort(key=lambda x: x["gain"], reverse=True)
+            signals["top_gainers_monthly"] = temp_20d[:40]
+            signals["top_gainers_monthly_no_lu"] = [s for s in temp_20d if not s["has_lu"]][:40]
+
             
             total_signals = sum(len(v) for v in signals.values())
             logger.info(f"✅ Scan complete: checked {checked} stocks, found {total_signals} signals")
