@@ -13,7 +13,8 @@ Features:
 
 import asyncio
 from datetime import datetime, date, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
+import time
 
 from app.core.logger import Logger
 from app.core.database import db
@@ -545,8 +546,12 @@ class StockHistoryService:
         except Exception as e:
             raise e
     
-    async def update_all_stocks(self):
-        """Daily update - fetch today's data for all stocks."""
+    async def update_all_stocks(self, progress_callback: Optional[Callable] = None):
+        """Daily update - fetch today's data for all stocks.
+        
+        Args:
+            progress_callback: Optional async callback(stage, current, total, message)
+        """
         ak, pd = self._get_libs()
         if not ak or not pd or not db.pool:
             return
@@ -568,6 +573,7 @@ class StockHistoryService:
         
         success_count = 0
         error_count = 0
+        last_progress_time = time.time()
         
         for i, code in enumerate(codes):
             try:
@@ -579,6 +585,12 @@ class StockHistoryService:
                 if (i + 1) % 200 == 0:
                     logger.info(f"Daily update progress: {i + 1}/{len(codes)} stocks")
                 
+                # Progress callback (every 10 seconds)
+                if progress_callback and time.time() - last_progress_time >= 10:
+                    last_progress_time = time.time()
+                    pct = int((i + 1) / len(codes) * 100)
+                    await progress_callback("数据同步", i + 1, len(codes), f"⏳ 数据同步中: {i+1}/{len(codes)} ({pct}%)")
+                
                 # Rate limiting
                 await asyncio.sleep(0.2)
                 
@@ -587,17 +599,24 @@ class StockHistoryService:
                 if error_count <= 5:
                     logger.warn(f"Failed to update {code}: {e}")
         
+        # Final progress notification
+        if progress_callback:
+            await progress_callback("数据同步", len(codes), len(codes), f"✅ 同步完成: {success_count}/{len(codes)} 只股票")
+        
         logger.info(
             f"✅ Daily update complete: {success_count}/{len(codes)} stocks updated"
         )
     
-    async def sync_with_integrity_check(self):
+    async def sync_with_integrity_check(self, progress_callback: Optional[Callable] = None):
         """Sync data with integrity check - fills in missing 7-day data first.
         
         This method:
         1. Checks for stocks missing data in the last 7 trading days
         2. Fills in the gaps for those stocks
         3. Updates all stocks with today's data
+        
+        Args:
+            progress_callback: Optional async callback(stage, current, total, message)
         
         Called by /dbsync command and daily 15:15 scheduled task.
         """
@@ -614,21 +633,29 @@ class StockHistoryService:
         
         logger.info("🔍 Starting sync with data integrity check...")
         
+        # Notify start
+        if progress_callback:
+            await progress_callback("开始同步", 0, 100, "🔍 正在检查数据完整性...")
+        
         # Step 1: Find stocks with missing 7-day data
         try:
             stocks_to_fix = await self._check_recent_data_integrity()
             
             if stocks_to_fix:
                 logger.info(f"📋 Found {len(stocks_to_fix)} stocks with incomplete data, fixing...")
-                await self._fix_incomplete_stocks(stocks_to_fix)
+                if progress_callback:
+                    await progress_callback("完整性修复", 0, len(stocks_to_fix), f"🛠️ 发现 {len(stocks_to_fix)} 只股票数据不完整，开始修复...")
+                await self._fix_incomplete_stocks(stocks_to_fix, progress_callback)
             else:
                 logger.info("✅ All stocks have complete recent data")
+                if progress_callback:
+                    await progress_callback("完整性检查", 100, 100, "✅ 所有股票数据完整")
                 
         except Exception as e:
             logger.error(f"Error during integrity check: {e}")
         
         # Step 2: Regular daily update for today's data
-        await self.update_all_stocks()
+        await self.update_all_stocks(progress_callback)
     
     async def _check_recent_data_integrity(self) -> List[Dict]:
         """Check which stocks are missing data in the last 7 trading days.
@@ -679,7 +706,7 @@ class StockHistoryService:
         
         return stocks_to_fix[:500]  # Limit to 500 stocks per run to avoid overload
     
-    async def _fix_incomplete_stocks(self, stocks_to_fix: List[Dict]):
+    async def _fix_incomplete_stocks(self, stocks_to_fix: List[Dict], progress_callback: Optional[Callable] = None):
         """Fix stocks with missing recent data."""
         if not stocks_to_fix:
             return
@@ -689,6 +716,7 @@ class StockHistoryService:
         
         success_count = 0
         error_count = 0
+        last_progress_time = time.time()
         
         for i, stock_info in enumerate(stocks_to_fix):
             code = stock_info['code']
@@ -704,6 +732,12 @@ class StockHistoryService:
                 if (i + 1) % 50 == 0:
                     logger.info(f"🔧 Integrity fix progress: {i+1}/{len(stocks_to_fix)} ({success_count} fixed)")
                 
+                # Progress callback (every 10 seconds)
+                if progress_callback and time.time() - last_progress_time >= 10:
+                    last_progress_time = time.time()
+                    pct = int((i + 1) / len(stocks_to_fix) * 100)
+                    await progress_callback("完整性修复", i + 1, len(stocks_to_fix), f"🔧 修复中: {i+1}/{len(stocks_to_fix)} ({pct}%)")
+                
                 # Rate limiting
                 await asyncio.sleep(0.3)
                 
@@ -712,11 +746,15 @@ class StockHistoryService:
                 if error_count <= 5:
                     logger.warn(f"Failed to fix {code}: {e}")
         
+        if progress_callback:
+            await progress_callback("完整性修复", len(stocks_to_fix), len(stocks_to_fix), f"✅ 修复完成: {success_count}/{len(stocks_to_fix)} 只股票")
+        
         logger.info(f"✅ Integrity fix complete: {success_count}/{len(stocks_to_fix)} stocks fixed")
     
     async def _scheduler_loop(self):
-        """Background scheduler for daily updates at 15:15."""
+        """Background scheduler for daily updates at 15:15 and nightly check at 03:00."""
         update_time = "15:15"
+        nightly_time = "03:00"
         triggered_today = set()
         
         while self.is_running:
@@ -729,12 +767,18 @@ class StockHistoryService:
                 if time_str == "00:00":
                     triggered_today.clear()
                 
-                key = f"{date_str}_update"
-                
                 # Run daily update at 15:15 on weekdays (with integrity check)
-                if now.weekday() < 5 and time_str == update_time and key not in triggered_today:
-                    triggered_today.add(key)
+                update_key = f"{date_str}_update"
+                if now.weekday() < 5 and time_str == update_time and update_key not in triggered_today:
+                    triggered_today.add(update_key)
                     logger.info("Triggering daily stock history sync with integrity check")
+                    asyncio.create_task(self.sync_with_integrity_check())
+                
+                # Run nightly integrity check at 03:00 (every day including weekends)
+                nightly_key = f"{date_str}_nightly"
+                if time_str == nightly_time and nightly_key not in triggered_today:
+                    triggered_today.add(nightly_key)
+                    logger.info("Triggering nightly data integrity check")
                     asyncio.create_task(self.sync_with_integrity_check())
                 
             except Exception as e:

@@ -4,8 +4,9 @@ Crawler Bot Handlers
 Telegram bot interface for web crawler and limit-up stock tracking.
 """
 
-from aiogram import Router, F, types
+from aiogram import Router, F, types, Bot
 from typing import Optional
+import time
 from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.exceptions import TelegramBadRequest
@@ -1309,7 +1310,7 @@ async def cb_scanner_dbcheck(callback: types.CallbackQuery):
 
 
 @router.callback_query(F.data == "scanner:dbsync")
-async def cb_scanner_dbsync(callback: types.CallbackQuery):
+async def cb_scanner_dbsync(callback: types.CallbackQuery, bot: Bot):
     """Trigger database sync from scanner menu."""
     if not await is_allowed(callback.from_user.id):
         await safe_answer(callback, "无权限")
@@ -1320,10 +1321,25 @@ async def cb_scanner_dbsync(callback: types.CallbackQuery):
     import asyncio
     from app.services.stock_history import stock_history_service
     
+    chat_id = callback.message.chat.id
+    
+    def make_progress_callback():
+        last_time = [0.0]  # Use list for mutable closure
+        async def progress_cb(stage: str, current: int, total: int, message: str):
+            now = time.time()
+            if now - last_time[0] < 10 and current < total:
+                return  # Rate limit: at most once per 10 seconds
+            last_time[0] = now
+            try:
+                await bot.send_message(chat_id, message, parse_mode="HTML")
+            except Exception:
+                pass
+        return progress_cb
+    
     try:
-        await callback.message.answer("⏳ 正在后台同步数据，这可能需要几分钟...\n\n请稍后点击数据库状态查看进度")
+        await callback.message.answer("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时推送进度通知")
         
-        asyncio.create_task(stock_history_service.sync_with_integrity_check())
+        asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback()))
         
     except Exception as e:
         await callback.message.answer(f"❌ 同步失败: {e}")
@@ -1402,23 +1418,38 @@ async def cmd_dbcheck(message: types.Message):
 
 
 @router.message(Command("dbsync"))
-async def cmd_dbsync(message: types.Message):
-    """Sync stock history data to local database."""
+async def cmd_dbsync(message: types.Message, bot: Bot):
+    """Sync stock history data to local database with progress notifications."""
     if not await is_allowed(message.from_user.id):
         return
     
     import asyncio
     from app.services.stock_history import stock_history_service
     
-    await message.answer("⏳ 正在后台同步数据（含完整性检查），这可能需要几分钟...\n\n请稍后使用 /dbcheck 查看进度")
+    chat_id = message.chat.id
     
-    # Trigger sync with integrity check in background
-    asyncio.create_task(stock_history_service.sync_with_integrity_check())
+    def make_progress_callback():
+        last_time = [0.0]  # Use list for mutable closure
+        async def progress_cb(stage: str, current: int, total: int, msg: str):
+            now = time.time()
+            if now - last_time[0] < 10 and current < total:
+                return  # Rate limit: at most once per 10 seconds
+            last_time[0] = now
+            try:
+                await bot.send_message(chat_id, msg, parse_mode="HTML")
+            except Exception:
+                pass
+        return progress_cb
+    
+    await message.answer("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时推送进度通知")
+    
+    # Trigger sync with progress callback
+    asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback()))
 
 
 @router.callback_query(F.data == "db:sync")
-async def cb_db_sync(callback: types.CallbackQuery):
-    """Trigger database sync (callback version)."""
+async def cb_db_sync(callback: types.CallbackQuery, bot: Bot):
+    """Trigger database sync (callback version) with progress notifications."""
     if not await is_allowed(callback.from_user.id):
         await safe_answer(callback, "无权限")
         return
@@ -1428,11 +1459,25 @@ async def cb_db_sync(callback: types.CallbackQuery):
     import asyncio
     from app.services.stock_history import stock_history_service
     
+    chat_id = callback.message.chat.id
+    
+    def make_progress_callback():
+        last_time = [0.0]
+        async def progress_cb(stage: str, current: int, total: int, msg: str):
+            now = time.time()
+            if now - last_time[0] < 10 and current < total:
+                return
+            last_time[0] = now
+            try:
+                await bot.send_message(chat_id, msg, parse_mode="HTML")
+            except Exception:
+                pass
+        return progress_cb
+    
     try:
-        await callback.message.edit_text("⏳ 正在后台同步数据（含完整性检查），这可能需要几分钟...\n\n请稍后使用 /dbcheck 查看进度")
+        await callback.message.edit_text("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时推送进度通知")
         
-        # Trigger sync with integrity check in background
-        asyncio.create_task(stock_history_service.sync_with_integrity_check())
+        asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback()))
         
     except Exception as e:
         await callback.message.edit_text(f"❌ 同步失败: {e}")
