@@ -220,7 +220,9 @@ async def lifespan(app: FastAPI):
     daban_simulator.set_notify_callback(daban_notify_callback)
     await daban_simulator.start()
 
-
+    # Burst Monitor Service (异动监测)
+    from app.services.burst_monitor import burst_monitor_service
+    await burst_monitor_service.start()
 
     # AI Service doesn't need explicit start but is ready
     if ai_service.is_available():
@@ -251,6 +253,8 @@ async def lifespan(app: FastAPI):
         await trading_simulator.stop()
     await daban_service.stop()
     await daban_simulator.stop()
+    from app.services.burst_monitor import burst_monitor_service
+    await burst_monitor_service.stop()
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")

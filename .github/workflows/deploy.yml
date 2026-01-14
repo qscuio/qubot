@@ -466,6 +466,8 @@ jobs:
             printf 'REPORT_TARGET_CHANNEL=%s\n' '${{ secrets.REPORT_TARGET_CHANNEL }}' >> .env
             printf 'DABAN_GROUP=%s\n' '${{ secrets.DABAN_GROUP }}' >> .env
             printf 'DABAN_CHANNEL=%s\n' '${{ secrets.DABAN_CHANNEL }}' >> .env
+            printf 'LIMITUP_TARGET_GROUP=%s\n' '${{ secrets.LIMITUP_TARGET_GROUP }}' >> .env
+            printf 'BURST_TARGET_GROUP=%s\n' '${{ secrets.BURST_TARGET_GROUP }}' >> .env
             printf 'KEYWORDS=%s\n' '${{ secrets.KEYWORDS }}' >> .env
             printf 'FROM_USERS=%s\n' '${{ secrets.FROM_USERS }}' >> .env
             printf 'ALLOWED_USERS=%s\n' '${{ secrets.ALLOWED_USERS }}' >> .env

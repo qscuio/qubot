@@ -61,7 +61,9 @@ class Settings(BaseSettings):
     REPORT_TARGET_GROUP: Optional[str] = None
     DABAN_CHANNEL: Optional[str] = None  # Specific channel for Daban signals
     DABAN_GROUP: Optional[str] = None
-    STOCK_ALERT_CHANNEL: Optional[str] = None  # Channel for limit-up stock alerts
+    LIMITUP_TARGET_GROUP: Optional[str] = None  # Group for limit-up morning reports (9:15-10:00)
+    BURST_TARGET_GROUP: Optional[str] = None  # Group for burst/异动 alerts
+    STOCK_ALERT_CHANNEL: Optional[str] = None  # Channel for limit-up stock alerts (fallback)
     ALERT_CHANNEL: Optional[str] = None  # Channel for security alerts
     
     # Limit-Up Tracker settings

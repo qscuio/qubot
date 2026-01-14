@@ -559,8 +559,10 @@ class LimitUpService:
         
         logger.info("send_morning_price_update called")
         
-        if not settings.STOCK_ALERT_CHANNEL:
-            logger.warn("STOCK_ALERT_CHANNEL not configured")
+        # Use LIMITUP_TARGET_GROUP for morning reports, fallback to STOCK_ALERT_CHANNEL
+        target = settings.LIMITUP_TARGET_GROUP or settings.STOCK_ALERT_CHANNEL
+        if not target:
+            logger.warn("LIMITUP_TARGET_GROUP and STOCK_ALERT_CHANNEL not configured")
             return
         
         prices = await self.get_previous_limit_prices()
@@ -568,7 +570,7 @@ class LimitUpService:
             logger.warn("No prices available for morning update")
             return
         
-        logger.info(f"Sending morning update with {len(prices)} stocks")
+        logger.info(f"Sending morning update with {len(prices)} stocks to {target}")
         
         # Sort by real-time change_pct descending
         prices.sort(key=lambda x: -x.get("change_pct", 0))
@@ -610,7 +612,7 @@ class LimitUpService:
         
         # Send all messages
         for msg in messages:
-            await telegram_service.send_message(settings.STOCK_ALERT_CHANNEL, msg, parse_mode="html")
+            await telegram_service.send_message(target, msg, parse_mode="html")
         
         logger.info(f"Sent morning price update at {now.strftime('%H:%M')} ({total} stocks, {len(messages)} messages)")
     

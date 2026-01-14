@@ -289,7 +289,9 @@ QuBot supports **8 AI providers** with dynamic model fetching:
 | `REPORT_TARGET_CHANNEL` | Daily reports destination (fallback) | `-1003333333333` |
 | `DABAN_GROUP` | Daban signals destination (preferred) | `-1003333333333` |
 | `DABAN_CHANNEL` | Daban signals destination (fallback) | `-1003333333333` |
-| `STOCK_ALERT_CHANNEL` | Limit-up stock alerts destination | `-1004444444444` |
+| `LIMITUP_TARGET_GROUP` | Morning report destination (9:15-10:00) | `-1004444444444` |
+| `BURST_TARGET_GROUP` | Burst/异动 alerts destination | `-1005555555555` |
+| `STOCK_ALERT_CHANNEL` | Limit-up stock alerts destination (fallback) | `-1004444444444` |
 | `BLACKLIST_CHANNELS` | Channels to completely ignore | `@spam,-1009999999999` |
 | `KEYWORDS` | Filter keywords (or `none`) | `bitcoin,crypto` |
 | `FROM_USERS` | Filter by usernames | `@user1,@user2` |
