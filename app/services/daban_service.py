@@ -1058,59 +1058,41 @@ class DabanService:
         """Compare current state with previous and detect signals."""
         signals = []
         now_str = china_now().strftime("%H:%M:%S")
-        prev_codes = set(self._intraday_state.keys())
-        curr_codes = set(current_state.keys())
         
-        # 🔥 新上板 - New limit-ups
-        new_limits = curr_codes - prev_codes
-        for code in new_limits:
-            info = current_state[code]
-            signals.append({
-                'type': 'new_limit',
-                'emoji': '🔥',
-                'code': code,
-                'name': info['name'],
-                'time': now_str,
-                'msg': f"新上板 {info['limit_times']}板 换手{info['turnover']:.1f}%",
-            })
-            # Initialize tracking
-            self._intraday_state[code] = {
-                'seal': info['seal'],
-                'prev_seal': info['seal'],
-                'limit_since': info['limit_since'],
-                'burst_count': 0,
-                'reseal_count': 0,
-                'name': info['name'],
-                'limit_times': info['limit_times'],
-            }
-        
-        # ⚠️ 炸板 - Limit breaks (was in pool, now not)
-        burst = prev_codes - curr_codes
-        for code in burst:
-            if code in self._intraday_state:
-                info = self._intraday_state[code]
-                info['burst_count'] = info.get('burst_count', 0) + 1
-                signals.append({
-                    'type': 'burst',
-                    'emoji': '⚠️',
-                    'code': code,
-                    'name': info.get('name', ''),
-                    'time': now_str,
-                    'msg': f"炸板! 第{info['burst_count']}次",
-                })
-        
-        # Check existing stocks for seal changes
-        for code in curr_codes & prev_codes:
-            curr_info = current_state[code]
-            prev_info = self._intraday_state.get(code, {})
+        # 1. Process Update/New/Reseal
+        for code, curr_info in current_state.items():
+            prev_info = self._intraday_state.get(code)
             
+            # Case A: New Limit Up (Not tracked)
+            if not prev_info:
+                signals.append({
+                    'type': 'new_limit',
+                    'emoji': '🔥',
+                    'code': code,
+                    'name': curr_info['name'],
+                    'time': now_str,
+                    'msg': f"新上板 {curr_info['limit_times']}板 换手{curr_info['turnover']:.1f}%",
+                })
+                # Initialize state
+                self._intraday_state[code] = {
+                    'status': 'sealed',
+                    'seal': curr_info['seal'],
+                    'prev_seal': curr_info['seal'],
+                    'limit_since': curr_info['limit_since'],
+                    'burst_count': 0,
+                    'reseal_count': 0,
+                    'name': curr_info['name'],
+                    'limit_times': curr_info['limit_times'],
+                }
+                continue
+
+            # Case B: Update Existing (Was tracked)
+            # Check Seal Change
             curr_seal = curr_info['seal']
             prev_seal = prev_info.get('seal', curr_seal)
             
             if prev_seal > 0:
                 change_pct = (curr_seal - prev_seal) / prev_seal * 100
-                
-                # 📉 撤单 - Seal drops >30%
                 if change_pct <= -30:
                     signals.append({
                         'type': 'seal_drop',
@@ -1120,8 +1102,6 @@ class DabanService:
                         'time': now_str,
                         'msg': f"封单骤降 {change_pct:.0f}%",
                     })
-                
-                # 💪 加封 - Seal increases >50%
                 elif change_pct >= 50:
                     signals.append({
                         'type': 'seal_add',
@@ -1132,34 +1112,47 @@ class DabanService:
                         'msg': f"封单增加 +{change_pct:.0f}%",
                     })
             
-            # Update state
-            self._intraday_state[code] = {
+            # Check Reseal (Was broken, now in current_state)
+            if prev_info.get('status') == 'broken':
+                prev_info['reseal_count'] = prev_info.get('reseal_count', 0) + 1
+                signals.append({
+                    'type': 'reseal',
+                    'emoji': '🔄',
+                    'code': code,
+                    'name': curr_info['name'],
+                    'time': now_str,
+                    'msg': f"回封成功! 第{prev_info['reseal_count']}次",
+                })
+            
+            # Update State
+            self._intraday_state[code].update({
+                'status': 'sealed',
                 'seal': curr_seal,
                 'prev_seal': prev_seal,
                 'limit_since': curr_info['limit_since'],
-                'burst_count': prev_info.get('burst_count', 0),
-                'reseal_count': prev_info.get('reseal_count', 0),
-                'name': curr_info['name'],
                 'limit_times': curr_info['limit_times'],
-            }
-        
-        # 🔄 回封 - Stocks that were burst but came back
-        for code in curr_codes:
-            if code in self._intraday_state:
-                info = self._intraday_state[code]
-                if info.get('burst_count', 0) > 0 and code not in burst:
-                    # Check if this is a reseal (was marked as burst, now back)
-                    if code not in prev_codes:
-                        info['reseal_count'] = info.get('reseal_count', 0) + 1
-                        signals.append({
-                            'type': 'reseal',
-                            'emoji': '🔄',
-                            'code': code,
-                            'name': info.get('name', ''),
-                            'time': now_str,
-                            'msg': f"回封成功! 第{info['reseal_count']}次",
-                        })
-        
+            })
+
+        # 2. Process Burst (Tracked & Sealed -> Not in Current)
+        tracked_codes = list(self._intraday_state.keys())
+        for code in tracked_codes:
+            info = self._intraday_state[code]
+            
+            # If tracked stock is NOT in current_state AND it was 'sealed'
+            if code not in current_state and info.get('status') == 'sealed':
+                info['burst_count'] = info.get('burst_count', 0) + 1
+                info['status'] = 'broken'
+                info['seal'] = 0 # Clear seal
+                
+                signals.append({
+                    'type': 'burst',
+                    'emoji': '⚠️',
+                    'code': code,
+                    'name': info.get('name', ''),
+                    'time': now_str,
+                    'msg': f"炸板! 第{info['burst_count']}次",
+                })
+
         return signals
     
     async def _send_signal_alerts(self, signals: List[Dict]):

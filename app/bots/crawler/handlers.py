@@ -1471,12 +1471,19 @@ async def cmd_chart(message: types.Message, command: CommandObject):
     
     code = code.strip()
     
-    # Build Mini App URL (use t.me deep link to avoid confirmation dialog)
-    webapp_url = get_chart_url(code)
+    # Build Mini App URL (prefer WebApp button to avoid confirmation dialog)
+    webapp_url = None
+    if settings.WEBFRONT_URL:
+        webapp_url = f"{settings.WEBFRONT_URL.rstrip('/')}/miniapp/chart/?code={code}"
+    else:
+        webapp_url = get_chart_url(code)
 
-    # Create URL button (opens Mini App directly)
+    # Create button (WebApp opens inline without confirmation when configured)
     builder = InlineKeyboardBuilder()
-    builder.button(text="📈 Open Chart", url=webapp_url)
+    if settings.WEBFRONT_URL:
+        builder.button(text="📈 Open Chart", web_app=types.WebAppInfo(url=webapp_url))
+    else:
+        builder.button(text="📈 Open Chart", url=webapp_url)
     builder.button(text="📜 History", callback_data=f"history:{code}")
     builder.adjust(1)
     
