@@ -1077,9 +1077,13 @@
                 layout: { background: { type: 'solid', color: 'transparent' }, textColor: c.text, fontFamily: "'Inter', sans-serif" },
                 grid: { vertLines: { color: c.grid }, horzLines: { color: c.grid } },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                localization: {
+                    locale: 'zh-CN',
+                    dateFormat: 'yyyy-MM-dd',
+                },
                 timeScale: {
                     borderColor: c.grid,
-                    timeVisible: true,
+                    timeVisible: false,
                     rightOffset: 5,  // Small right margin
                     barSpacing: 8,
                     minBarSpacing: 3,
@@ -1337,6 +1341,12 @@
         function processData() {
             // Main Chart: Candle
             sCandle.setData(rawData.map(d => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close })));
+
+            // Update TimeScale (Daily vs Intraday)
+            const isIntraday = !['daily', 'weekly', 'monthly'].includes(timeFrame);
+            const tsOpts = { timeScale: { timeVisible: isIntraday } };
+            chartMain.applyOptions(tsOpts);
+            chartSub.applyOptions(tsOpts);
 
             // Overlays
             updateOverlays();
