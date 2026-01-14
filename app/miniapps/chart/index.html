@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Pro Stock Chart</title>
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
             --bg-primary: #ffffff;
@@ -837,13 +838,21 @@
 
         // User ID for watchlist
         const debugUserIdParam = params.get('debug_user_id');
-        let userId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-        if (!userId && debugUserIdParam && /^\d+$/.test(debugUserIdParam)) {
-            userId = Number(debugUserIdParam);
+        let userId = null;
+
+        function resolveUserId() {
+            let resolved = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+            if (!resolved && debugUserIdParam && /^\d+$/.test(debugUserIdParam)) {
+                resolved = Number(debugUserIdParam);
+            }
+            if (!resolved) {
+                console.warn("No Telegram User ID found; watchlist disabled.");
+            }
+            userId = resolved || null;
+            return userId;
         }
-        if (!userId) {
-            console.warn("No Telegram User ID found; watchlist disabled.");
-        }
+
+        resolveUserId();
 
         let chartData = [];
         let timeFrame = 'daily';
@@ -1903,13 +1912,16 @@
 
         // --- Watchlist Functions ---
         async function checkWatchlistStatus() {
-            if (!userId) {
-                const btn = document.getElementById('btn-watchlist');
+            const btn = document.getElementById('btn-watchlist');
+            if (!resolveUserId()) {
                 btn.disabled = true;
                 btn.style.opacity = '0.5';
                 btn.title = "Open in Telegram to use watchlist";
                 return;
             }
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.title = "";
             try {
                 const res = await fetch(`${API_BASE}/api/chart/watchlist/status?user_id=${userId}&code=${code}`);
                 const data = await res.json();
@@ -1973,7 +1985,7 @@
 
         async function toggleWatchlist() {
             const btn = document.getElementById('btn-watchlist');
-            if (!userId) {
+            if (!resolveUserId()) {
                 showToast("Open in Telegram to use watchlist");
                 return;
             }
@@ -2055,7 +2067,7 @@
             if (!navContext) return;
             try {
                 let url = `${API_BASE}/api/chart/navigation?code=${code}&context=${navContext}`;
-                if (userId) url += `&user_id=${userId}`;
+                if (resolveUserId()) url += `&user_id=${userId}`;
 
                 const res = await fetch(url);
                 const data = await res.json();

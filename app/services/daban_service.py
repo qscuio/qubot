@@ -23,6 +23,7 @@ from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
 from app.core.timezone import CHINA_TZ, china_now, china_today
+from app.core.stock_links import get_chart_url
 
 logger = Logger("DabanService")
 
@@ -521,11 +522,12 @@ class DabanService:
             lines.append("\n🎯 <b>可打标的</b>")
             for c in top_exec[:5]:
                 sb = c['score_breakdown']
+                chart_url = get_chart_url(c['code'], c['name'], context="daban_report")
                 lines.append(
-                    f"🟢 <b>{c['name']}</b> ({c['code']})\n"
+                    f"🟢 <a href=\"{chart_url}\">{c['name']}</a> ({c['code']})\n"
                     f"   {c['board_type']} | 总分: <b>{c['score']}</b>\n"
                     f"   封:{sb['seal_strength']} 时:{sb['limit_time']} 板:{sb['board_type']} 换:{sb['turnover']} 值:{sb['market_cap']}\n"
-                    f"   {c['time_label']} | 封单: {c['seal_amount']:.1f}亿 | 换手: {c['turnover_rate']:.1f}%"
+                    f"   {c['time_label']} | 封单: {c['seal_amount']:.1f}亿 | 换手: {c['turnover_rate']:.1f}%\n"
                 )
         
         # Observe stocks (尾盘板, etc)
@@ -533,21 +535,24 @@ class DabanService:
         if observe:
             lines.append("\n👀 <b>观望标的</b>")
             for c in observe[:3]:
-                lines.append(f"⚪ {c['name']} ({c['code']}) - {c['exec_reason']} | 分:{c['score']}")
+                chart_url = get_chart_url(c['code'], c['name'], context="daban_report")
+                lines.append(f"⚪ <a href=\"{chart_url}\">{c['name']}</a> ({c['code']}) - {c['exec_reason']} | 分:{c['score']}")
         
         # 一字板 (for reference)
         yizi = [c for c in candidates if c['exec_flag'] == ExecutabilityFlag.YIZI_BOARD][:3]
         if yizi:
             lines.append("\n🔒 <b>一字板(无法买入)</b>")
             for c in yizi:
-                lines.append(f"• {c['name']} ({c['code']}) - {c['board_type']}")
+                chart_url = get_chart_url(c['code'], c['name'], context="daban_report")
+                lines.append(f"• <a href=\"{chart_url}\">{c['name']}</a> ({c['code']}) - {c['board_type']}")
         
         # High risk
         high_risk = [c for c in candidates if c['exec_flag'] == ExecutabilityFlag.HIGH_RISK]
         if high_risk:
             lines.append("\n⚠️ <b>高风险(慎重)</b>")
             for c in high_risk[:3]:
-                lines.append(f"🔴 {c['name']} ({c['code']}) - {c['exec_reason']}")
+                chart_url = get_chart_url(c['code'], c['name'], context="daban_report")
+                lines.append(f"🔴 <a href=\"{chart_url}\">{c['name']}</a> ({c['code']}) - {c['exec_reason']}")
         
         # Stats footer
         lines.append(f"\n<i>首板{stats.get('shouban_count', 0)} 二板{stats.get('erban_count', 0)} 一字{stats.get('yizi_count', 0)}</i>")
@@ -1169,9 +1174,10 @@ class DabanService:
         # Group alerts
         alert_lines = []
         for sig in signals:
+            chart_url = get_chart_url(sig['code'], sig['name'], context="daban_signal")
             alert_lines.append(
-                f"{sig['emoji']} <b>{sig['name']}</b> ({sig['code']})\n"
-                f"   {sig['msg']} @ {sig['time']}"
+                f"{sig['emoji']} <b><a href=\"{chart_url}\">{sig['name']}</a></b> ({sig['code']})\n"
+                f"   {sig['msg']} @ {sig['time']}\n"
             )
         
         if alert_lines:
@@ -1179,7 +1185,7 @@ class DabanService:
             message = (
                 f"🎯 <b>打板实时信号</b>\n"
                 f"<i>{now.strftime('%H:%M:%S')}</i>\n\n" +
-                "\n".join(alert_lines)
+                "".join(alert_lines)
             )
             await self._notify(message)
     
@@ -1257,8 +1263,9 @@ class DabanService:
             if reseal > 0:
                 flags += f" 🔄封{reseal}"
             
+            chart_url = get_chart_url(s.get('code', ''), s.get('name', ''), context="daban_live")
             lines.append(
-                f"• <b>{s.get('name', '')}</b> {s.get('limit_times', 1)}板 "
+                f"• <b><a href=\"{chart_url}\">{s.get('name', '')}</a></b> {s.get('limit_times', 1)}板 "
                 f"封{seal_yi:.1f}亿{flags}"
             )
         
@@ -1279,8 +1286,9 @@ class DabanService:
         
         # Reverse to show most recent first
         for sig in reversed(signals[-15:]):
+            chart_url = get_chart_url(sig.get('code', ''), sig.get('name', ''), context="daban_history")
             lines.append(
-                f"{sig['emoji']} {sig['time']} <b>{sig['name']}</b> - {sig['msg']}"
+                f"{sig['emoji']} {sig['time']} <b><a href=\"{chart_url}\">{sig['name']}</a></b> - {sig['msg']}"
             )
         
         return "\n".join(lines)
