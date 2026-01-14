@@ -190,6 +190,7 @@ class Settings(BaseSettings):
     CLOUDFLARE_API_TOKEN: Optional[str] = None  # Cloudflare API token
     CLOUDFLARE_ACCOUNT_ID: Optional[str] = None  # Cloudflare account ID
     AI_ALLOWED_PATHS: Optional[str] = None  # Comma-separated allowed paths for file tools
+    EASTMONEY_FINGERPRINT: Optional[str] = None  # EastMoney qgqp_b_id cookie for stock search tool
     
     # API Keys (format: key1:userId1,key2:userId2)
     API_KEYS: Optional[str] = None

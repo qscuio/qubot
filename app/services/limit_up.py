@@ -322,7 +322,7 @@ class LimitUpService:
         stocks = await db.pool.fetch("""
             SELECT code, name, close_price, limit_times
             FROM limit_up_stocks
-            WHERE date = $1
+            WHERE date = $1 AND is_sealed = TRUE
             ORDER BY limit_times DESC, close_price DESC
         """, yesterday)
         
@@ -578,8 +578,9 @@ class LimitUpService:
             change = p["change_pct"]
             icon = "🔴" if change > 5 else ("🟢" if change > 0 else "⚪")
             streak = f"[{p['limit_times']}板]"  # Always show 连板数
+            chart_url = get_chart_url(p['code'], p['name'])
             stock_lines.append(
-                f"{i}. {icon} {p['name']} {streak} {p['current_price']:.2f} ({change:+.2f}%)"
+                f"{i}. {icon} <a href=\"{chart_url}\">{p['name']}</a> {streak} {p['current_price']:.2f} ({change:+.2f}%)"
             )
         
         # Split into messages (max ~3800 chars to be safe)

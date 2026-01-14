@@ -113,6 +113,7 @@ class AdvancedAiService:
         from app.services.ai.tools.file_tool import register_file_tools
         from app.services.ai.tools.github_tool import register_github_tools
         from app.services.ai.tools.cloudflare_tool import register_cloudflare_tools
+        from app.services.ai.tools.financial_data import register_financial_tools
         from app.services.ai.agents.builtin import register_builtin_agents
         
         # Register tools
@@ -120,6 +121,7 @@ class AdvancedAiService:
         register_file_tools()
         register_github_tools()
         register_cloudflare_tools()
+        register_financial_tools()
         
         # Register skill tool (on-demand skill loading)
         from app.services.ai.tools.skill_tool import register_skill_tool
