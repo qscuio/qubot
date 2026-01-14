@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, Dict
 from app.api.auth import verify_api_key
 from app.services.monitor import monitor_service
 from app.services.rss import rss_service
@@ -273,9 +273,9 @@ async def chart_data(code: str, days: int = 60, period: str = "daily"):
                             "close": float(row.get('收盘', 0)),
                             "volume": int(row.get('成交量', 0)),
                         })
-                    except:
+                    except Exception:
                         continue
-        except Exception as e:
+        except Exception:
             pass
     
     if not data:

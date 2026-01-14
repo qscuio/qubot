@@ -4,6 +4,9 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.services.ai import ai_service
 from app.core.config import settings
 from app.core.telegram_utils import chunk_message, markdown_to_telegram_html, strip_html
+from app.core.logger import Logger
+
+logger = Logger("AIBot")
 
 router = Router()
 
@@ -20,8 +23,7 @@ def is_allowed(user_id: int) -> bool:
 # Main Menu
 # ─────────────────────────────────────────────────────────────────────────────
 
-from app.core.logger import Logger
-logger = Logger("AIBot")
+
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -43,7 +45,7 @@ async def edit_main_menu(message: types.Message, user_id: int):
     text, markup = await get_main_menu_ui(user_id)
     try:
         await message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         pass
 
 async def get_main_menu_ui(user_id: int):
@@ -105,7 +107,7 @@ async def cb_chats(callback: types.CallbackQuery):
     text, markup = await get_chats_ui(callback.from_user.id)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=markup)
 
 async def get_chats_ui(user_id: int):
@@ -173,7 +175,7 @@ async def cb_chat_delete(callback: types.CallbackQuery):
     text, markup = await get_chats_ui(callback.from_user.id)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         pass
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -193,7 +195,7 @@ async def cb_providers(callback: types.CallbackQuery):
     text, markup = get_providers_ui()
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=markup)
 
 def get_providers_ui():
@@ -265,7 +267,7 @@ async def cb_models(callback: types.CallbackQuery):
     text, markup = await get_models_ui(callback.from_user.id)
     try:
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup)
-    except:
+    except Exception:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=markup)
 
 async def get_models_ui(user_id: int, provider_override: str = None):
@@ -455,7 +457,7 @@ async def handle_chat(message: types.Message):
     try:
         # Get user settings for context display
         user_settings = await ai_service.get_settings(message.from_user.id)
-        provider_name = user_settings.get("provider", "groq")
+
         model_name = user_settings.get("model", "default")
         
         # Get active chat info
