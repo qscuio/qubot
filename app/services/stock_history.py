@@ -690,9 +690,9 @@ class StockHistoryService:
         for code in all_codes:
             if code in code_latest:
                 latest = code_latest[code]
-                # If latest data is more than 3 trading days old, needs update
+                # If latest data is not today, needs update
                 days_old = (today - latest).days
-                if days_old > 3:  # Account for weekends
+                if days_old >= 1:  # Missing even 1 day
                     stocks_to_fix.append({
                         'code': code, 
                         'missing_from': latest + timedelta(days=1)
