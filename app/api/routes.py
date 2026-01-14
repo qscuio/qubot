@@ -406,6 +406,13 @@ async def get_chart_navigation(code: str, context: str, user_id: int = Depends(v
             stocks = await limit_up_service.get_startup_watchlist()
             # Already sorted
             
+        elif context == "morning":
+            # Morning report: Yesterday's limit-up stocks (same as send_morning_price_update)
+            prices = await limit_up_service.get_previous_limit_prices()
+            # Sort by change_pct descending (same order as morning report)
+            prices.sort(key=lambda x: -x.get("change_pct", 0))
+            stocks = prices  # Already has 'code' field
+            
         elif context == "watchlist" and user_id:
             # User watchlist
             stocks = await watchlist_service.get_watchlist(user_id)

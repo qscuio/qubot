@@ -582,7 +582,7 @@ class LimitUpService:
             change = p["change_pct"]
             icon = "🔴" if change > 5 else ("🟢" if change > 0 else "⚪")
             streak = f"[{p['limit_times']}板]"  # Always show 连板数
-            chart_url = get_chart_url(p['code'], p['name'])
+            chart_url = get_chart_url(p['code'], p['name'], context="morning")
             stock_lines.append(
                 f"{i}. {icon} <a href=\"{chart_url}\">{p['name']}</a> {streak} {p['current_price']:.2f} ({change:+.2f}%)"
             )

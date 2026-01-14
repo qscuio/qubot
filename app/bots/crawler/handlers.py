@@ -1428,23 +1428,23 @@ async def cmd_dbsync(message: types.Message, bot: Bot):
     
     chat_id = message.chat.id
     
-    def make_progress_callback():
+    status_msg = await message.answer("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时推送进度通知")
+    
+    def make_progress_callback(msg_obj):
         last_time = [0.0]  # Use list for mutable closure
         async def progress_cb(stage: str, current: int, total: int, msg: str):
             now = time.time()
-            if now - last_time[0] < 10 and current < total:
-                return  # Rate limit: at most once per 10 seconds
+            if now - last_time[0] < 5 and current < total:
+                return  # Rate limit: at most once per 5 seconds
             last_time[0] = now
             try:
-                await bot.send_message(chat_id, msg, parse_mode="HTML")
+                await msg_obj.edit_text(msg, parse_mode="HTML")
             except Exception:
                 pass
         return progress_cb
     
-    await message.answer("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时推送进度通知")
-    
     # Trigger sync with progress callback
-    asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback()))
+    asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback(status_msg)))
 
 
 @router.callback_query(F.data == "db:sync")
@@ -1461,15 +1461,15 @@ async def cb_db_sync(callback: types.CallbackQuery, bot: Bot):
     
     chat_id = callback.message.chat.id
     
-    def make_progress_callback():
+    def make_progress_callback(msg_obj):
         last_time = [0.0]
         async def progress_cb(stage: str, current: int, total: int, msg: str):
             now = time.time()
-            if now - last_time[0] < 10 and current < total:
+            if now - last_time[0] < 5 and current < total:
                 return
             last_time[0] = now
             try:
-                await bot.send_message(chat_id, msg, parse_mode="HTML")
+                await msg_obj.edit_text(msg, parse_mode="HTML")
             except Exception:
                 pass
         return progress_cb
@@ -1477,7 +1477,7 @@ async def cb_db_sync(callback: types.CallbackQuery, bot: Bot):
     try:
         await callback.message.edit_text("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时推送进度通知")
         
-        asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback()))
+        asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback(callback.message)))
         
     except Exception as e:
         await callback.message.edit_text(f"❌ 同步失败: {e}")
@@ -2752,27 +2752,45 @@ async def cmd_mywatch(message: types.Message):
         await status.edit_text(f"❌ 加载失败: {e}")
 
 
-@router.callback_query(F.data == "watch:list")
+@router.callback_query(F.data.startswith("watch:list"))
 async def cb_watch_list(callback: types.CallbackQuery):
-    """View watchlist (cached prices)."""
+    """View watchlist (cached prices) with pagination."""
     await safe_answer(callback)
+    
+    # Parse page from callback_data: "watch:list" or "watch:list:N"
+    parts = callback.data.split(":")
+    page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
     
     try:
         await callback.message.edit_text("⏳ 正在加载...", parse_mode="HTML")
-        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=False, chat_type=callback.message.chat.type if callback.message else None)
+        text, markup = await get_watchlist_ui(
+            callback.from_user.id, 
+            realtime=False, 
+            chat_type=callback.message.chat.type if callback.message else None,
+            page=page
+        )
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except Exception as e:
         await callback.message.edit_text(f"❌ 加载失败: {e}")
 
 
-@router.callback_query(F.data == "watch:realtime")
+@router.callback_query(F.data.startswith("watch:realtime"))
 async def cb_watch_realtime(callback: types.CallbackQuery):
-    """View watchlist with real-time prices."""
+    """View watchlist with real-time prices and pagination."""
     await safe_answer(callback)
+    
+    # Parse page from callback_data: "watch:realtime" or "watch:realtime:N"
+    parts = callback.data.split(":")
+    page = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
     
     try:
         await callback.message.edit_text("⏳ 正在获取实时行情...", parse_mode="HTML")
-        text, markup = await get_watchlist_ui(callback.from_user.id, realtime=True, chat_type=callback.message.chat.type if callback.message else None)
+        text, markup = await get_watchlist_ui(
+            callback.from_user.id, 
+            realtime=True, 
+            chat_type=callback.message.chat.type if callback.message else None,
+            page=page
+        )
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except Exception as e:
         await callback.message.edit_text(f"❌ 加载失败: {e}")
@@ -2801,13 +2819,16 @@ async def cb_watch_del(callback: types.CallbackQuery):
         pass
 
 
-async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Optional[str] = None):
+async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Optional[str] = None, page: int = 0):
     """Get watchlist UI with prices.
     
     Args:
         user_id: User ID
         realtime: If True, fetch real-time prices from AkShare
+        page: Page number (0-indexed) for pagination
     """
+    PAGE_SIZE = 20
+    
     webapp_base = _get_webapp_base(chat_type)
     use_webapp_buttons = bool(webapp_base)
     if realtime:
@@ -2829,13 +2850,22 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Opti
     # Sort by total change descending
     stocks.sort(key=lambda x: x.get('total_change', 0), reverse=True)
     
-    # Header with data source indicator
+    # Pagination
+    total_stocks = len(stocks)
+    total_pages = (total_stocks + PAGE_SIZE - 1) // PAGE_SIZE
+    page = max(0, min(page, total_pages - 1))  # Clamp page to valid range
+    start_idx = page * PAGE_SIZE
+    end_idx = min(start_idx + PAGE_SIZE, total_stocks)
+    page_stocks = stocks[start_idx:end_idx]
+    
+    # Header with data source indicator and pagination info
     source = "📡 实时" if realtime else "📊 缓存"
-    text = f"⭐ <b>自选列表</b> ({len(stocks)}) {source}\n━━━━━━━━━━━━━━━━━━━━━\n\n"
+    page_info = f" [{page + 1}/{total_pages}]" if total_pages > 1 else ""
+    text = f"⭐ <b>自选列表</b> ({total_stocks}){page_info} {source}\n━━━━━━━━━━━━━━━━━━━━━\n\n"
     if use_webapp_buttons:
         text += "<i>点击下方按钮查看K线</i>\n"
     
-    for idx, s in enumerate(stocks, 1):
+    for idx, s in enumerate(page_stocks, start_idx + 1):
         name = s.get('name', s['code'])
         code = s['code']
         current = s.get('current_price', 0)
@@ -2856,7 +2886,7 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Opti
         if use_webapp_buttons:
             continue
         
-        chart_url = get_chart_url(code, name)
+        chart_url = get_chart_url(code, name, context="watchlist")
         date_str = add_date.strftime('%m/%d') if add_date else ""
         
         text += (
@@ -2868,8 +2898,7 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Opti
     builder = InlineKeyboardBuilder()
 
     if use_webapp_buttons:
-        max_buttons = 70
-        for idx, s in enumerate(stocks[:max_buttons], 1):
+        for idx, s in enumerate(page_stocks, start_idx + 1):
             name = s.get('name', s['code'])
             code = s['code']
             current = s.get('current_price', 0)
@@ -2894,28 +2923,42 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Opti
                     prefix=f"{icon}{idx}."
                 )
             )
-        if len(stocks) > max_buttons:
-            text += f"\n<i>仅显示前 {max_buttons} 只按钮，列表过长请分批查看</i>\n"
     
-    # Add delete buttons for each stock (limit to 8)
-    for s in stocks[:8]:
+    # Add delete buttons for current page stocks (limit to 8)
+    for s in page_stocks[:8]:
         name_short = s.get('name', s['code'])[:6]
         builder.button(text=f"❌ {name_short}", callback_data=f"watch:del:{s['code']}")
     
-    # Toggle between cached and realtime
+    # Pagination buttons
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(types.InlineKeyboardButton(
+            text="◀️ 上一页",
+            callback_data=f"watch:{'realtime' if realtime else 'list'}:{page - 1}"
+        ))
+    if page < total_pages - 1:
+        nav_buttons.append(types.InlineKeyboardButton(
+            text="下一页 ▶️",
+            callback_data=f"watch:{'realtime' if realtime else 'list'}:{page + 1}"
+        ))
+    
+    if nav_buttons:
+        builder.row(*nav_buttons)
+    
+    # Toggle between cached and realtime + return button
     if use_webapp_buttons:
         builder.row(
             types.InlineKeyboardButton(
                 text="📊 缓存数据" if realtime else "📡 实时刷新",
-                callback_data="watch:list" if realtime else "watch:realtime"
+                callback_data="watch:list:0" if realtime else "watch:realtime:0"
             ),
             types.InlineKeyboardButton(text="◀️ 返回", callback_data="main")
         )
     else:
         if realtime:
-            builder.button(text="📊 缓存数据", callback_data="watch:list")
+            builder.button(text="📊 缓存数据", callback_data="watch:list:0")
         else:
-            builder.button(text="📡 实时刷新", callback_data="watch:realtime")
+            builder.button(text="📡 实时刷新", callback_data="watch:realtime:0")
         builder.button(text="◀️ 返回", callback_data="main")
         builder.adjust(2, 2, 2, 2, 2)
     
@@ -3160,25 +3203,18 @@ async def cmd_limitup(message: types.Message, command: CommandObject):
     if not await is_allowed(message.from_user.id):
         return
     
+    import asyncio
     from app.services.limit_up import limit_up_service
     
     args = command.args or ""
     
     if args == "morning":
-        status_msg = await message.answer("⏳ 正在生成早报...")
-        try:
-            await limit_up_service.send_morning_price_update()
-            await status_msg.edit_text("✅ 早报已发送到频道")
-        except Exception as e:
-            await status_msg.edit_text(f"❌ 失败: {e}")
+        await message.answer("⏳ 早报正在后台生成并发送到频道...")
+        asyncio.create_task(limit_up_service.send_morning_price_update())
     
     elif args == "afternoon":
-        status_msg = await message.answer("⏳ 正在生成涨停日报...")
-        try:
-            await limit_up_service.send_afternoon_report()
-            await status_msg.edit_text("✅ 涨停日报已发送到频道")
-        except Exception as e:
-            await status_msg.edit_text(f"❌ 失败: {e}")
+        await message.answer("⏳ 涨停日报正在后台生成并发送到频道...")
+        asyncio.create_task(limit_up_service.send_afternoon_report())
     
     else:
         await message.answer(
@@ -3187,6 +3223,7 @@ async def cmd_limitup(message: types.Message, command: CommandObject):
             "<code>/limitup afternoon</code> - 发送今日涨停日报",
             parse_mode="HTML"
         )
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════
