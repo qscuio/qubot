@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
 from app.api.auth import verify_api_key
 from app.services.monitor import monitor_service
 from app.services.rss import rss_service
