@@ -639,7 +639,7 @@ class StockHistoryService:
         
         # Step 1: Find stocks with missing 7-day data
         try:
-            stocks_to_fix = await self._check_recent_data_integrity()
+            stocks_to_fix = await self._check_recent_data_integrity(progress_callback)
             
             if stocks_to_fix:
                 logger.info(f"📋 Found {len(stocks_to_fix)} stocks with incomplete data, fixing...")
@@ -657,7 +657,7 @@ class StockHistoryService:
         # Step 2: Regular daily update for today's data
         await self.update_all_stocks(progress_callback)
     
-    async def _check_recent_data_integrity(self) -> List[Dict]:
+    async def _check_recent_data_integrity(self, progress_callback: Optional[Callable] = None) -> List[Dict]:
         """Check which stocks are missing data in the last 7 trading days.
         
         Returns list of dicts with 'code' and 'missing_from' date.
@@ -669,9 +669,15 @@ class StockHistoryService:
         seven_days_ago = today - timedelta(days=10)  # Look back 10 days to cover weekends
         
         # Get all stock codes we should have data for
+        if progress_callback:
+            await progress_callback("检查中", 0, 100, "📊 正在获取股票列表...")
+        
         all_codes = await self.get_all_stock_codes()
         if not all_codes:
             return []
+        
+        if progress_callback:
+            await progress_callback("检查中", 30, 100, f"🔍 获取到 {len(all_codes)} 只股票，正在检查数据完整性...")
         
         # Get the latest date for each stock in recent period
         rows = await db.pool.fetch("""
