@@ -143,8 +143,10 @@ async def chart_data(code: str, days: int = 60, period: str = "daily"):
         period: 'daily', 'weekly', or 'monthly'
     """
     import asyncio
+    from datetime import time as time_type
     from app.services.stock_history import stock_history_service
     from app.core.database import db
+    from app.core.timezone import china_now, china_today
     
     data = []
     name = code  # Default to code if name not found
@@ -172,11 +174,18 @@ async def chart_data(code: str, days: int = 60, period: str = "daily"):
         except Exception:
             pass  # Table might not exist, continue
     
+    def _use_realtime_daily(now) -> bool:
+        if now.weekday() >= 5:
+            return False
+        t = now.time()
+        return time_type(9, 15) <= t <= time_type(15, 0)
+
+    use_realtime = period == "daily" and _use_realtime_daily(china_now())
+
     try:
-        # Only use database for daily data (weekly/monthly need to fetch fresh)
         if period == "daily":
             history = await stock_history_service.get_stock_history(code, days=days)
-            
+
             if history:
                 for h in reversed(history):
                     data.append({
@@ -187,11 +196,48 @@ async def chart_data(code: str, days: int = 60, period: str = "daily"):
                         "close": float(h['close']),
                         "volume": int(h['volume']),
                     })
-                    # Get name from first record if available
-                    if name == code and h.get('name'):
-                        name = h['name']
-    except Exception as e:
+    except Exception:
         pass
+
+    async def _fetch_realtime_daily() -> Optional[Dict]:
+        try:
+            import akshare as ak
+            today = china_today()
+            today_str = today.strftime("%Y%m%d")
+            df = await asyncio.to_thread(
+                ak.stock_zh_a_hist,
+                symbol=code,
+                period="daily",
+                start_date=today_str,
+                end_date=today_str,
+                adjust="qfq"
+            )
+            if df is None or df.empty:
+                return None
+            row = df.iloc[-1]
+            row_date = str(row.get('日期', ''))[:10]
+            if row_date != today.strftime("%Y-%m-%d"):
+                return None
+            return {
+                "time": row_date,
+                "open": float(row.get('开盘', 0)),
+                "high": float(row.get('最高', 0)),
+                "low": float(row.get('最低', 0)),
+                "close": float(row.get('收盘', 0)),
+                "volume": int(row.get('成交量', 0)),
+            }
+        except Exception:
+            return None
+
+    if period == "daily" and use_realtime:
+        today_str = china_today().strftime("%Y-%m-%d")
+        if data and data[-1].get("time") == today_str:
+            data.pop()
+        realtime_bar = await _fetch_realtime_daily()
+        if realtime_bar:
+            data.append(realtime_bar)
+            if len(data) > days:
+                data = data[-days:]
     
     # Fallback or weekly/monthly: fetch from AkShare
     if not data:

@@ -5,6 +5,8 @@ from app.core.logger import Logger
 from app.core.rate_limiter import rate_limiter
 from app.core.telegram_utils import chunk_message
 import asyncio
+import os
+import tempfile
 
 logger = Logger("TelegramService")
 
@@ -186,7 +188,17 @@ class TelegramService:
             await callback(event)
         logger.info(f"Registered message handler on client {index}")
 
-    async def send_message(self, peer, message, parse_mode=None, file=None, link_preview=None):
+    async def send_message(
+        self,
+        peer,
+        message,
+        parse_mode=None,
+        file=None,
+        link_preview=None,
+        fallback_to_text=True,
+        media_source=None,
+        media_source_client=None,
+    ):
         """Send message using the MAIN client."""
         if not self.connected or not self.main_client:
             logger.warn("Cannot send message, no main client connected")
@@ -229,6 +241,7 @@ class TelegramService:
             # Continue with original peer, might still work for some cases
         
         # Process media types
+        result = {"media_sent": False, "text_sent": False}
         sendable_file = None
         enable_link_preview = True  # Default: allow link previews
         if link_preview is not None:
@@ -255,10 +268,44 @@ class TelegramService:
                 async with rate_limiter:
                     await self.main_client.send_message(resolved_peer, message, parse_mode=parse_mode, file=sendable_file)
                 logger.debug(f"Sent message with media to {peer}")
-                return
+                result["media_sent"] = True
+                return result
             except Exception as e:
                 logger.error(f"Failed to send media to {peer}: {e}")
-                # Fall through to send without media
+
+                # Retry by downloading and re-uploading the media
+                try:
+                    download_client = media_source_client or self.main_client
+                    download_target = media_source or sendable_file
+                    fd, temp_path = tempfile.mkstemp(prefix="tg_media_", suffix=".bin")
+                    os.close(fd)
+                    reupload = await download_client.download_media(download_target, file=temp_path)
+                    file_to_send = reupload or temp_path
+                    if isinstance(reupload, (bytes, bytearray)):
+                        file_to_send = reupload
+                    if file_to_send:
+                        async with rate_limiter:
+                            await self.main_client.send_message(
+                                resolved_peer,
+                                message,
+                                parse_mode=parse_mode,
+                                file=file_to_send
+                            )
+                        logger.info(f"Reuploaded media to {peer}")
+                        result["media_sent"] = True
+                        return result
+                except Exception as reupload_err:
+                    logger.warn(f"Reupload failed for {peer}: {reupload_err}")
+                finally:
+                    try:
+                        if "temp_path" in locals() and temp_path and os.path.exists(temp_path):
+                            os.remove(temp_path)
+                    except Exception as cleanup_err:
+                        logger.warn(f"Failed to clean up temp media file: {cleanup_err}")
+
+                # Fall through to send without media if allowed
+                if not fallback_to_text:
+                    return result
 
         # Chunk long messages
         chunks = chunk_message(message, max_length=4096)
@@ -267,9 +314,11 @@ class TelegramService:
             try:
                 async with rate_limiter:
                     await self.main_client.send_message(resolved_peer, chunk, parse_mode=parse_mode, link_preview=enable_link_preview)
+                result["text_sent"] = True
                 logger.debug(f"Sent message to {peer}")
             except Exception as e:
                 logger.error(f"Failed to send message to {peer}: {e}")
+        return result
 
     async def forward_messages(self, peer, messages, from_peer=None):
         """Forward messages using the MAIN client."""

@@ -1016,14 +1016,27 @@ class MonitorService:
                     if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
                          target = int(target)
                     
-                    await telegram_service.send_message(
+                    send_result = await telegram_service.send_message(
                         target, 
                         formatted_msg, 
                         parse_mode='html', 
                         file=media if media_supported else None,
-                        link_preview=False 
+                        link_preview=False,
+                        fallback_to_text=not media_supported,
+                        media_source=event.message if media_supported else None,
+                        media_source_client=event.client if media_supported else None
                     )
-                    if has_media and not media_supported:
+                    media_sent = bool(send_result.get("media_sent")) if isinstance(send_result, dict) else False
+                    text_sent = bool(send_result.get("text_sent")) if isinstance(send_result, dict) else False
+                    needs_media_fallback = has_media and (not media_supported or not media_sent)
+                    if has_media and media_supported and not media_sent and not text_sent:
+                        await telegram_service.send_message(
+                            target,
+                            formatted_msg,
+                            parse_mode='html',
+                            link_preview=False
+                        )
+                    if needs_media_fallback:
                         target_str = str(target)
                         norm_target = self._normalize_peer_id(target_str)
                         norm_chat = self._normalize_peer_id(chat_id)
@@ -1032,12 +1045,15 @@ class MonitorService:
                             or (norm_target and norm_target == norm_chat)
                         )
                         if not target_is_source:
-                            await telegram_service.forward_messages(
-                                target,
-                                event.message,
-                                from_peer=chat
-                            )
-                            logger.info(f"📎 Unsupported media forwarded")
+                            try:
+                                await telegram_service.forward_messages(
+                                    target,
+                                    event.message,
+                                    from_peer=chat
+                                )
+                                logger.info(f"📎 Unsupported media forwarded")
+                            except Exception as e:
+                                logger.warn(f"Failed to forward media fallback: {e}")
                     log_label = "VIP " if is_vip else ""
                     logger.info(f"✅ {log_label}message forwarded to {target}")
                 except Exception as e:
