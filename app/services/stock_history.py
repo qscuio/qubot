@@ -599,6 +599,9 @@ class StockHistoryService:
                 if error_count <= 5:
                     logger.warn(f"Failed to update {code}: {e}")
         
+        # Invalidate cache after update
+        await self.invalidate_stock_cache()
+        
         # Final progress notification
         if progress_callback:
             await progress_callback("数据同步", len(codes), len(codes), f"✅ 同步完成: {success_count}/{len(codes)} 只股票")
@@ -808,12 +811,36 @@ class StockHistoryService:
     async def get_stock_history(
         self, 
         code: str, 
-        days: int = 60
+        days: int = 60,
+        skip_cache: bool = False
     ) -> List[Dict]:
-        """Get recent history for a specific stock."""
+        """Get recent history for a specific stock.
+        
+        Args:
+            code: Stock code
+            days: Number of days to fetch (default 60)
+            skip_cache: If True, bypass Redis cache (for real-time services)
+        
+        Returns:
+            List of history records as dicts
+        """
         if not db.pool:
             return []
         
+        # Try cache first (unless skip_cache is True)
+        cache_key = f"stock_history:{code}:{days}"
+        
+        if not skip_cache and db.redis:
+            try:
+                from app.core.database import get_cache
+                cache = get_cache()
+                cached = await cache.get_json(cache_key)
+                if cached:
+                    return cached
+            except Exception:
+                pass  # Cache miss or error, fall through to DB
+        
+        # Query database
         rows = await db.pool.fetch("""
             SELECT code, date, open, high, low, close, volume, 
                    turnover, change_pct, turnover_rate
@@ -823,7 +850,55 @@ class StockHistoryService:
             LIMIT $2
         """, code, days)
         
-        return [dict(r) for r in rows]
+        # Convert to serializable format
+        result = []
+        for r in rows:
+            record = dict(r)
+            # Convert date to string for JSON serialization
+            if record.get('date'):
+                record['date'] = record['date'].isoformat()
+            # Convert Decimal to float
+            for key in ['open', 'high', 'low', 'close', 'turnover', 'change_pct', 'turnover_rate']:
+                if record.get(key) is not None:
+                    record[key] = float(record[key])
+            result.append(record)
+        
+        # Cache result (TTL 2 hours - data is relatively static)
+        if not skip_cache and db.redis and result:
+            try:
+                from app.core.database import get_cache
+                cache = get_cache()
+                await cache.set_json(cache_key, result, ttl=7200)  # 2 hours
+            except Exception:
+                pass  # Ignore cache errors
+        
+        return result
+    
+    async def invalidate_stock_cache(self, code: str = None):
+        """Invalidate stock history cache.
+        
+        Args:
+            code: If provided, invalidate only this stock. Otherwise invalidate all.
+        """
+        if not db.redis:
+            return
+        
+        try:
+            if code:
+                # Delete specific stock cache (common day values)
+                for days in [30, 60, 120, 250]:
+                    await db.redis.delete(f"stock_history:{code}:{days}")
+            else:
+                # Delete all stock history cache (use pattern scan)
+                cursor = 0
+                while True:
+                    cursor, keys = await db.redis.scan(cursor, match="stock_history:*", count=100)
+                    if keys:
+                        await db.redis.delete(*keys)
+                    if cursor == 0:
+                        break
+        except Exception as e:
+            logger.debug(f"Cache invalidation error: {e}")
     
     async def get_latest_date(self) -> Optional[date]:
         """Get the most recent date in the database."""
