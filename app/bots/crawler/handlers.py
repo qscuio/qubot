@@ -1323,7 +1323,7 @@ async def cb_scanner_dbsync(callback: types.CallbackQuery):
     try:
         await callback.message.answer("⏳ 正在后台同步数据，这可能需要几分钟...\n\n请稍后点击数据库状态查看进度")
         
-        asyncio.create_task(stock_history_service.update_all_stocks())
+        asyncio.create_task(stock_history_service.sync_with_integrity_check())
         
     except Exception as e:
         await callback.message.answer(f"❌ 同步失败: {e}")
@@ -1410,10 +1410,10 @@ async def cmd_dbsync(message: types.Message):
     import asyncio
     from app.services.stock_history import stock_history_service
     
-    await message.answer("⏳ 正在后台同步数据，这可能需要几分钟...\n\n请稍后使用 /dbcheck 查看进度")
+    await message.answer("⏳ 正在后台同步数据（含完整性检查），这可能需要几分钟...\n\n请稍后使用 /dbcheck 查看进度")
     
-    # Trigger update in background
-    asyncio.create_task(stock_history_service.update_all_stocks())
+    # Trigger sync with integrity check in background
+    asyncio.create_task(stock_history_service.sync_with_integrity_check())
 
 
 @router.callback_query(F.data == "db:sync")
@@ -1429,10 +1429,10 @@ async def cb_db_sync(callback: types.CallbackQuery):
     from app.services.stock_history import stock_history_service
     
     try:
-        await callback.message.edit_text("⏳ 正在后台同步数据，这可能需要几分钟...\n\n请稍后使用 /dbcheck 查看进度")
+        await callback.message.edit_text("⏳ 正在后台同步数据（含完整性检查），这可能需要几分钟...\n\n请稍后使用 /dbcheck 查看进度")
         
-        # Trigger update in background
-        asyncio.create_task(stock_history_service.update_all_stocks())
+        # Trigger sync with integrity check in background
+        asyncio.create_task(stock_history_service.sync_with_integrity_check())
         
     except Exception as e:
         await callback.message.edit_text(f"❌ 同步失败: {e}")

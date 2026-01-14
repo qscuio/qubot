@@ -591,6 +591,129 @@ class StockHistoryService:
             f"✅ Daily update complete: {success_count}/{len(codes)} stocks updated"
         )
     
+    async def sync_with_integrity_check(self):
+        """Sync data with integrity check - fills in missing 7-day data first.
+        
+        This method:
+        1. Checks for stocks missing data in the last 7 trading days
+        2. Fills in the gaps for those stocks
+        3. Updates all stocks with today's data
+        
+        Called by /dbsync command and daily 15:15 scheduled task.
+        """
+        ak, pd = self._get_libs()
+        if not ak or not pd or not db.pool:
+            return
+        
+        today = china_today()
+        
+        # Skip weekends
+        if today.weekday() >= 5:
+            logger.info("Weekend, skipping sync")
+            return
+        
+        logger.info("🔍 Starting sync with data integrity check...")
+        
+        # Step 1: Find stocks with missing 7-day data
+        try:
+            stocks_to_fix = await self._check_recent_data_integrity()
+            
+            if stocks_to_fix:
+                logger.info(f"📋 Found {len(stocks_to_fix)} stocks with incomplete data, fixing...")
+                await self._fix_incomplete_stocks(stocks_to_fix)
+            else:
+                logger.info("✅ All stocks have complete recent data")
+                
+        except Exception as e:
+            logger.error(f"Error during integrity check: {e}")
+        
+        # Step 2: Regular daily update for today's data
+        await self.update_all_stocks()
+    
+    async def _check_recent_data_integrity(self) -> List[Dict]:
+        """Check which stocks are missing data in the last 7 trading days.
+        
+        Returns list of dicts with 'code' and 'missing_from' date.
+        """
+        if not db.pool:
+            return []
+        
+        today = china_today()
+        seven_days_ago = today - timedelta(days=10)  # Look back 10 days to cover weekends
+        
+        # Get all stock codes we should have data for
+        all_codes = await self.get_all_stock_codes()
+        if not all_codes:
+            return []
+        
+        # Get the latest date for each stock in recent period
+        rows = await db.pool.fetch("""
+            SELECT code, MAX(date) as latest_date
+            FROM stock_history
+            WHERE date >= $1
+            GROUP BY code
+        """, seven_days_ago)
+        
+        code_latest = {row['code']: row['latest_date'] for row in rows}
+        
+        # Find stocks with missing data
+        stocks_to_fix = []
+        
+        # Stocks that exist in DB but have outdated data
+        for code in all_codes:
+            if code in code_latest:
+                latest = code_latest[code]
+                # If latest data is more than 3 trading days old, needs update
+                days_old = (today - latest).days
+                if days_old > 3:  # Account for weekends
+                    stocks_to_fix.append({
+                        'code': code, 
+                        'missing_from': latest + timedelta(days=1)
+                    })
+            else:
+                # Stock exists in market but no recent data - needs full 7-day backfill
+                stocks_to_fix.append({
+                    'code': code,
+                    'missing_from': seven_days_ago
+                })
+        
+        return stocks_to_fix[:500]  # Limit to 500 stocks per run to avoid overload
+    
+    async def _fix_incomplete_stocks(self, stocks_to_fix: List[Dict]):
+        """Fix stocks with missing recent data."""
+        if not stocks_to_fix:
+            return
+        
+        today = china_today()
+        end_str = today.strftime("%Y%m%d")
+        
+        success_count = 0
+        error_count = 0
+        
+        for i, stock_info in enumerate(stocks_to_fix):
+            code = stock_info['code']
+            start_date = stock_info['missing_from']
+            start_str = start_date.strftime("%Y%m%d")
+            
+            try:
+                records = await self._fetch_and_save_history(code, start_str, end_str)
+                if records > 0:
+                    success_count += 1
+                    
+                # Progress logging every 50 stocks
+                if (i + 1) % 50 == 0:
+                    logger.info(f"🔧 Integrity fix progress: {i+1}/{len(stocks_to_fix)} ({success_count} fixed)")
+                
+                # Rate limiting
+                await asyncio.sleep(0.3)
+                
+            except Exception as e:
+                error_count += 1
+                if error_count <= 5:
+                    logger.warn(f"Failed to fix {code}: {e}")
+        
+        logger.info(f"✅ Integrity fix complete: {success_count}/{len(stocks_to_fix)} stocks fixed")
+    
     async def _scheduler_loop(self):
         """Background scheduler for daily updates at 15:15."""
         update_time = "15:15"
@@ -608,11 +731,11 @@ class StockHistoryService:
                 
                 key = f"{date_str}_update"
                 
-                # Run daily update at 15:15 on weekdays
+                # Run daily update at 15:15 on weekdays (with integrity check)
                 if now.weekday() < 5 and time_str == update_time and key not in triggered_today:
                     triggered_today.add(key)
-                    logger.info("Triggering daily stock history update")
-                    asyncio.create_task(self.update_all_stocks())
+                    logger.info("Triggering daily stock history sync with integrity check")
+                    asyncio.create_task(self.sync_with_integrity_check())
                 
             except Exception as e:
                 logger.error(f"Scheduler error: {e}")
