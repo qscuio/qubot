@@ -761,6 +761,10 @@
                 <span class="stat-val" id="turnover">--%</span>
             </div>
             <div class="stat-item">
+                <span class="stat-label">Vol Ratio</span>
+                <span class="stat-val" id="vol-ratio">--</span>
+            </div>
+            <div class="stat-item">
                 <span class="stat-label">Volume</span>
                 <span class="stat-val" id="vol-stat">--</span>
             </div>
@@ -1475,15 +1479,45 @@
             chgEl.className = `price-change ${pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat'}`;
 
             // Stats
-            // Amplitude: (High - Low) / PrevClose
-            let amp = 0;
-            if (prev && prev.close > 0) {
-                amp = ((current.high - current.low) / prev.close) * 100;
+            // Amplitude: Use backend value if available, else calculate
+            let amp = current.amplitude;
+            if (amp === undefined || amp === null) {
+                if (prev && prev.close > 0) {
+                    amp = ((current.high - current.low) / prev.close) * 100;
+                } else {
+                    amp = 0;
+                }
             }
             document.getElementById('amplitude').textContent = amp.toFixed(2) + '%';
 
+            // Turnover Rate
+            let turnover = current.turnover_rate || 0;
+            document.getElementById('turnover').textContent = turnover.toFixed(2) + '%';
+
+            // Volume Ratio
+            let vr = current.volume_ratio;
+            const vrEl = document.getElementById('vol-ratio');
+            if (vr !== undefined && vr !== null) {
+                vrEl.textContent = vr.toFixed(2);
+                // Highlight if high volume ratio?
+                vrEl.style.color = vr > 2 ? 'var(--up-color)' : 'var(--text-primary)';
+            } else {
+                vrEl.textContent = '--';
+                vrEl.style.color = 'var(--text-primary)';
+            }
+
             // Volume
-            document.getElementById('vol-stat').textContent = (current.volume / 100).toFixed(0);
+            // Format volume (e.g. 10000 -> 1.0万)
+            let vol = current.volume;
+            let volStr = '';
+            if (vol > 100000000) {
+                volStr = (vol / 100000000).toFixed(2) + '亿';
+            } else if (vol > 10000) {
+                volStr = (vol / 10000).toFixed(1) + '万';
+            } else {
+                volStr = vol.toString();
+            }
+            document.getElementById('vol-stat').textContent = volStr;
         }
 
         // --- Indicator Calculations ---

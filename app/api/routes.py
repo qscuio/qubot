@@ -187,17 +187,51 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
 
     try:
         if period == "daily":
-            history = await stock_history_service.get_stock_history(code, days=days)
+            # Fetch extra days for MA calculation
+            history = await stock_history_service.get_stock_history(code, days=days + 5)
 
             if history:
-                for h in reversed(history):
+                # Calculate Volume MA5 for Volume Ratio
+                # Volume Ratio = Volume / MA(Volume, 5)
+                # We need to compute this manually since we have a list of dicts
+                
+                # Sort by date ascending for calculation
+                history.sort(key=lambda x: x['date'])
+                
+                # Calculate 5-day volume average
+                # We'll use a simple moving average
+                volumes = [h['volume'] for h in history]
+                vol_ma5 = []
+                for i in range(len(volumes)):
+                    if i < 4:
+                        vol_ma5.append(None) # Not enough data
+                    else:
+                        # Average of last 5 days (including today)
+                        avg = sum(volumes[i-4:i+1]) / 5
+                        vol_ma5.append(avg)
+                
+                # Add volume ratio to history records
+                for i, h in enumerate(history):
+                    if vol_ma5[i] and vol_ma5[i] > 0:
+                        h['volume_ratio'] = round(h['volume'] / vol_ma5[i], 2)
+                    else:
+                        h['volume_ratio'] = None
+
+                # Slice back to requested days
+                if len(history) > days:
+                    history = history[-days:]
+
+                for h in history:
                     data.append({
-                        "time": h['date'].strftime("%Y-%m-%d"),
+                        "time": h['date'], # Already string from get_stock_history
                         "open": float(h['open']),
                         "high": float(h['high']),
                         "low": float(h['low']),
                         "close": float(h['close']),
                         "volume": int(h['volume']),
+                        "amplitude": float(h.get('amplitude', 0) or 0),
+                        "turnover_rate": float(h.get('turnover_rate', 0) or 0),
+                        "volume_ratio": h.get('volume_ratio'),
                     })
     except Exception:
         pass
@@ -221,6 +255,25 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
             row_date = str(row.get('日期', ''))[:10]
             if row_date != today.strftime("%Y-%m-%d"):
                 return None
+            
+            # Realtime volume ratio requires past data, might be hard to get accurate here without history
+            # We can try to approximate or leave None
+            # Akshare realtime spot data might have volume ratio (量比)
+            
+            vol_ratio = None
+            try:
+                # Try to get spot data for volume ratio
+                spot_df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+                if spot_df is not None and not spot_df.empty:
+                    spot_row = spot_df[spot_df['代码'] == code]
+                    if not spot_row.empty:
+                        # 量比 column
+                        vr = spot_row.iloc[0].get('量比')
+                        if vr:
+                            vol_ratio = float(vr)
+            except:
+                pass
+
             return {
                 "time": row_date,
                 "open": float(row.get('开盘', 0)),
@@ -228,6 +281,9 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
                 "low": float(row.get('最低', 0)),
                 "close": float(row.get('收盘', 0)),
                 "volume": int(row.get('成交量', 0)),
+                "amplitude": float(row.get('振幅', 0)),
+                "turnover_rate": float(row.get('换手率', 0)),
+                "volume_ratio": vol_ratio
             }
         except Exception:
             return None
