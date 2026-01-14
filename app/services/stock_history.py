@@ -727,6 +727,14 @@ class StockHistoryService:
                 records = await self._fetch_and_save_history(code, start_str, end_str)
                 if records > 0:
                     success_count += 1
+                    # Log first few successes for debugging
+                    if success_count <= 3:
+                        logger.debug(f"✅ Fixed {code}: {records} records ({start_str} to {end_str})")
+                else:
+                    # Log first few empty responses for debugging
+                    empty_count = (i + 1) - success_count - error_count
+                    if empty_count <= 5:
+                        logger.debug(f"⚠️ No data for {code} ({start_str} to {end_str}) - may be suspended or new listing")
                     
                 # Progress logging every 50 stocks
                 if (i + 1) % 50 == 0:
