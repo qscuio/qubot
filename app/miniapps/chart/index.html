@@ -1090,7 +1090,7 @@
                     fixLeftEdge: true,  // Prevent scrolling past left edge
                     fixRightEdge: true  // Prevent scrolling past right edge
                 },
-                rightPriceScale: { borderColor: c.grid },
+                rightPriceScale: { borderColor: c.grid, minimumWidth: 60, autoScale: true },
                 autoSize: true
             };
 
@@ -1137,7 +1137,15 @@
                     const idx = rawData.findIndex(d => d.time === param.time);
                     if (idx !== -1) {
                         debouncedRenderChips(idx);
+
+                        // Interactive Header Update
+                        const d = rawData[idx];
+                        const prev = idx > 0 ? rawData[idx - 1] : d; // fallback to self if first
+                        updateHeaderValues(d, prev);
                     }
+                } else {
+                    // Restore latest
+                    restoreHeaderValues();
                 }
             });
 
@@ -1221,6 +1229,10 @@
             lastChipIdx = -1;
         }
 
+        // --- Header Updates ---
+        let latestStockData = null;
+        let latestPrevData = null;
+
         function updateStockHeader(data) {
             document.getElementById('name').textContent = data.name || code;
             document.getElementById('code').textContent = code;
@@ -1235,19 +1247,46 @@
             const last = validData[validData.length - 1];
             const prev = validData[validData.length > 1 ? validData.length - 2 : 0];
 
-            document.getElementById('price').textContent = last.close.toFixed(2);
+            // Save for restoration
+            latestStockData = last;
+            latestPrevData = prev;
 
-            const pct = prev.close > 0 ? ((last.close - prev.close) / prev.close) * 100 : 0;
+            updateHeaderValues(last, prev);
+        }
+
+        function restoreHeaderValues() {
+            if (latestStockData && latestPrevData) {
+                updateHeaderValues(latestStockData, latestPrevData);
+            }
+        }
+
+        function updateHeaderValues(current, prev) {
+            if (!current) return;
+
+            // Price
+            document.getElementById('price').textContent = current.close.toFixed(2);
+
+            // Change
+            // If this is the very first bar and no prev, change is 0
+            let pct = 0;
+            if (prev && prev.close > 0) {
+                pct = ((current.close - prev.close) / prev.close) * 100;
+            }
+
             const chgEl = document.getElementById('change');
             chgEl.textContent = (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
             chgEl.className = `price-change ${pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat'}`;
 
             // Stats
-            const amp = prev.close > 0 ? ((last.high - last.low) / prev.close) * 100 : 0;
+            // Amplitude: (High - Low) / PrevClose
+            let amp = 0;
+            if (prev && prev.close > 0) {
+                amp = ((current.high - current.low) / prev.close) * 100;
+            }
             document.getElementById('amplitude').textContent = amp.toFixed(2) + '%';
-            document.getElementById('vol-stat').textContent = (last.volume / 100).toFixed(0); // Hands
-            // Turnover rate if available? approximate
-            // document.getElementById('turnover').textContent = '--';
+
+            // Volume
+            document.getElementById('vol-stat').textContent = (current.volume / 100).toFixed(0);
         }
 
         // --- Indicator Calculations ---

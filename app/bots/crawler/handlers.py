@@ -949,7 +949,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.adjust(2, 2, 2, 3, 3, 3, 3, 2, 1)
     
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
     except:
         pass
 
@@ -962,16 +962,8 @@ async def _run_scan_from_callback(callback: types.CallbackQuery, force: bool = F
         def __init__(self, msg):
             self.from_user = callback.from_user
             self._msg = msg
-            self._first_answer = True
 
         async def answer(self, text, **kwargs):
-            if self._first_answer:
-                self._first_answer = False
-                try:
-                    await self._msg.edit_text(text, **kwargs)
-                except:
-                    pass
-                return self._msg
             return await self._msg.answer(text, **kwargs)
 
     mock_msg = MockMessage(callback.message)
@@ -1014,7 +1006,7 @@ async def cb_scanner_dbcheck(callback: types.CallbackQuery):
         stats = await stock_history_service.get_stats()
         
         if not stats:
-            await callback.message.edit_text("❌ 数据库未连接")
+            await callback.message.answer("❌ 数据库未连接")
             return
         
         total_records = stats.get('total_records', 0)
@@ -1057,10 +1049,10 @@ async def cb_scanner_dbcheck(callback: types.CallbackQuery):
         builder.button(text="◀️ 返回", callback_data="scanner:main")
         builder.adjust(2)
         
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
         
     except Exception as e:
-        await callback.message.edit_text(f"❌ 检查失败: {e}")
+        await callback.message.answer(f"❌ 检查失败: {e}")
 
 
 @router.callback_query(F.data == "scanner:dbsync")
@@ -1076,12 +1068,12 @@ async def cb_scanner_dbsync(callback: types.CallbackQuery):
     from app.services.stock_history import stock_history_service
     
     try:
-        await callback.message.edit_text("⏳ 正在后台同步数据，这可能需要几分钟...\n\n请稍后点击数据库状态查看进度")
+        await callback.message.answer("⏳ 正在后台同步数据，这可能需要几分钟...\n\n请稍后点击数据库状态查看进度")
         
         asyncio.create_task(stock_history_service.update_all_stocks())
         
     except Exception as e:
-        await callback.message.edit_text(f"❌ 同步失败: {e}")
+        await callback.message.answer(f"❌ 同步失败: {e}")
 
 
 @router.message(Command("dbcheck"))
@@ -1213,7 +1205,7 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
         
         if not signals or all(len(v) == 0 for v in signals.values()):
             cache_note = "\n\n♻️ 使用缓存结果（数据库未更新）" if stock_scanner.last_scan_used_cache else ""
-            await status.edit_text(f"🔍 扫描完成\n\n📭 暂无信号{cache_note}")
+            await status.answer(f"🔍 扫描完成\n\n📭 暂无信号{cache_note}")
             return
         
         # Cache results for pagination
@@ -1251,9 +1243,9 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
             # Navigation buttons
             nav_buttons = []
             if page > 1:
-                nav_buttons.append(InlineKeyboardButton(text="⬅️ 上一页", callback_data=f"scanner:page:{context}:{page-1}"))
+                nav_buttons.append(types.InlineKeyboardButton(text="⬅️ 上一页", callback_data=f"scanner:page:{context}:{page-1}"))
             if page < total_pages:
-                nav_buttons.append(InlineKeyboardButton(text="下一页 ➡️", callback_data=f"scanner:page:{context}:{page+1}"))
+                nav_buttons.append(types.InlineKeyboardButton(text="下一页 ➡️", callback_data=f"scanner:page:{context}:{page+1}"))
             
             if nav_buttons:
                 builder.row(*nav_buttons)
@@ -1261,10 +1253,9 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
             # Back button (if needed, but usually context handles it)
             # builder.row(InlineKeyboardButton(text="🔙 返回菜单", callback_data="scanner:main"))
             
-            if message_to_edit:
-                await message_to_edit.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
-            else:
-                await sender.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+            builder.row(types.InlineKeyboardButton(text="◀️ 返回菜单", callback_data="scanner:main"))
+
+            await sender.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
         
         # Send summary header
         total_signals = sum(len(v) for v in signals.values())
@@ -1285,7 +1276,9 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
                 summary += f"{icon} {name}: <b>{len(stocks)}只</b>\n"
         summary += f"\n共 <b>{total_signals}</b> 个信号"
         
-        await status.edit_text(summary, parse_mode="HTML")
+        summary_builder = InlineKeyboardBuilder()
+        summary_builder.button(text="◀️ 返回菜单", callback_data="scanner:main")
+        await status.answer(summary, parse_mode="HTML", reply_markup=summary_builder.as_markup())
         
         # Send complete list for each signal type
         for sig_type, stocks in signals.items():
@@ -1303,7 +1296,7 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
                 )
             
     except Exception as e:
-        await status.edit_text(f"❌ 扫描失败: {e}")
+        await status.answer(f"❌ 扫描失败: {e}")
 
 
 @router.callback_query(F.data.startswith("scanner:page:"))
@@ -1345,12 +1338,12 @@ async def cb_scanner_page(callback: types.CallbackQuery):
         # Refactoring to move send_signal_list out is better.
         
         await _send_signal_list_paginated(
-            callback.message, 
-            title, 
-            stocks, 
-            context=context, 
-            page=page, 
-            message_to_edit=callback.message
+            callback.message,
+            title,
+            stocks,
+            context=context,
+            page=page,
+            message_to_edit=None
         )
         await callback.answer()
         
@@ -1388,16 +1381,16 @@ async def _send_signal_list_paginated(sender_or_message, title: str, stocks: lis
     # Navigation buttons
     nav_buttons = []
     if page > 1:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️ 上一页", callback_data=f"scanner:page:{context}:{page-1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="⬅️ 上一页", callback_data=f"scanner:page:{context}:{page-1}"))
     if page < total_pages:
-        nav_buttons.append(InlineKeyboardButton(text="下一页 ➡️", callback_data=f"scanner:page:{context}:{page+1}"))
+        nav_buttons.append(types.InlineKeyboardButton(text="下一页 ➡️", callback_data=f"scanner:page:{context}:{page+1}"))
     
     if nav_buttons:
         builder.row(*nav_buttons)
     
-    if message_to_edit:
-        await message_to_edit.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
-    elif isinstance(sender_or_message, types.Message):
+    builder.row(types.InlineKeyboardButton(text="◀️ 返回菜单", callback_data="scanner:main"))
+
+    if isinstance(sender_or_message, types.Message):
         await sender_or_message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
 
 
@@ -1546,10 +1539,11 @@ async def cb_scan_list(callback: types.CallbackQuery):
         builder.button(text="➡️ 下一页", callback_data=f"scan:list:{signal_type}:{page+1}")
     
     builder.button(text="◀️ 返回扫描", callback_data="scan:back")
-    builder.adjust(2, 1)
+    builder.button(text="◀️ 返回菜单", callback_data="scanner:main")
+    builder.adjust(2, 1, 1)
     
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
     except:
         pass
 
@@ -1564,7 +1558,7 @@ async def cb_scan_back(callback: types.CallbackQuery):
     
     if not signals or all(len(v) == 0 for v in signals.values()):
         # No cached results, trigger new scan
-        await callback.message.edit_text("📭 缓存已失效，请重新扫描")
+        await callback.message.answer("📭 缓存已失效，请重新扫描")
         return
     
     text = "🔍 <b>启动信号扫描</b>\n━━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1594,7 +1588,7 @@ async def cb_scan_back(callback: types.CallbackQuery):
     builder.adjust(2, 2, 2)
     
     try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup(), disable_web_page_preview=True)
     except:
         pass
 
