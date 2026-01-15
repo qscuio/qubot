@@ -733,8 +733,8 @@ class StockHistoryService:
                         open_price = float(row['今开'])
                         high = float(row['最高'])
                         low = float(row['最低'])
-                        volume = float(row['成交量'])
-                        turnover = float(row['成交额'])
+                        volume = float(row['成交量']) if pd.notna(row['成交量']) else 0.0
+                        turnover = float(row['成交额']) if pd.notna(row['成交额']) else 0.0
                         change_pct = float(row['涨跌幅'])
                         turnover_rate = float(row['换手率']) if pd.notna(row['换手率']) else 0.0
                         amplitude = float(row['振幅']) if pd.notna(row['振幅']) else 0.0
