@@ -6,8 +6,10 @@ from app.services.monitor import monitor_service
 from app.services.rss import rss_service
 from app.services.ai import ai_service
 from app.core.bot import telegram_service
+from app.core.logger import Logger
 
 router = APIRouter(prefix="/api", tags=["API"])
+chart_logger = Logger("ChartAPI")
 
 
 # Request/Response Models
@@ -241,13 +243,16 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
             import akshare as ak
             today = china_today()
             today_str = today.strftime("%Y%m%d")
-            df = await asyncio.to_thread(
-                ak.stock_zh_a_hist,
-                symbol=code,
-                period="daily",
-                start_date=today_str,
-                end_date=today_str,
-                adjust="qfq"
+            df = await asyncio.wait_for(
+                asyncio.to_thread(
+                    ak.stock_zh_a_hist,
+                    symbol=code,
+                    period="daily",
+                    start_date=today_str,
+                    end_date=today_str,
+                    adjust="qfq"
+                ),
+                timeout=6
             )
             if df is None or df.empty:
                 return None
@@ -263,7 +268,10 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
             vol_ratio = None
             try:
                 # Try to get spot data for volume ratio
-                spot_df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+                spot_df = await asyncio.wait_for(
+                    asyncio.to_thread(ak.stock_zh_a_spot_em),
+                    timeout=4
+                )
                 if spot_df is not None and not spot_df.empty:
                     spot_row = spot_df[spot_df['代码'] == code]
                     if not spot_row.empty:
@@ -290,11 +298,12 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
 
     if period == "daily" and use_realtime:
         today_str = china_today().strftime("%Y-%m-%d")
-        if data and data[-1].get("time") == today_str:
-            data.pop()
         realtime_bar = await _fetch_realtime_daily()
         if realtime_bar:
-            data.append(realtime_bar)
+            if data and data[-1].get("time") == today_str:
+                data[-1] = realtime_bar
+            else:
+                data.append(realtime_bar)
             if len(data) > days:
                 data = data[-days:]
     
@@ -303,19 +312,34 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
         try:
             import akshare as ak
             from datetime import datetime, timedelta
+            import time
             
             # For weekly/monthly, request more source data
             extra_days = 30 if period == "daily" else (days * 7 if period == "weekly" else days * 31)
             end_date = datetime.now().strftime("%Y%m%d")
             start_date = (datetime.now() - timedelta(days=days + extra_days)).strftime("%Y%m%d")
-            
-            df = await asyncio.to_thread(
-                ak.stock_zh_a_hist,
-                symbol=code,
-                period=period,
-                start_date=start_date,
-                end_date=end_date,
-                adjust="qfq"
+
+            chart_logger.info(
+                f"chart_data fallback to akshare: code={code} period={period} "
+                f"days={days} start={start_date} end={end_date}"
+            )
+            started = time.monotonic()
+            df = await asyncio.wait_for(
+                asyncio.to_thread(
+                    ak.stock_zh_a_hist,
+                    symbol=code,
+                    period=period,
+                    start_date=start_date,
+                    end_date=end_date,
+                    adjust="qfq"
+                ),
+                timeout=8
+            )
+            elapsed = time.monotonic() - started
+            row_count = 0 if df is None else len(df)
+            chart_logger.info(
+                f"chart_data akshare done: code={code} period={period} "
+                f"rows={row_count} elapsed={elapsed:.1f}s"
             )
             
             if df is not None and not df.empty:
@@ -334,8 +358,8 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
                         })
                     except Exception:
                         continue
-        except Exception:
-            pass
+        except Exception as e:
+            chart_logger.warn(f"chart_data akshare failed: code={code} period={period} error={e}")
     
     if not data:
         raise HTTPException(status_code=404, detail=f"No data for {code}")

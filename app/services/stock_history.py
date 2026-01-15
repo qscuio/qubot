@@ -431,7 +431,11 @@ class StockHistoryService:
         ak, pd = self._get_libs()
         if not ak or not pd:
             return []
-        
+
+        import time
+        start_time = time.monotonic()
+        logger.info("Fetching A-share stock list via Akshare (may show progress bar)...")
+
         try:
             # Get current stock list
             df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
@@ -469,11 +473,13 @@ class StockHistoryService:
                 except Exception as e:
                     logger.debug(f"Failed to update stock_info: {e}")
             
-            logger.info(f"Found {len(codes)} A-share stocks")
+            elapsed = time.monotonic() - start_time
+            logger.info(f"Found {len(codes)} A-share stocks (elapsed={elapsed:.1f}s)")
             return [str(c) for c in codes]
             
         except Exception as e:
-            logger.error(f"Failed to get stock codes: {e}")
+            elapsed = time.monotonic() - start_time
+            logger.error(f"Failed to get stock codes after {elapsed:.1f}s: {e}")
             return []
     
     async def _fetch_and_save_history(
