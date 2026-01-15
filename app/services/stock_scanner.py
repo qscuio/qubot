@@ -285,12 +285,10 @@ class StockScanner:
                 for code in batch_codes:
                     name = code_name_map.get(code, code)
                     
-                    try:
-                        # Use local data only
-                        if code not in local_data or len(local_data[code]) < 21:
-                            skipped_insufficient += 1
-                            continue
-
+                    # Use local data only
+                    if code not in local_data or len(local_data[code]) < 21:
+                        skipped_insufficient += 1
+                        continue
                     
                     hist = local_data[code]
                     stock_info = {"code": code, "name": name}
