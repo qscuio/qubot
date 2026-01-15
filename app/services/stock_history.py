@@ -870,14 +870,16 @@ class StockHistoryService:
             
             # 1. Remove future dates
             res = await db.pool.execute("DELETE FROM stock_history WHERE date > $1", today)
-            if "0" not in res:
-                logger.info(f"🧹 Cleaned up future data: {res}")
+            count = int(res.split()[-1]) if res else 0
+            if count > 0:
+                logger.info(f"🧹 Cleaned up {count} future data records")
                 
             # 2. Remove today's data if before market open
             if now.time() < datetime.strptime("09:30", "%H:%M").time():
                 res = await db.pool.execute("DELETE FROM stock_history WHERE date = $1", today)
-                if "0" not in res:
-                    logger.info(f"🧹 Cleaned up premature today data: {res}")
+                count = int(res.split()[-1]) if res else 0
+                if count > 0:
+                    logger.info(f"🧹 Cleaned up {count} premature today data records")
                     
         except Exception as e:
             logger.error(f"Failed to cleanup abnormal data: {e}")
@@ -953,6 +955,9 @@ class StockHistoryService:
         
         # Step 2: Regular daily update for today's data
         await self.update_all_stocks(progress_callback)
+        
+        # Step 3: Final cleanup to ensure no future/premature data slipped in
+        await self.cleanup_abnormal_data()
     
     async def _check_recent_data_integrity(self, progress_callback: Optional[Callable] = None) -> List[Dict]:
         """Check which stocks are missing data in the last 7 trading days.

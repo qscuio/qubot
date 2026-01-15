@@ -1179,6 +1179,9 @@
             initCharts();
             loadData();
 
+            // Start auto-refresh (only active during trading hours)
+            startAutoRefresh();
+
             // Mobile check for Chips button
             if (window.innerWidth < 768) {
                 document.getElementById('chips-toggle').style.display = 'block';
@@ -1393,7 +1396,9 @@
 
         // --- Data Loading ---
         let rawData = [];
-        async function loadData() {
+        let refreshTimer = null;
+
+        async function loadData(isUpdate = false) {
             try {
                 const days = 250;
                 // Use authenticatedFetch
@@ -1417,8 +1422,8 @@
                 updateStockHeader(json);
                 processData();
 
-                // Reset chart scales to fit new data
-                if (chartMain) {
+                // Only reset zoom on first load
+                if (!isUpdate && chartMain) {
                     // Default Zoom: Show last 60 bars
                     const totalBars = rawData.length;
                     const visibleBars = 60;
@@ -1439,14 +1444,57 @@
 
                 document.getElementById('loading').style.display = 'none';
 
-                // Reset chip cache and render latest
-                resetChipCache();
-                renderSidePanelChips(-1);
+                // Reset chip cache only on full reload, or maybe update latest?
+                // For now, let's keep cache unless it's a major change
+                if (!isUpdate) {
+                    resetChipCache();
+                    renderSidePanelChips(-1);
+                }
 
             } catch (e) {
-                document.getElementById('loading').innerHTML = `<div class="error">${e.message}</div>`;
+                if (!isUpdate) {
+                    document.getElementById('loading').innerHTML = `<div class="error">${e.message}</div>`;
+                } else {
+                    console.warn("Background update failed:", e);
+                }
             }
         }
+
+        function isTradingTime() {
+            const now = new Date();
+            // Convert to China time (UTC+8) roughly
+            // Since this runs in client, we assume client time or just check hours if user is in China
+            // Better: use UTC
+            const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+            const chinaTime = new Date(utc + (3600000 * 8));
+
+            const day = chinaTime.getDay();
+            if (day === 0 || day === 6) return false; // Weekend
+
+            const h = chinaTime.getHours();
+            const m = chinaTime.getMinutes();
+            const t = h * 60 + m;
+
+            // 9:15 - 11:30 (555 - 690)
+            // 13:00 - 15:00 (780 - 900)
+            return (t >= 555 && t <= 690) || (t >= 780 && t <= 900);
+        }
+
+        function startAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+
+            // Check every 5 seconds
+            refreshTimer = setInterval(() => {
+                if (document.hidden) return; // Don't refresh if tab hidden
+                if (timeFrame !== 'daily') return; // Only refresh daily chart (which has realtime logic)
+
+                if (isTradingTime()) {
+                    loadData(true);
+                }
+            }, 5000);
+        }
+
+
 
         // Reset chip cache when loading new data
         function resetChipCache() {
