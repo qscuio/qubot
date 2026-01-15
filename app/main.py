@@ -196,7 +196,7 @@ async def lifespan(app: FastAPI):
                             new_chat_id = match.group(1)
                     
                     if new_chat_id:
-                        logger.warning(f"Target migrated to {new_chat_id}. Retrying... (PLEASE UPDATE CONFIG)")
+                        logger.warn(f"Target migrated to {new_chat_id}. Retrying... (PLEASE UPDATE CONFIG)")
                         # Retry with new ID
                         await bot.send_message(
                             int(new_chat_id),
