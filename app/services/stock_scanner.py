@@ -183,6 +183,7 @@ class StockScanner:
             "small_bullish_3_1_bearish_1_bullish": [],  # 三阳一阴一阳
             "small_bullish_5_in_7": [],  # 地位七天五阳
             "small_bullish_6_in_7": [],  # 7天六阳
+            "slow_bull_7": [],  # 7天慢牛
             "strong_first_negative": [],  # 强势股首阴
             "broken_limit_up_streak": [],  # 连板断板
             "pullback_ma5": [],  # 5日线回踩
@@ -366,6 +367,12 @@ class StockScanner:
                     if self._check_small_bullish_6_in_7(hist, pd):
                         signals["small_bullish_6_in_7"].append(stock_info)
 
+                    if self._check_slow_bull_7(hist, pd):
+                        signals["slow_bull_7"].append(stock_info)
+
+                    if self._check_slow_bull_7(hist, pd):
+                        signals["slow_bull_7"].append(stock_info)
+
                     if self._check_strong_first_negative(hist, pd):
                         signals["strong_first_negative"].append(stock_info)
 
@@ -415,6 +422,8 @@ class StockScanner:
                         stock_info in signals["small_bullish_5_1_bearish"],
                         stock_info in signals["small_bullish_3_1_bearish_1_bullish"],
                         stock_info in signals["small_bullish_5_in_7"],
+                        stock_info in signals["small_bullish_6_in_7"],
+                        stock_info in signals["slow_bull_7"],
                         stock_info in signals["strong_first_negative"],
                         stock_info in signals["broken_limit_up_streak"],
                         stock_info in signals["pullback_ma5"],
@@ -1612,6 +1621,47 @@ class StockScanner:
             return True
 
         except Exception as e:
+            return False
+
+    def _check_slow_bull_7(self, hist, pd) -> bool:
+        """Check for 'Slow Bull 7' pattern:
+        1. 7 consecutive days of higher closes (close > prev_close).
+        2. Total gain over 7 days <= 20%.
+        """
+        try:
+            if len(hist) < 8:
+                return False
+            
+            # Get last 8 days (to check 7 comparisons)
+            # We need close[t] > close[t-1] for t in [-7, -1]
+            # So we need indices -8 to -1
+            subset = hist.iloc[-8:]
+            closes = subset['收盘'].values
+            
+            if len(closes) < 8:
+                return False
+
+            # Check 1: 7 consecutive higher closes
+            # closes[1] > closes[0], closes[2] > closes[1], ... closes[7] > closes[6]
+            for i in range(1, 8):
+                if closes[i] <= closes[i-1]:
+                    return False
+            
+            # Check 2: Total gain <= 20%
+            # Gain from start of rise (closes[0]) to end (closes[7]).
+            # Note: closes[0] is the baseline before the 1st rise.
+            
+            start_price = closes[0]
+            end_price = closes[7]
+            
+            if start_price <= 0:
+                return False
+                
+            total_gain = (end_price - start_price) / start_price
+            
+            return total_gain <= 0.20
+            
+        except Exception:
             return False
 
 
