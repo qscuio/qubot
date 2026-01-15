@@ -10,7 +10,7 @@ Scans all A-share stocks for startup signals:
 
 import asyncio
 from datetime import datetime, date
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import pandas as pd
 import numpy as np
 
