@@ -263,38 +263,34 @@ class StockScanner:
             except Exception:
                 pass
             
-            logger.info(f"✅ Found {len(codes)} stocks in local DB, starting scan...")
+            # Batch processing settings
+            BATCH_SIZE = 200
+            total_codes = len(codes)
             
-            # Fetch history from local database
-            local_data = await self._get_local_history_batch(codes)
-            
-            if not local_data:
-                logger.warn("⚠️ No history data available after fetching from DB")
-                return signals
-            
-            logger.info(f"📊 Loaded history for {len(local_data)} stocks")
+            logger.info(f"✅ Found {total_codes} stocks in local DB, starting scan in batches of {BATCH_SIZE}...")
             
             checked = 0
             skipped_insufficient = 0
-            total_codes = len(codes)
             
-            for i, code in enumerate(codes):
-                name = code_name_map.get(code, code)
+            for i in range(0, total_codes, BATCH_SIZE):
+                batch_codes = codes[i : i + BATCH_SIZE]
                 
-                # Report progress
-                if (i + 1) % 100 == 0 or (i + 1) == total_codes:
-                     logger.info(f"Scanning progress: {i + 1}/{total_codes} stocks checked ({((i + 1) / total_codes * 100):.1f}%)")
-                     if progress_callback:
-                         try:
-                             await progress_callback(i + 1, total_codes)
-                         except Exception:
-                             pass
+                # Fetch history for this batch only
+                local_data = await self._get_local_history_batch(batch_codes)
+                
+                if not local_data:
+                    # Just skip if no data for this batch
+                    continue
+                
+                for code in batch_codes:
+                    name = code_name_map.get(code, code)
+                    
+                    try:
+                        # Use local data only
+                        if code not in local_data or len(local_data[code]) < 21:
+                            skipped_insufficient += 1
+                            continue
 
-                try:
-                    # Use local data only
-                    if code not in local_data or len(local_data[code]) < 21:
-                        skipped_insufficient += 1
-                        continue
                     
                     hist = local_data[code]
                     stock_info = {"code": code, "name": name}
@@ -451,11 +447,18 @@ class StockScanner:
                         })
                     
                     checked += 1
-                        
-                except Exception as e:
-                    logger.debug(f"Error checking {code}: {e}")
-                    continue
-            
+                
+                # Report progress after each batch
+                logger.info(f"Scanning progress: {checked}/{total_codes} stocks checked ({((checked) / total_codes * 100):.1f}%)")
+                if progress_callback:
+                    try:
+                        await progress_callback(checked, total_codes)
+                    except Exception:
+                        pass
+                
+                # Yield control to event loop to prevent blocking
+                await asyncio.sleep(0.01)
+
             if skipped_insufficient > 0:
                 logger.info(f"⏭️ Skipped {skipped_insufficient} stocks with insufficient history (<21 days)")
             
