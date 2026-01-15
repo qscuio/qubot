@@ -1111,6 +1111,9 @@ _scan_results_cache = {}
 
 SIGNAL_NAMES = {
     "breakout": "突破信号",
+    "kuangbiao": "狂飙启动",
+    "startup_candidate": "启动关注",
+    "triple_bullish_shrink_breakout": "蓄势爆发",
     "volume": "放量信号", 
     "ma_bullish": "多头排列",
     "small_bullish_5": "底部5连阳",
@@ -1131,6 +1134,9 @@ SIGNAL_NAMES = {
 
 SIGNAL_ICONS = {
     "breakout": "🔺",
+    "kuangbiao": "🏎️",
+    "startup_candidate": "🚀",
+    "triple_bullish_shrink_breakout": "🔥",
     "volume": "📊",
     "ma_bullish": "📈",
     "small_bullish_5": "🌅",
@@ -1172,6 +1178,11 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     )
     
     builder = InlineKeyboardBuilder()
+    # New Signals (Hot)
+    builder.button(text="🚀 启动关注", callback_data="scanner:scan:startup_candidate")
+    builder.button(text="🏎️ 狂飙启动", callback_data="scanner:scan:kuangbiao")
+    builder.button(text="🔥 蓄势爆发", callback_data="scanner:scan:triple_bullish_shrink_breakout")
+
     # 2 columns for signals
     builder.button(text="🔺 突破信号", callback_data="scanner:scan:breakout")
     builder.button(text="📊 放量信号", callback_data="scanner:scan:volume")
@@ -1211,7 +1222,8 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     # Original: 2, 2, 2, 3, 3, 3, 3, 2, 1
     # Added 6 buttons (3 rows of 2 or 2 rows of 3)
     # Let's use 3 columns for the new ones
-    builder.adjust(2, 2, 2, 3, 3, 3, 3, 3, 3, 2, 1)
+    # Layout: 3 cols for new signals, then 2, 2, ...
+    builder.adjust(3, 2, 2, 2, 3, 3, 3, 3, 3, 3, 2, 1)
     
     try:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
