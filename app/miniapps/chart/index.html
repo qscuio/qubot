@@ -1267,8 +1267,9 @@
                     rightOffset: 5,  // Small right margin
                     barSpacing: 8,
                     minBarSpacing: 3,
-                    fixLeftEdge: true,  // Prevent scrolling past left edge
-                    fixRightEdge: true  // Prevent scrolling past right edge
+                    fixLeftEdge: false,
+                    fixRightEdge: true,
+                    shiftVisibleRangeOnNewBar: true
                 },
                 rightPriceScale: { borderColor: c.grid, minimumWidth: 80, autoScale: true },
                 autoSize: true

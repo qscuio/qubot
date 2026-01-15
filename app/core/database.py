@@ -535,6 +535,19 @@ class Database:
                     ON CONFLICT (user_id) DO NOTHING
                 """, user_id)
             
+            # User Portfolio Table (实盘持仓)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS user_portfolio (
+                    id SERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    code TEXT NOT NULL,
+                    cost_price DECIMAL NOT NULL,
+                    shares INT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(user_id, code)
+                );
+            """)
+
             logger.info("Database tables initialized")
 
 db = Database()

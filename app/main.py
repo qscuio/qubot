@@ -95,6 +95,10 @@ async def lifespan(app: FastAPI):
 
     # Watchlist Service (用户自选列表)
     await watchlist_service.start()
+    
+    # Portfolio Service (实盘持仓)
+    from app.services.portfolio import portfolio_service
+    await portfolio_service.start()
 
     # Trading Simulator (模拟交易)
     if settings.ENABLE_TRADING_SIM:
@@ -115,6 +119,7 @@ async def lifespan(app: FastAPI):
         
         trading_simulator.set_notify_callback(sim_notify_callback)
         await trading_simulator.start()
+
 
     # 打板 Service & Simulator
     from app.services.daban_service import daban_service
@@ -329,6 +334,7 @@ async def lifespan(app: FastAPI):
     if settings.ENABLE_STOCK_HISTORY:
         from app.services.stock_history import stock_history_service
         await stock_history_service.stop()
+    await portfolio_service.stop()
     await watchlist_service.stop()
     if settings.ENABLE_TRADING_SIM:
         await trading_simulator.stop()

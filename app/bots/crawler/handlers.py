@@ -22,6 +22,7 @@ from app.services.watchlist import watchlist_service
 from app.services.trading_simulator import trading_simulator, MAX_POSITIONS
 from app.services.daban_service import daban_service
 from app.services.daban_simulator import daban_simulator, MAX_POSITIONS as DABAN_MAX_POSITIONS
+from app.services.portfolio import portfolio_service
 from app.core.config import settings
 from app.core.database import db
 from app.core.logger import Logger
@@ -2963,6 +2964,41 @@ async def cb_watch_realtime(callback: types.CallbackQuery):
         await callback.message.edit_text(f"❌ 加载失败: {e}")
 
 
+@router.callback_query(F.data == "watch:clear")
+async def cb_watch_clear(callback: types.CallbackQuery):
+    """Clear all stocks from watchlist."""
+    # Ask for confirmation
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ 确认清空", callback_data="watch:clear:confirm")
+    builder.button(text="❌ 取消", callback_data="watch:list")
+    builder.adjust(2)
+    
+    await callback.message.edit_text(
+        "⚠️ <b>确认清空自选列表？</b>\n\n此操作无法撤销。",
+        parse_mode="HTML",
+        reply_markup=builder.as_markup()
+    )
+
+
+@router.callback_query(F.data == "watch:clear:confirm")
+async def cb_watch_clear_confirm(callback: types.CallbackQuery):
+    """Execute clear watchlist."""
+    await safe_answer(callback)
+    
+    success = await watchlist_service.clear_watchlist(callback.from_user.id)
+    
+    if success:
+        await callback.message.edit_text(
+            "✅ 自选列表已清空",
+            reply_markup=InlineKeyboardBuilder().button(text="◀️ 返回", callback_data="watch:list").as_markup()
+        )
+    else:
+        await callback.message.edit_text(
+            "❌ 清空失败",
+            reply_markup=InlineKeyboardBuilder().button(text="◀️ 返回", callback_data="watch:list").as_markup()
+        )
+
+
 @router.callback_query(F.data.startswith("watch:del:"))
 async def cb_watch_del(callback: types.CallbackQuery):
     """Delete stock from watchlist."""
@@ -3113,14 +3149,16 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Opti
         builder.row(*nav_buttons)
     
     # Toggle between cached and realtime + return button
+    # Toggle between cached and realtime + return button
     if use_webapp_buttons:
         builder.row(
             types.InlineKeyboardButton(
                 text="📊 缓存数据" if realtime else "📡 实时刷新",
                 callback_data="watch:list:0" if realtime else "watch:realtime:0"
             ),
-            types.InlineKeyboardButton(text="◀️ 返回", callback_data="main")
+            types.InlineKeyboardButton(text="🗑️ 清空", callback_data="watch:clear")
         )
+        builder.row(types.InlineKeyboardButton(text="◀️ 返回", callback_data="main"))
     else:
         if realtime:
             builder.button(text="📊 缓存数据", callback_data="watch:list:0")
@@ -3636,3 +3674,111 @@ async def cb_daban_signals(callback: types.CallbackQuery):
         await callback.message.edit_text(report, parse_mode="HTML", reply_markup=builder.as_markup())
     except Exception as e:
         await callback.message.edit_text(f"❌ 失败: {e}")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Portfolio Management (实盘持仓)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("port"))
+async def cmd_port(message: types.Message, command: CommandObject):
+    """Manage real portfolio."""
+    if not await is_allowed(message.from_user.id):
+        return
+
+    args = command.args
+    if not args:
+        # Show portfolio
+        await show_portfolio(message)
+        return
+
+    parts = args.split()
+    action = parts[0].lower()
+
+    if action == "add":
+        # /port add <code> <cost> <shares>
+        if len(parts) < 4:
+            await message.answer("用法: /port add <代码> <成本价> <股数>")
+            return
+        
+        code = parts[1]
+        try:
+            cost = float(parts[2])
+            shares = int(parts[3])
+        except ValueError:
+            await message.answer("❌ 价格或股数格式错误")
+            return
+            
+        success = await portfolio_service.add_position(message.from_user.id, code, cost, shares)
+        if success:
+            await message.answer(f"✅ 已添加 {code}: {shares}股 @ {cost}")
+            await show_portfolio(message)
+        else:
+            await message.answer("❌ 添加失败")
+
+    elif action == "del":
+        # /port del <code>
+        if len(parts) < 2:
+            await message.answer("用法: /port del <代码>")
+            return
+            
+        code = parts[1]
+        success = await portfolio_service.remove_position(message.from_user.id, code)
+        if success:
+            await message.answer(f"✅ 已删除 {code}")
+            await show_portfolio(message)
+        else:
+            await message.answer("❌ 删除失败")
+            
+    else:
+        await message.answer(
+            "💼 <b>持仓管理</b>\n\n"
+            "• 查看: /port\n"
+            "• 添加: /port add <代码> <成本> <股数>\n"
+            "• 删除: /port del <代码>",
+            parse_mode="HTML"
+        )
+
+async def show_portfolio(message: types.Message):
+    """Show portfolio with P&L."""
+    portfolio = await portfolio_service.get_portfolio(message.from_user.id)
+    
+    if not portfolio:
+        await message.answer("💼 <b>实盘持仓</b>\n━━━━━━━━━━━━━━━━━━━━━\n📭 当前无持仓\n\n使用 /port add 添加", parse_mode="HTML")
+        return
+
+    total_market = 0
+    total_profit = 0
+    total_cost = 0
+    
+    lines = ["💼 <b>实盘持仓</b>", "━━━━━━━━━━━━━━━━━━━━━"]
+    
+    for p in portfolio:
+        name = p.get('name', p['code'])
+        code = p['code']
+        current = p.get('current_price', 0)
+        cost = float(p['cost_price'])
+        shares = p['shares']
+        profit = p.get('profit', 0)
+        profit_pct = p.get('profit_pct', 0)
+        today_pct = p.get('today_change', 0)
+        
+        emoji = "🔴" if profit > 0 else ("🟢" if profit < 0 else "⚪")
+        
+        lines.append(
+            f"{emoji} <b>{name}</b> ({code})\n"
+            f"   现价: {current:.2f} ({today_pct:+.2f}%)\n"
+            f"   持仓: {shares}股 @ {cost:.2f}\n"
+            f"   盈亏: {profit:+,.0f} ({profit_pct:+.2f}%)"
+        )
+        
+        total_market += p.get('market_value', 0)
+        total_profit += profit
+        total_cost += cost * shares
+
+    total_return = (total_profit / total_cost * 100) if total_cost > 0 else 0
+    
+    lines.append("━━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"💰 总市值: ¥{total_market:,.0f}")
+    lines.append(f"📈 总盈亏: ¥{total_profit:+,.0f} ({total_return:+.2f}%)")
+    
+    await message.answer("\n".join(lines), parse_mode="HTML")

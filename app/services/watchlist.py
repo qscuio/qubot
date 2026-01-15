@@ -142,6 +142,28 @@ class WatchlistService:
         except Exception as e:
             logger.error(f"Failed to remove stock: {e}")
             return False
+            
+    async def clear_watchlist(self, user_id: int) -> bool:
+        """Remove ALL stocks from user's watchlist."""
+        if not db.pool:
+            return False
+        
+        try:
+            result = await db.pool.execute("""
+                DELETE FROM user_watchlist WHERE user_id = $1
+            """, user_id)
+            return "DELETE" in result
+        except Exception as e:
+            logger.error(f"Failed to clear watchlist: {e}")
+            return False
+
+    async def get_watchlist_performance(self, user_id: int) -> List[Dict]:
+        """Get watchlist sorted by today's performance (descending)."""
+        # Use realtime fetch to get latest data
+        stocks = await self.get_watchlist_realtime(user_id)
+        # Sort by today_change descending
+        stocks.sort(key=lambda x: x.get('today_change', 0), reverse=True)
+        return stocks
     
     async def get_watchlist(self, user_id: int) -> List[Dict]:
         """Get user's watchlist."""
@@ -365,11 +387,106 @@ class WatchlistService:
     # Scheduler
     # ─────────────────────────────────────────────────────────────────────────
     
+    async def send_intraday_reports(self):
+        """Send intraday watchlist performance reports."""
+        from app.bots.registry import get_bot
+        
+        if not db.pool:
+            return
+            
+        # Get all users with watchlist
+        users = await db.pool.fetch("SELECT DISTINCT user_id FROM user_watchlist")
+        
+        for row in users:
+            user_id = row['user_id']
+            try:
+                stocks = await self.get_watchlist_performance(user_id)
+                if not stocks:
+                    continue
+                    
+                # Format report
+                lines = [
+                    f"⏱️ <b>自选盯盘</b> ({china_now().strftime('%H:%M')})",
+                    "━━━━━━━━━━━━━━━━━━━━━"
+                ]
+                
+                # Top 3 gainers
+                for s in stocks[:3]:
+                    name = s.get('name', s['code'])
+                    change = s.get('today_change', 0)
+                    lines.append(f"🔴 <b>{name}</b>: {change:+.2f}%")
+                
+                # Top 3 losers (if any, from bottom)
+                if len(stocks) > 3:
+                    losers = [s for s in stocks if s.get('today_change', 0) < 0]
+                    losers.sort(key=lambda x: x.get('today_change', 0)) # Ascending (worst first)
+                    if losers:
+                        lines.append("---")
+                        for s in losers[:3]:
+                            name = s.get('name', s['code'])
+                            change = s.get('today_change', 0)
+                            lines.append(f"🟢 <b>{name}</b>: {change:+.2f}%")
+                            
+                report = "\n".join(lines)
+                
+                bot = get_bot("crawler")
+                if bot:
+                    await bot.send_message(user_id, report, parse_mode="HTML")
+                    
+            except Exception as e:
+                logger.warn(f"Failed to send intraday report to {user_id}: {e}")
+            
+            await asyncio.sleep(0.5)
+
+    async def send_closing_reports(self):
+        """Send daily closing performance report."""
+        from app.bots.registry import get_bot
+        
+        if not db.pool:
+            return
+            
+        users = await db.pool.fetch("SELECT DISTINCT user_id FROM user_watchlist")
+        
+        for row in users:
+            user_id = row['user_id']
+            try:
+                stocks = await self.get_watchlist_performance(user_id)
+                if not stocks:
+                    continue
+                    
+                lines = [
+                    "🏁 <b>自选收盘日报</b>",
+                    "━━━━━━━━━━━━━━━━━━━━━"
+                ]
+                
+                for s in stocks:
+                    name = s.get('name', s['code'])
+                    change = s.get('today_change', 0)
+                    price = s.get('current_price', 0)
+                    icon = "🔴" if change > 0 else ("🟢" if change < 0 else "⚪")
+                    lines.append(f"{icon} <b>{name}</b>: {price} ({change:+.2f}%)")
+                    
+                report = "\n".join(lines)
+                
+                bot = get_bot("crawler")
+                if bot:
+                    await bot.send_message(user_id, report, parse_mode="HTML")
+                    
+            except Exception as e:
+                logger.warn(f"Failed to send closing report to {user_id}: {e}")
+            
+            await asyncio.sleep(0.5)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Scheduler
+    # ─────────────────────────────────────────────────────────────────────────
+    
     async def _scheduler_loop(self):
-        """Background scheduler for daily reports at 17:00."""
-        report_time = "17:00"
+        """Background scheduler for watchlist reports."""
+        closing_time = "15:05"
         
         triggered_today = set()
+        last_intraday_min = -1
         
         while self.is_running:
             try:
@@ -380,12 +497,25 @@ class WatchlistService:
                 if time_str == "00:00":
                     triggered_today.clear()
                 
-                key = f"{date_str}_watchlist"
+                # 1. Closing Report (15:05)
+                closing_key = f"{date_str}_closing"
+                if now.weekday() < 5 and time_str == closing_time and closing_key not in triggered_today:
+                    triggered_today.add(closing_key)
+                    asyncio.create_task(self.send_closing_reports())
                 
-                # Send reports at 17:00 on weekdays
-                if now.weekday() < 5 and time_str == report_time and key not in triggered_today:
-                    triggered_today.add(key)
-                    asyncio.create_task(self.send_daily_reports())
+                # 2. Intraday Report (Every 10 mins during trading)
+                # Trading hours: 09:30-11:30, 13:00-15:00
+                is_trading = (
+                    (now.hour == 9 and now.minute >= 30) or
+                    (now.hour == 10) or
+                    (now.hour == 11 and now.minute <= 30) or
+                    (now.hour >= 13 and now.hour < 15)
+                )
+                
+                if now.weekday() < 5 and is_trading:
+                    if now.minute % 10 == 0 and now.minute != last_intraday_min:
+                        last_intraday_min = now.minute
+                        asyncio.create_task(self.send_intraday_reports())
                     
             except Exception as e:
                 logger.error(f"Scheduler error: {e}")
