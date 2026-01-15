@@ -438,10 +438,18 @@ class StockHistoryService:
 
         try:
             # Get current stock list
-            df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+            logger.info("Calling ak.stock_zh_a_spot_em with 30s timeout...")
+            try:
+                df = await asyncio.wait_for(
+                    asyncio.to_thread(ak.stock_zh_a_spot_em),
+                    timeout=30.0
+                )
+            except asyncio.TimeoutError:
+                logger.error("Timeout while fetching stock list (30s exceeded)")
+                return []
             
             if df is None or df.empty:
-                logger.error("Failed to fetch stock list")
+                logger.error("Failed to fetch stock list: stock_zh_a_spot_em returned None or empty")
                 return []
             
             # Filter main board stocks (exclude ST, 退市)
