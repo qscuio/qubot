@@ -11,6 +11,7 @@ Sends alerts to BURST_TARGET_GROUP.
 
 import asyncio
 import logging
+import math
 from datetime import datetime, time as time_type
 from typing import Dict, List, Optional
 
@@ -100,6 +101,21 @@ class BurstMonitorService:
                 return {}
             
             result = {}
+            # Helper for safe conversion
+            def safe_float(v, default=0.0):
+                try:
+                    f = float(v)
+                    return default if math.isnan(f) else f
+                except (ValueError, TypeError):
+                    return default
+
+            def safe_int(v, default=0):
+                try:
+                    f = float(v)
+                    return default if math.isnan(f) else int(f)
+                except (ValueError, TypeError):
+                    return default
+
             for _, row in df.iterrows():
                 code = str(row.get('代码', ''))
                 name = str(row.get('名称', ''))
@@ -110,15 +126,15 @@ class BurstMonitorService:
                 
                 result[code] = {
                     'name': name,
-                    'price': float(row.get('最新价', 0) or 0),
-                    'change_pct': float(row.get('涨跌幅', 0) or 0),
-                    'volume': int(row.get('成交量', 0) or 0),
-                    'amount': float(row.get('成交额', 0) or 0),
-                    'high': float(row.get('最高', 0) or 0),
-                    'low': float(row.get('最低', 0) or 0),
-                    'open': float(row.get('今开', 0) or 0),
-                    'prev_close': float(row.get('昨收', 0) or 0),
-                    'turnover': float(row.get('换手率', 0) or 0),
+                    'price': safe_float(row.get('最新价')),
+                    'change_pct': safe_float(row.get('涨跌幅')),
+                    'volume': safe_int(row.get('成交量')),
+                    'amount': safe_float(row.get('成交额')),
+                    'high': safe_float(row.get('最高')),
+                    'low': safe_float(row.get('最低')),
+                    'open': safe_float(row.get('今开')),
+                    'prev_close': safe_float(row.get('昨收')),
+                    'turnover': safe_float(row.get('换手率')),
                 }
             
             return result

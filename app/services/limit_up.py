@@ -6,6 +6,7 @@ and maintains consecutive limit-up (连板) statistics.
 """
 
 import asyncio
+import math
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional
 
@@ -36,6 +37,20 @@ class LimitUpService:
                 logger.error("AkShare not installed. Run: pip install akshare")
                 return None
         return self._ak
+
+    def _safe_float(self, val, default=0.0) -> float:
+        try:
+            f = float(val)
+            return default if math.isnan(f) else f
+        except (ValueError, TypeError):
+            return default
+
+    def _safe_int(self, val, default=0) -> int:
+        try:
+            f = float(val)
+            return default if math.isnan(f) else int(f)
+        except (ValueError, TypeError):
+            return default
     
     async def start(self):
         """Start the limit-up tracker service."""
@@ -135,10 +150,10 @@ class LimitUpService:
                     stock = {
                         "code": str(row.get("代码", "")),
                         "name": str(row.get("名称", "")),
-                        "close_price": float(row.get("最新价", 0)),
-                        "change_pct": float(row.get("涨跌幅", 0)),
-                        "turnover_rate": float(row.get("换手率", 0)),
-                        "limit_times": int(row.get("连板数", 1)),
+                        "close_price": self._safe_float(row.get("最新价")),
+                        "change_pct": self._safe_float(row.get("涨跌幅")),
+                        "turnover_rate": self._safe_float(row.get("换手率")),
+                        "limit_times": self._safe_int(row.get("连板数"), 1),
                         "is_sealed": True,
                     }
                     stocks.append(stock)
@@ -152,9 +167,9 @@ class LimitUpService:
                         stock = {
                             "code": str(row.get("代码", "")),
                             "name": str(row.get("名称", "")),
-                            "close_price": float(row.get("最新价", 0)),
-                            "change_pct": float(row.get("涨跌幅", 0)),
-                            "turnover_rate": float(row.get("换手率", 0)),
+                            "close_price": self._safe_float(row.get("最新价")),
+                            "change_pct": self._safe_float(row.get("涨跌幅")),
+                            "turnover_rate": self._safe_float(row.get("换手率")),
                             "limit_times": 1,
                             "is_sealed": False,
                         }
@@ -364,8 +379,8 @@ class LimitUpService:
             for _, row in df.iterrows():
                 code = str(row.get("代码", ""))
                 price_map[code] = {
-                    "current_price": float(row.get("最新价", 0)),
-                    "change_pct": float(row.get("涨跌幅", 0)),
+                    "current_price": self._safe_float(row.get("最新价")),
+                    "change_pct": self._safe_float(row.get("涨跌幅")),
                 }
             
             result = []
