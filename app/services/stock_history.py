@@ -691,107 +691,104 @@ class StockHistoryService:
         if progress_callback:
             await progress_callback("数据同步", 0, 100, "⏳ 正在批量获取实时数据...")
             
-        # Retry logic (3 attempts)
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                if attempt > 0:
-                    logger.info(f"Retry attempt {attempt + 1}/{max_retries}...")
-                    if progress_callback:
-                        await progress_callback("数据同步", 0, 100, f"⏳ 正在重试 ({attempt + 1}/{max_retries})...")
-                    await asyncio.sleep(2 * attempt)  # Exponential backoff
+        try:
+            # Fetch all spot data with timeout
+            logger.info("Calling ak.stock_zh_a_spot_em()...")
+            df = await asyncio.wait_for(
+                asyncio.to_thread(ak.stock_zh_a_spot_em),
+                timeout=600.0  # 10 minute timeout
+            )
+            
+            if df is None or df.empty:
+                logger.error("Batch update failed: API returned empty data")
+                return False
                 
-                # Fetch all spot data with timeout
-                logger.info("Calling ak.stock_zh_a_spot_em()...")
-                df = await asyncio.wait_for(
-                    asyncio.to_thread(ak.stock_zh_a_spot_em),
-                    timeout=300.0  # 5 minute timeout
-                )
-                
-                if df is None or df.empty:
-                    logger.warn("Batch update returned empty data")
-                    continue
+            # Filter valid A-share stocks
+            # A-share codes: 00xxxx (SZ), 30xxxx (创业板), 60xxxx (SH), 68xxxx (科创板)
+            df_filtered = df[
+                ~df['名称'].str.contains('ST|退', na=False) &
+                (df['代码'].str.match(r'^[036]'))
+            ].copy()
+            
+            total_stocks = len(df_filtered)
+            logger.info(f"Got {total_stocks} valid stocks from API")
+            
+            if progress_callback:
+                await progress_callback("数据同步", 10, 100, f"⏳ 获取到 {total_stocks} 只股票，准备入库...")
+            
+            # Prepare records for bulk insert
+            records = []
+            for _, row in df_filtered.iterrows():
+                try:
+                    # Map columns
+                    # '最新价'->close, '今开'->open, '最高'->high, '最低'->low
+                    # '成交量'->volume, '成交额'->turnover
+                    # '涨跌幅'->change_pct, '换手率'->turnover_rate, '振幅'->amplitude
                     
-                # Filter valid A-share stocks
-                df_filtered = df[
-                    ~df['名称'].str.contains('ST|退', na=False) &
-                    (df['代码'].str.match(r'^[036]'))
-                ].copy()
-                
-                total_stocks = len(df_filtered)
-                logger.info(f"Got {total_stocks} valid stocks from API")
-                
-                if progress_callback:
-                    await progress_callback("数据同步", 10, 100, f"⏳ 获取到 {total_stocks} 只股票，准备入库...")
-                
-                # Prepare records for bulk insert
-                records = []
-                for _, row in df_filtered.iterrows():
-                    try:
-                        code = str(row['代码'])
-                        close = float(row['最新价'])
-                        open_price = float(row['今开'])
-                        high = float(row['最高'])
-                        low = float(row['最低'])
-                        volume = float(row['成交量']) if pd.notna(row['成交量']) else 0.0
-                        turnover = float(row['成交额']) if pd.notna(row['成交额']) else 0.0
-                        change_pct = float(row['涨跌幅'])
-                        turnover_rate = float(row['换手率']) if pd.notna(row['换手率']) else 0.0
-                        amplitude = float(row['振幅']) if pd.notna(row['振幅']) else 0.0
-                        
-                        if close <= 0 or open_price <= 0:
-                            continue
-                            
-                        records.append((
-                            code, today, open_price, high, low, close, 
-                            volume, turnover, change_pct, turnover_rate, amplitude
-                        ))
-                    except Exception:
+                    code = str(row['代码'])
+                    close = float(row['最新价'])
+                    open_price = float(row['今开'])
+                    high = float(row['最高'])
+                    low = float(row['最低'])
+                    volume = float(row['成交量']) if pd.notna(row['成交量']) else 0.0
+                    turnover = float(row['成交额']) if pd.notna(row['成交额']) else 0.0
+                    change_pct = float(row['涨跌幅'])
+                    turnover_rate = float(row['换手率']) if pd.notna(row['换手率']) else 0.0
+                    amplitude = float(row['振幅']) if pd.notna(row['振幅']) else 0.0
+                    
+                    # Basic validation
+                    if close <= 0 or open_price <= 0:
                         continue
+                        
+                    records.append((
+                        code, today, open_price, high, low, close, 
+                        volume, turnover, change_pct, turnover_rate, amplitude
+                    ))
+                except Exception:
+                    continue
+            
+            if not records:
+                logger.warn("No valid records to insert")
+                return False
                 
-                if not records:
-                    logger.warn("No valid records to insert")
-                    return False
-                    
-                # Bulk insert
-                logger.info(f"Inserting {len(records)} records...")
-                if progress_callback:
-                    await progress_callback("数据同步", 50, 100, f"⏳ 正在写入 {len(records)} 条数据...")
-                    
-                async with db.pool.acquire() as conn:
-                    await conn.executemany("""
-                        INSERT INTO stock_history (
-                            code, date, open, high, low, close, 
-                            volume, turnover, change_pct, turnover_rate, amplitude
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-                        ON CONFLICT (code, date) DO UPDATE SET
-                            open = EXCLUDED.open,
-                            high = EXCLUDED.high,
-                            low = EXCLUDED.low,
-                            close = EXCLUDED.close,
-                            volume = EXCLUDED.volume,
-                            turnover = EXCLUDED.turnover,
-                            change_pct = EXCLUDED.change_pct,
-                            turnover_rate = EXCLUDED.turnover_rate,
-                            amplitude = EXCLUDED.amplitude
-                    """, records)
-                    
-                logger.info(f"✅ Batch update complete: {len(records)} records inserted")
+            # Bulk insert
+            logger.info(f"Inserting {len(records)} records...")
+            if progress_callback:
+                await progress_callback("数据同步", 50, 100, f"⏳ 正在写入 {len(records)} 条数据...")
                 
-                # Invalidate cache
-                await self.invalidate_stock_cache()
+            async with db.pool.acquire() as conn:
+                await conn.executemany("""
+                    INSERT INTO stock_history (
+                        code, date, open, high, low, close, 
+                        volume, turnover, change_pct, turnover_rate, amplitude
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    ON CONFLICT (code, date) DO UPDATE SET
+                        open = EXCLUDED.open,
+                        high = EXCLUDED.high,
+                        low = EXCLUDED.low,
+                        close = EXCLUDED.close,
+                        volume = EXCLUDED.volume,
+                        turnover = EXCLUDED.turnover,
+                        change_pct = EXCLUDED.change_pct,
+                        turnover_rate = EXCLUDED.turnover_rate,
+                        amplitude = EXCLUDED.amplitude
+                """, records)
                 
-                if progress_callback:
-                    await progress_callback("数据同步", 100, 100, f"✅ 批量同步完成: {len(records)} 只股票")
-                
-                return True
-                
-            except Exception as e:
-                logger.error(f"Batch update attempt {attempt + 1} failed: {e}")
-                
-        # All retries failed
-        logger.error("All batch update attempts failed")
-        return False
+            logger.info(f"✅ Batch update complete: {len(records)} records inserted")
+            
+            # Invalidate cache
+            await self.invalidate_stock_cache()
+            
+            if progress_callback:
+                await progress_callback("数据同步", 100, 100, f"✅ 批量同步完成: {len(records)} 只股票")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Batch update failed: {e}")
+            if progress_callback:
+                await progress_callback("数据同步", 0, 100, f"❌ 同步失败: {e}")
+            return False
     
     async def sync_with_integrity_check(self, progress_callback: Optional[Callable] = None):
         """Sync data with integrity check - fills in missing 7-day data first.
