@@ -473,7 +473,7 @@ class StockHistoryService:
             
             if df is None or df.empty:
                 logger.error("Failed to fetch stock list: stock_zh_a_spot_em returned None or empty")
-                return []
+                raise Exception("Empty result from API")
             
             # Filter main board stocks (exclude ST, 退市)
             # A-share codes: 00xxxx (SZ), 30xxxx (创业板), 60xxxx (SH), 68xxxx (科创板)
@@ -510,7 +510,25 @@ class StockHistoryService:
             
         except Exception as e:
             elapsed = time.monotonic() - start_time
-            logger.error(f"Failed to get stock codes after {elapsed:.1f}s: {e}")
+            logger.error(f"Failed to get stock codes from API after {elapsed:.1f}s: {e}")
+            
+            # Fallback to local database
+            if db.pool:
+                try:
+                    logger.info("⚠️ Attempting to load stock list from local database (fallback)...")
+                    # Try stock_info first
+                    rows = await db.pool.fetch("SELECT code FROM stock_info")
+                    if not rows:
+                        # Try stock_history if stock_info is empty
+                        rows = await db.pool.fetch("SELECT DISTINCT code FROM stock_history")
+                    
+                    if rows:
+                        codes = [r['code'] for r in rows]
+                        logger.info(f"✅ Loaded {len(codes)} stocks from local DB fallback")
+                        return codes
+                except Exception as db_e:
+                    logger.error(f"Failed to load from local DB: {db_e}")
+            
             return []
     
     async def _fetch_and_save_history(
