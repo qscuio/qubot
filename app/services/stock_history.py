@@ -167,6 +167,9 @@ class StockHistoryService:
                 logger.info("All stocks have history data")
         else:
             logger.info(f"Stock coverage: {coverage:.1%} ({db_stock_count}/{len(all_codes)}) - sufficient")
+        
+        # Cleanup abnormal data (future dates or duplicate syncs)
+        await self.cleanup_abnormal_data()
     
     async def _backfill_all_stocks(self):
         """Backfill 5 years of history for all A-share stocks."""
@@ -685,11 +688,38 @@ class StockHistoryService:
             return False
         
         today = china_today()
-        date_str = today.strftime("%Y-%m-%d")
-        logger.info(f"Starting batch daily update for {date_str}")
+        now = china_now()
+        
+        # Determine the correct date for the data
+        # If before 09:30, the data is from the previous trading day
+        if now.time() < datetime.strptime("09:30", "%H:%M").time():
+            target_date = today - timedelta(days=1)
+            logger.info(f"Time is {now.strftime('%H:%M')} (<09:30), assuming data is from previous day: {target_date}")
+        else:
+            target_date = today
+            
+        # Get actual latest trading date
+        trade_date = await self.get_latest_trading_date(target_date)
+        if not trade_date:
+            logger.warn("Could not determine trading date, using target date")
+            trade_date = target_date
+            
+        date_str = trade_date.strftime("%Y-%m-%d")
+        logger.info(f"Starting batch daily update for {date_str} (Target: {target_date})")
+        
+        # Check if already synced
+        try:
+            count = await db.pool.fetchval("SELECT COUNT(*) FROM stock_history WHERE date = $1", trade_date)
+            if count and count > 4000:
+                logger.info(f"✅ Data for {date_str} already exists ({count} records). Skipping sync.")
+                if progress_callback:
+                    await progress_callback("数据同步", 100, 100, f"✅ {date_str} 数据已存在，无需同步")
+                return True
+        except Exception as e:
+            logger.warn(f"Failed to check existing data: {e}")
         
         if progress_callback:
-            await progress_callback("数据同步", 0, 100, "⏳ 正在批量获取实时数据...")
+            await progress_callback("数据同步", 0, 100, f"⏳ 正在批量获取实时数据 ({date_str})...")
             
         try:
             # Fetch all spot data with timeout
@@ -741,7 +771,7 @@ class StockHistoryService:
                         continue
                         
                     records.append((
-                        code, today, open_price, high, low, close, 
+                        code, trade_date, open_price, high, low, close, 
                         volume, turnover, change_pct, turnover_rate, amplitude
                     ))
                 except Exception:
@@ -790,6 +820,56 @@ class StockHistoryService:
                 await progress_callback("数据同步", 0, 100, f"❌ 同步失败: {e}")
             return False
     
+    async def cleanup_abnormal_data(self):
+        """Cleanup abnormal data from database.
+        
+        Removes:
+        1. Future dates (date > today)
+        2. Today's data if time < 09:30 (likely synced incorrectly at midnight)
+        """
+        if not db.pool:
+            return
+            
+        try:
+            today = china_today()
+            now = china_now()
+            
+            # 1. Remove future dates
+            res = await db.pool.execute("DELETE FROM stock_history WHERE date > $1", today)
+            if "0" not in res:
+                logger.info(f"🧹 Cleaned up future data: {res}")
+                
+            # 2. Remove today's data if before market open
+            if now.time() < datetime.strptime("09:30", "%H:%M").time():
+                res = await db.pool.execute("DELETE FROM stock_history WHERE date = $1", today)
+                if "0" not in res:
+                    logger.info(f"🧹 Cleaned up premature today data: {res}")
+                    
+        except Exception as e:
+            logger.error(f"Failed to cleanup abnormal data: {e}")
+
+    async def get_latest_trading_date(self, target_date: date) -> Optional[date]:
+        """Get the latest trading date <= target_date."""
+        ak, pd = self._get_libs()
+        if not ak or not pd:
+            return None
+            
+        try:
+            # Fetch trading dates (cached if possible? akshare might cache)
+            df = await asyncio.to_thread(ak.tool_trade_date_hist_sina)
+            if df is None or df.empty:
+                return None
+                
+            dates = pd.to_datetime(df['trade_date']).dt.date.tolist()
+            valid_dates = [d for d in dates if d <= target_date]
+            
+            if valid_dates:
+                return valid_dates[-1]
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get trading date: {e}")
+            return None
+
     async def sync_with_integrity_check(self, progress_callback: Optional[Callable] = None):
         """Sync data with integrity check - fills in missing 7-day data first.
         
