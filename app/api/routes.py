@@ -135,7 +135,7 @@ async def rss_unsubscribe(source_id: str, user_id: str = Depends(verify_api_key)
 
 chart_router = APIRouter(prefix="/api", tags=["Chart"])
 
-from app.api.auth import verify_api_key, verify_webapp
+from app.api.auth import verify_api_key, verify_webapp, verify_webapp_optional
 
 @chart_router.get("/chart/data/{code}")
 async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: int = Depends(verify_webapp)):
@@ -444,7 +444,7 @@ async def chart_watchlist_status(code: str, user_id: int = Depends(verify_webapp
 
 
 @chart_router.get("/chart/navigation")
-async def get_chart_navigation(code: str, context: str, user_id: int = Depends(verify_webapp)):
+async def get_chart_navigation(code: str, context: str, user_id: int = Depends(verify_webapp_optional)):
     """Get previous and next stock codes based on context."""
     from app.services.limit_up import limit_up_service
     from app.services.watchlist import watchlist_service

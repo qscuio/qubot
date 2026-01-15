@@ -138,3 +138,15 @@ async def verify_webapp(request: Request, x_telegram_init_data: str = APIKeyHead
         raise HTTPException(status_code=403, detail="User not allowed")
         
     return user_id
+
+
+async def verify_webapp_optional(request: Request, x_telegram_init_data: str = APIKeyHeader(name="X-Telegram-Init-Data", auto_error=False)) -> int:
+    """
+    Verify Telegram WebApp initData but return 0 (Anonymous) if missing or invalid.
+    Used for endpoints that support both authenticated and public access.
+    """
+    try:
+        return await verify_webapp(request, x_telegram_init_data)
+    except HTTPException:
+        return 0
+
