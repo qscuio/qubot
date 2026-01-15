@@ -1156,6 +1156,25 @@
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
+            // Telegram Mini App Setup
+            if (window.Telegram?.WebApp) {
+                Telegram.WebApp.ready();
+                try {
+                    const platform = Telegram.WebApp.platform || 'unknown';
+                    // Only request fullscreen on mobile devices (Android/iOS) to hide status bar
+                    if (['android', 'ios'].includes(platform)) {
+                        if (Telegram.WebApp.requestFullscreen) {
+                            Telegram.WebApp.requestFullscreen();
+                        }
+                    }
+
+                    // Expand to full height (matches Telegram window size on desktop)
+                    Telegram.WebApp.expand();
+                } catch (e) {
+                    console.warn("Telegram WebApp setup failed:", e);
+                }
+            }
+
             initTheme();
             initCharts();
             loadData();

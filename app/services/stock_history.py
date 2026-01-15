@@ -457,12 +457,12 @@ class StockHistoryService:
 
         try:
             # Get current stock list
-            logger.info("Calling ak.stock_zh_a_spot_em (60s timeout)...")
+            logger.info("Calling ak.stock_zh_a_spot_em (300s timeout)...")
             try:
                 # Add timeout to prevent hanging indefinitely
                 df = await asyncio.wait_for(
                     asyncio.to_thread(ak.stock_zh_a_spot_em),
-                    timeout=60.0
+                    timeout=300.0
                 )
             except asyncio.TimeoutError:
                 logger.error("Timeout calling ak.stock_zh_a_spot_em")
