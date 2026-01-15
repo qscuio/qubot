@@ -131,9 +131,13 @@ class StockScanner:
         await telegram_service.send_message(settings.STOCK_ALERT_CHANNEL, text, parse_mode="html")
         logger.info(f"Sent scan report with {sum(len(v) for v in signals.values())} signals")
     
-    async def scan_all_stocks(self, force: bool = False) -> Dict[str, List[Dict]]:
+    async def scan_all_stocks(self, force: bool = False, progress_callback=None) -> Dict[str, List[Dict]]:
         """Scan ALL stocks for all signal types.
         
+        Args:
+            force: Force full scan ignoring cache
+            progress_callback: Async callable(current, total) for progress updates
+            
         Uses local stock_history database ONLY for maximum speed.
         """
         logger.info("🔍 Starting scan_all_stocks (full scan)")
@@ -273,12 +277,18 @@ class StockScanner:
             checked = 0
             skipped_insufficient = 0
             total_codes = len(codes)
+            
             for i, code in enumerate(codes):
                 name = code_name_map.get(code, code)
                 
-                # Log progress every 100 stocks
-                if (i + 1) % 100 == 0:
+                # Report progress
+                if (i + 1) % 100 == 0 or (i + 1) == total_codes:
                      logger.info(f"Scanning progress: {i + 1}/{total_codes} stocks checked ({((i + 1) / total_codes * 100):.1f}%)")
+                     if progress_callback:
+                         try:
+                             await progress_callback(i + 1, total_codes)
+                         except Exception:
+                             pass
 
                 try:
                     # Use local data only

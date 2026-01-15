@@ -1520,11 +1520,34 @@ async def cmd_scan(message: types.Message, command: CommandObject = None, force:
         arg = command.args.strip().lower()
         force = arg in ("force", "f", "强制")
 
-    status = await message.answer(f"🔍 正在扫描... ({SIGNAL_NAMES.get(signal_type, '全部')})\n\n⏳ 请稍候")
+    status = await message.answer(f"🔍 正在扫描... ({SIGNAL_NAMES.get(signal_type, '全部')})\n\n⏳ 准备中...")
     sender = status
     
+    import time
+    last_update_time = time.time()
+    
+    async def on_progress(current, total):
+        nonlocal last_update_time
+        # Throttle updates: max one update every 1.5 seconds
+        now = time.time()
+        if now - last_update_time < 1.5 and current < total:
+            return
+            
+        last_update_time = now
+        percent = int(current / total * 100)
+        progress_bar = "▓" * (percent // 10) + "░" * (10 - (percent // 10))
+        
+        try:
+            await status.edit_text(
+                f"🔍 正在扫描... ({SIGNAL_NAMES.get(signal_type, '全部')})\n\n"
+                f"⏳ 进度: {percent}% ({current}/{total})\n"
+                f"{progress_bar}"
+            )
+        except Exception:
+            pass # Ignore message not modified errors
+
     try:
-        signals = await stock_scanner.scan_all_stocks(force=force)
+        signals = await stock_scanner.scan_all_stocks(force=force, progress_callback=on_progress)
         
         if not signals or all(len(v) == 0 for v in signals.values()):
             cache_note = "\n\n♻️ 使用缓存结果（数据库未更新）" if stock_scanner.last_scan_used_cache else ""
