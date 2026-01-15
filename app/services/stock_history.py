@@ -705,7 +705,7 @@ class StockHistoryService:
                 logger.info("Calling ak.stock_zh_a_spot_em()...")
                 df = await asyncio.wait_for(
                     asyncio.to_thread(ak.stock_zh_a_spot_em),
-                    timeout=120.0  # 2 minute timeout
+                    timeout=300.0  # 5 minute timeout
                 )
                 
                 if df is None or df.empty:
