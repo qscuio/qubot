@@ -798,6 +798,10 @@
         </div>
 
         <div class="group">
+            <button class="t-btn" id="btn-log" onclick="toggleLogScale()">Log</button>
+        </div>
+
+        <div class="group">
             <button class="t-btn active" onclick="setSubChart('VOL', this)">VOL</button>
             <button class="t-btn" onclick="setSubChart('MACD', this)">MACD</button>
             <button class="t-btn" onclick="setSubChart('KDJ', this)">KDJ</button>
@@ -1898,6 +1902,22 @@
             showSignals = !showSignals;
             document.getElementById('btn-signals').classList.toggle('active', showSignals);
             if (rawData.length) processData(); // Re-run markers
+        }
+
+        // --- Log Scale ---
+        let isLogScale = false;
+        function toggleLogScale() {
+            isLogScale = !isLogScale;
+            document.getElementById('btn-log').classList.toggle('active', isLogScale);
+
+            // Mode 0 = Normal, 1 = Logarithmic, 2 = Percentage, 3 = IndexedTo100
+            const mode = isLogScale ? 1 : 0;
+
+            if (chartMain) {
+                chartMain.priceScale('right').applyOptions({
+                    mode: mode
+                });
+            }
         }
 
         // --- Legends ---

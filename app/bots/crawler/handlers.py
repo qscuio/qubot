@@ -1114,7 +1114,7 @@ SIGNAL_NAMES = {
     "kuangbiao": "狂飙启动",
     "startup_candidate": "启动关注",
     "triple_bullish_shrink_breakout": "蓄势爆发",
-    "volume": "放量信号", 
+    "volume": "放量信号",
     "ma_bullish": "多头排列",
     "small_bullish_5": "底部5连阳",
     "volume_price": "量价启动",
@@ -1129,30 +1129,55 @@ SIGNAL_NAMES = {
     "pullback_ma20": "20日线回踩",
     "pullback_ma30": "30日线回踩",
     "pullback_ma5_weekly": "5周线回踩",
-    "multi_signal": "多信号共振"
+    "multi_signal": "🔥多信号共振",
+    # New Signal Names (Linear Regression Channel)
+    "support_linreg_5": "5日趋势支撑",
+    "support_linreg_10": "10日趋势支撑",
+    "support_linreg_20": "20日趋势支撑",
+    "breakout_linreg_5": "突破5日趋势",
+    "breakout_linreg_10": "突破10日趋势",
+    "breakout_linreg_20": "突破20日趋势",
+    "top_gainers_weekly": "周涨幅榜",
+    "top_gainers_half_month": "半月涨幅榜",
+    "top_gainers_monthly": "月涨幅榜",
+    "top_gainers_weekly_no_lu": "周涨幅(非连板)",
+    "top_gainers_half_month_no_lu": "半月涨幅(非连板)",
+    "top_gainers_monthly_no_lu": "月涨幅(非连板)",
 }
 
 SIGNAL_ICONS = {
-    "breakout": "🔺",
+    "breakout": "🚀",
     "kuangbiao": "🏎️",
-    "startup_candidate": "🚀",
-    "triple_bullish_shrink_breakout": "🔥",
+    "startup_candidate": "🛫",
+    "triple_bullish_shrink_breakout": "📈",
     "volume": "📊",
     "ma_bullish": "📈",
-    "small_bullish_5": "🌅",
-    "volume_price": "🚀",
-    "small_bullish_4": "🔥",
+    "small_bullish_5": "🐜",
+    "volume_price": "💰",
+    "small_bullish_4": "🐜",
     "small_bullish_4_1_bearish": "📉",
     "small_bullish_5_1_bearish": "📉",
     "small_bullish_3_1_bearish_1_bullish": "📈",
-    "small_bullish_5_in_7": "🌤️",
-    "strong_first_negative": "🟢",
+    "small_bullish_5_in_7": "📅",
+    "strong_first_negative": "💪",
     "broken_limit_up_streak": "💔",
-    "pullback_ma5": "↩️",
-    "pullback_ma20": "🔄",
-    "pullback_ma30": "🔙",
-    "pullback_ma5_weekly": "📅",
-    "multi_signal": "⭐"
+    "pullback_ma5": "5️⃣",
+    "pullback_ma20": "2️⃣",
+    "pullback_ma30": "3️⃣",
+    "pullback_ma5_weekly": "W️⃣",
+    "multi_signal": "🔥",
+    "support_linreg_5": "5️⃣",
+    "support_linreg_10": "🔟",
+    "support_linreg_20": "2️⃣",
+    "breakout_linreg_5": "⬆️",
+    "breakout_linreg_10": "⬆️",
+    "breakout_linreg_20": "⬆️",
+    "top_gainers_weekly": "🗓️",
+    "top_gainers_half_month": "🌓",
+    "top_gainers_monthly": "🌕",
+    "top_gainers_weekly_no_lu": "🗓️",
+    "top_gainers_half_month_no_lu": "🌓",
+    "top_gainers_monthly_no_lu": "🌕",
 }
 
 
@@ -1201,6 +1226,14 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
     builder.button(text="🔙 30日线回踩", callback_data="scanner:scan:pullback_ma30")
     builder.button(text="📅 5周线回踩", callback_data="scanner:scan:pullback_ma5_weekly")
+    
+    # New Trend Signals (LinReg)
+    builder.button(text="5️⃣ 5日趋势支撑", callback_data="scanner:scan:support_linreg_5")
+    builder.button(text="🔟 10日趋势支撑", callback_data="scanner:scan:support_linreg_10")
+    builder.button(text="2️⃣ 20日趋势支撑", callback_data="scanner:scan:support_linreg_20")
+    builder.button(text="⬆️ 突破5日趋势", callback_data="scanner:scan:breakout_linreg_5")
+    builder.button(text="⬆️ 突破10日趋势", callback_data="scanner:scan:breakout_linreg_10")
+    builder.button(text="⬆️ 突破20日趋势", callback_data="scanner:scan:breakout_linreg_20")
 
     # Top Gainers
     builder.button(text="🔥 每周涨幅", callback_data="scanner:scan:top_gainers_weekly")

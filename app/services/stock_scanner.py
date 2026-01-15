@@ -131,6 +131,9 @@ class StockScanner:
         await telegram_service.send_message(settings.STOCK_ALERT_CHANNEL, text, parse_mode="html")
         logger.info(f"Sent scan report with {sum(len(v) for v in signals.values())} signals")
     
+        self._last_scan_used_cache = False
+        self.is_scanning = False  # Scanning state lock
+    
     async def scan_all_stocks(self, force: bool = False, progress_callback=None) -> Dict[str, List[Dict]]:
         """Scan ALL stocks for all signal types.
         
@@ -140,10 +143,16 @@ class StockScanner:
             
         Uses local stock_history database ONLY for maximum speed.
         """
-        logger.info("🔍 Starting scan_all_stocks (full scan)")
-        self._last_scan_used_cache = False
-        
-        _, pd = self._get_libs()
+        if self.is_scanning:
+            logger.warn("⚠️ Scan already in progress, rejecting duplicate request")
+            return self._last_signals or {}
+
+        try:
+            self.is_scanning = True
+            logger.info("🔍 Starting scan_all_stocks (full scan)")
+            self._last_scan_used_cache = False
+            
+            _, pd = self._get_libs()
         if not pd:
             logger.error("❌ Failed to load pandas/akshare libraries")
             return {}
@@ -169,6 +178,14 @@ class StockScanner:
             "pullback_ma30": [],  # 30日线回踩
             "pullback_ma5_weekly": [],  # 5周线回踩
             "multi_signal": [],  # 多信号共振(满足≥3个信号)
+            # New Trend Signals (Linear Regression Channel)
+            "support_linreg_5": [],   # 5日趋势支撑
+            "support_linreg_10": [],  # 10日趋势支撑
+            "support_linreg_20": [],  # 20日趋势支撑
+            "breakout_linreg_5": [],   # 突破5日趋势
+            "breakout_linreg_10": [],  # 突破10日趋势
+            "breakout_linreg_20": [],  # 突破20日趋势
+            
             "top_gainers_weekly": [], # 每周涨幅前40
             "top_gainers_half_month": [], # 每半月涨幅前40
             "top_gainers_monthly": [], # 每月涨幅前40
@@ -352,6 +369,22 @@ class StockScanner:
                     if self._check_ma_pullback_weekly(hist, pd, 5):
                         signals["pullback_ma5_weekly"].append(stock_info)
                     
+                    # Trend Support Signals (LinReg)
+                    if self._check_linreg_support(hist, pd, 5):
+                        signals["support_linreg_5"].append(stock_info)
+                    if self._check_linreg_support(hist, pd, 10):
+                        signals["support_linreg_10"].append(stock_info)
+                    if self._check_linreg_support(hist, pd, 20):
+                        signals["support_linreg_20"].append(stock_info)
+
+                    # Trend Breakout Signals (LinReg)
+                    if self._check_linreg_breakout(hist, pd, 5):
+                        signals["breakout_linreg_5"].append(stock_info)
+                    if self._check_linreg_breakout(hist, pd, 10):
+                        signals["breakout_linreg_10"].append(stock_info)
+                    if self._check_linreg_breakout(hist, pd, 20):
+                        signals["breakout_linreg_20"].append(stock_info)
+                    
                     # Count how many signals this stock has
                     signal_count = sum([
                         stock_info in signals["breakout"],
@@ -495,6 +528,8 @@ class StockScanner:
             import traceback
             logger.error(traceback.format_exc())
             return signals
+        finally:
+            self.is_scanning = False
 
     
     async def _get_local_history_batch(self, codes: List[str]) -> Dict[str, any]:
@@ -1037,121 +1072,106 @@ class StockScanner:
                 return False
                 
             # 1. Check Strong Trend (Gain > 30% in last 20 days)
-            # Use T-1 close vs T-21 close to avoid today's drop affecting the calculation too much?
-            # Or just use Max High in last 20 days vs Min Low?
-            # Let's use: (Yesterday Close - Close 20 days ago) / Close 20 days ago > 0.3
-            close = hist['收盘']
-            close_yesterday = close.iloc[-2]
-            close_20_ago = close.iloc[-21]
+            # Use T-1 close vs T-21 close to avoid today's drop affecting    # --- Trend Channel (Linear Regression) Helpers ---
+    def _calculate_linreg_channel(self, series: pd.Series, window: int) -> Tuple[float, float, float, float]:
+        """Calculate Linear Regression Channel for the window.
+        
+        Returns:
+            (slope, current_mid, current_upper, current_lower)
+            slope: Slope of the regression line
+            current_mid: Regression value at the last point (predict)
+            current_upper: Mid + 2 * StdDev
+            current_lower: Mid - 2 * StdDev
+        """
+        try:
+            if len(series) < window:
+                return 0.0, 0.0, 0.0, 0.0
+                
+            y = series.iloc[-window:].values
+            x = np.arange(window)
             
-            if close_20_ago == 0:
+            # Linear Regression: y = mx + b
+            # Simple 1D-polyfit
+            slope, intercept = np.polyfit(x, y, 1)
+            
+            # Predicted values
+            y_pred = slope * x + intercept
+            
+            # Std Dev of residuals
+            residuals = y - y_pred
+            std_dev = np.std(residuals)
+            
+            current_mid = slope * (window - 1) + intercept
+            current_upper = current_mid + 2 * std_dev
+            current_lower = current_mid - 2 * std_dev
+            
+            return slope, current_mid, current_upper, current_lower
+        except:
+            return 0.0, 0.0, 0.0, 0.0
+
+    def _check_linreg_support(self, hist, pd, window: int) -> bool:
+        """Check for Support at Lower Rail of Linear Regression Channel.
+        
+        Conditions:
+        1. Trend is UP (Slope > 0).
+        2. Price Drops to Support: Low <= Lower Rail (or close to it).
+        3. Support Holds: Close > Lower Rail.
+        """
+        try:
+            if len(hist) < window + 2:
                 return False
                 
-            gain_pct = (close_yesterday - close_20_ago) / close_20_ago
-            if gain_pct <= 0.3:
+            close_series = hist['收盘']
+            slope, mid, upper, lower = self._calculate_linreg_channel(close_series, window)
+            
+            # 1. Trend Rising
+            # Slope tells us units of price change per day. 
+            # Needs to be significantly positive? Or just > 0. Let's say > 0.
+            if slope <= 0:
+                return False
+            
+            # 2. Touched Support
+            # Low <= Lower * 1.01 (within 1% above lower rail, or below it)
+            low_curr = hist['最低'].iloc[-1]
+            if low_curr > lower * 1.01:
                 return False
                 
-            # 2. Check First Negative
-            # Yesterday (T-1) must be Bullish
-            yesterday = hist.iloc[-2]
-            if yesterday['收盘'] <= yesterday['开盘']:
-                return False
-                
-            # Today (T) must be Bearish
-            today = hist.iloc[-1]
-            if today['收盘'] >= today['开盘']:
+            # 3. Held Support (Close > Lower)
+            # Actually if it breaks lower rail significantly it might be bad.
+            # But "Support" usually means it tested it.
+            close_curr = hist['收盘'].iloc[-1]
+            if close_curr < lower * 0.99: # Allow small breakdown but must be mostly above?
+                # If closed deep below, support broken
                 return False
                 
             return True
         except:
             return False
 
-    def _check_broken_limit_up_streak(self, hist, pd, code: str) -> bool:
-        """检查连板断板信号.
+    def _check_linreg_breakout(self, hist, pd, window: int) -> bool:
+        """Check for Breakout of Upper Rail of Linear Regression Channel.
         
-        条件:
-        1. 连板: T-2 和 T-1 都是涨停
-        2. 断板: T (今日) 不是涨停
+        Conditions:
+        1. Trend is UP.
+        2. Breakout Pressure: Close > Upper Rail.
         """
         try:
-            if len(hist) < 3:
+            if len(hist) < window + 2:
                 return False
                 
-            # Determine limit up threshold
-            limit_pct = 9.5
-            if code.startswith('688') or code.startswith('300'):
-                limit_pct = 19.5
-                
-            # Check T-2 and T-1 (Must be Limit Up)
-            for i in [-2, -3]:
-                row = hist.iloc[i]
-                prev_close = hist.iloc[i-1]['收盘']
-                if prev_close == 0:
-                    return False
-                
-                gain = (row['收盘'] - prev_close) / prev_close * 100
-                if gain < limit_pct:
-                    return False
+            close_series = hist['收盘']
+            slope, mid, upper, lower = self._calculate_linreg_channel(close_series, window)
             
-            # Check T (Today) - Must NOT be Limit Up
-            today = hist.iloc[-1]
-            yesterday_close = hist.iloc[-2]['收盘']
-            if yesterday_close == 0:
+            # 1. Trend Rising
+            if slope <= 0:
                 return False
+            
+            # 2. Breakout
+            close_curr = hist['收盘'].iloc[-1]
+            if close_curr > upper:
+                return True
                 
-            today_gain = (today['收盘'] - yesterday_close) / yesterday_close * 100
-            if today_gain >= limit_pct:
-                return False
-                
-            return True
-        except:
             return False
-
-
-
-    def _check_ma_pullback(self, hist, pd, window: int) -> bool:
-        """检查均线回踩确认信号.
-        
-        条件:
-        1. 均线趋势向上 (当前MA > 5日前MA)
-        2. 昨日(T-1): 阴线回踩 (收盘 < 开盘, 最低 <= MA*1.01, 收盘 > MA)
-        3. 今日(T): 阳线确认 (收盘 > 开盘)
-        """
-        try:
-            if len(hist) < window + 5:
-                return False
-                
-            close = hist['收盘']
-            ma = close.rolling(window).mean()
-            
-            ma_curr = ma.iloc[-1]
-            ma_prev_5 = ma.iloc[-6]
-            
-            # 1. Trend is rising
-            if ma_curr <= ma_prev_5:
-                return False
-                
-            # Get Yesterday (T-1) and Today (T)
-            today = hist.iloc[-1]
-            yesterday = hist.iloc[-2]
-            ma_yesterday = ma.iloc[-2]
-            
-            # 2. Yesterday: Bearish Pullback
-            # Bearish
-            if yesterday['收盘'] >= yesterday['开盘']:
-                return False
-            # Pullback (Low touches MA or within 1%)
-            if yesterday['最低'] > ma_yesterday * 1.01:
-                return False
-            # Support (Close above MA)
-            if yesterday['收盘'] <= ma_yesterday:
-                return False
-                
-            # 3. Today: Bullish Confirmation
-            if today['收盘'] <= today['开盘']:
-                return False
-                
-            return True
         except:
             return False
 
