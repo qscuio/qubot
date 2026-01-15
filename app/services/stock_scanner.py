@@ -120,8 +120,8 @@ class StockScanner:
             if not stocks:
                 continue
             
-            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈", "startup_candidate": "🚀", "kuangbiao": "🏎️", "triple_bullish_shrink_breakout": "🔥", "small_bullish_6_in_7": "🌟"}.get(signal_type, "•")
-            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列", "startup_candidate": "启动关注", "kuangbiao": "狂飙启动", "triple_bullish_shrink_breakout": "蓄势爆发", "small_bullish_6_in_7": "7天六阳"}.get(signal_type, signal_type)
+            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈", "startup_candidate": "🚀", "kuangbiao": "🏎️", "triple_bullish_shrink_breakout": "🔥", "small_bullish_6_in_7": "🌟", "strong_fanbao": "↩️"}.get(signal_type, "•")
+            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列", "startup_candidate": "启动关注", "kuangbiao": "狂飙启动", "triple_bullish_shrink_breakout": "蓄势爆发", "small_bullish_6_in_7": "7天六阳", "strong_fanbao": "强势反包"}.get(signal_type, signal_type)
             
             text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
             for s in stocks[:8]:
@@ -186,6 +186,7 @@ class StockScanner:
             "slow_bull_7": [],  # 7天慢牛
             "slow_bull_5": [],  # 5天慢牛
             "strong_first_negative": [],  # 强势股首阴
+            "strong_fanbao": [],  # 强势股反包
             "broken_limit_up_streak": [],  # 连板断板
             "pullback_ma5": [],  # 5日线回踩
             "pullback_ma20": [],  # 20日线回踩
@@ -377,6 +378,9 @@ class StockScanner:
                     if self._check_strong_first_negative(hist, pd):
                         signals["strong_first_negative"].append(stock_info)
 
+                    if self._check_strong_fanbao(hist, pd):
+                        signals["strong_fanbao"].append(stock_info)
+
                     if self._check_broken_limit_up_streak(hist, pd, code):
                         signals["broken_limit_up_streak"].append(stock_info)
 
@@ -427,6 +431,7 @@ class StockScanner:
                         stock_info in signals["slow_bull_7"],
                         stock_info in signals["slow_bull_5"],
                         stock_info in signals["strong_first_negative"],
+                        stock_info in signals["strong_fanbao"],
                         stock_info in signals["broken_limit_up_streak"],
                         stock_info in signals["pullback_ma5"],
                         stock_info in signals["pullback_ma20"],
@@ -1699,6 +1704,65 @@ class StockScanner:
             return total_gain <= 0.20
             
         except Exception:
+            return False
+            
+    def _check_strong_fanbao(self, hist, pd) -> bool:
+        """检查强势股反包信号.
+        
+        条件:
+        1. 强势背景: 过去10天内(不含今日)有过涨停(>9.5%)
+        2. 昨日调整: 昨日收阴线 (收盘 < 开盘)
+        3. 今日反包: 今日收阳线，且收盘价 > 昨日开盘价 (实体反包)
+        4. 力度确认: 今日涨幅 > 3%
+        """
+        try:
+            if len(hist) < 11:
+                return False
+            
+            # Get data
+            today = hist.iloc[-1]
+            yesterday = hist.iloc[-2]
+            
+            # 1. Check Strong Context (Limit Up in last 10 days excluding today)
+            # Look at T-10 to T-1
+            past_10 = hist.iloc[-12:-1] # T-1 is at index -2. -12 to -2 covers 10 days before today.
+            if len(past_10) < 2:
+                return False
+                
+            has_limit_up = False
+            for i in range(1, len(past_10)):
+                curr = past_10.iloc[i]
+                prev = past_10.iloc[i-1]
+                if prev['收盘'] > 0:
+                    pct = (curr['收盘'] - prev['收盘']) / prev['收盘']
+                    if pct > 0.095:
+                        has_limit_up = True
+                        break
+            
+            if not has_limit_up:
+                return False
+            
+            # 2. Yesterday Correction (Green Candle)
+            if yesterday['收盘'] >= yesterday['开盘']:
+                return False
+                
+            # 3. Today Fanbao (Red Candle + Engulf Body)
+            if today['收盘'] <= today['开盘']:
+                return False
+            
+            # Close > Yesterday Open (Body Engulfing)
+            if today['收盘'] <= yesterday['开盘']:
+                return False
+                
+            # 4. Strength Confirmation (> 3%)
+            prev_close = yesterday['收盘']
+            if prev_close > 0:
+                pct_change = (today['收盘'] - prev_close) / prev_close
+                if pct_change < 0.03:
+                    return False
+            
+            return True
+        except:
             return False
 
 
