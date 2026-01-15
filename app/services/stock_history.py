@@ -96,6 +96,21 @@ class StockHistoryService:
                 f"Found {result['total_records']:,} records: {db_stock_count} stocks, "
                 f"from {result['min_date']} to {result['max_date']}"
             )
+            
+            # Optimization: Check if stock_info is already updated today to avoid slow AkShare call
+            try:
+                info_stats = await db.pool.fetchrow("""
+                    SELECT COUNT(*) as count, MAX(updated_at) as last_update 
+                    FROM stock_info
+                """)
+                if info_stats and info_stats['count'] > 4000:
+                    last_update = info_stats['last_update']
+                    today = china_today()
+                    if last_update and last_update.date() == today:
+                        logger.info(f"✅ Stock list is up to date (Updated: {last_update}), skipping initialization check")
+                        return
+            except Exception as e:
+                logger.warn(f"Failed to check stock_info stats: {e}")
         
         # Get all current A-share stock codes
         all_codes = await self.get_all_stock_codes()
@@ -438,15 +453,13 @@ class StockHistoryService:
 
         try:
             # Get current stock list
-            logger.info("Calling ak.stock_zh_a_spot_em with 30s timeout...")
+            logger.info("Calling ak.stock_zh_a_spot_em (no timeout)...")
             try:
-                df = await asyncio.wait_for(
-                    asyncio.to_thread(ak.stock_zh_a_spot_em),
-                    timeout=30.0
-                )
-            except asyncio.TimeoutError:
-                logger.error("Timeout while fetching stock list (30s exceeded)")
-                return []
+                # User requested no timeout for this critical initiation step
+                df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+            except Exception as e:
+                logger.error(f"Error calling stock_zh_a_spot_em: {e}")
+                raise e
             
             if df is None or df.empty:
                 logger.error("Failed to fetch stock list: stock_zh_a_spot_em returned None or empty")
