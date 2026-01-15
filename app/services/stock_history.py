@@ -558,11 +558,27 @@ class StockHistoryService:
             
             # Column mapping from akshare
             # 日期, 开盘, 收盘, 最高, 最低, 成交量, 成交额, 振幅, 涨跌幅, 涨跌额, 换手率
+            
+            from app.core.timezone import china_today, china_now
+            today = china_today()
+            now = china_now()
+            is_pre_market = now.time() < datetime.strptime("09:30", "%H:%M").time()
+            
             records = []
             for _, row in df.iterrows():
+                date_val = pd.to_datetime(row['日期']).date()
+                
+                # Validation: Skip future dates
+                if date_val > today:
+                    continue
+                
+                # Validation: Skip today's data if pre-market (09:30)
+                if date_val == today and is_pre_market:
+                    continue
+                
                 record = (
                     code,
-                    pd.to_datetime(row['日期']).date(),
+                    date_val,
                     float(row.get('开盘', 0)),
                     float(row.get('最高', 0)),
                     float(row.get('最低', 0)),
