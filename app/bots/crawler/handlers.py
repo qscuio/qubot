@@ -1491,11 +1491,23 @@ async def cmd_dbsync(message: types.Message, bot: Bot):
         last_time = [0.0]  # Use list for mutable closure
         async def progress_cb(stage: str, current: int, total: int, msg: str):
             now = time.time()
-            if now - last_time[0] < 5 and current < total:
-                return  # Rate limit: at most once per 5 seconds
+            if now - last_time[0] < 1.5 and current < total:
+                return  # Rate limit: at most once per 1.5 seconds
             last_time[0] = now
+            
+            # Calculate percentage and bar
+            percent = int(current / total * 100) if total > 0 else 0
+            progress_bar = "▓" * (percent // 10) + "░" * (10 - (percent // 10))
+            
+            # Format message with bar
+            formatted_msg = (
+                f"{msg}\n"
+                f"⏳ 进度: {percent}% ({current}/{total})\n"
+                f"{progress_bar}"
+            )
+            
             try:
-                await msg_obj.edit_text(msg, parse_mode="HTML")
+                await msg_obj.edit_text(formatted_msg, parse_mode="HTML")
             except Exception:
                 pass
         return progress_cb
@@ -1522,11 +1534,23 @@ async def cb_db_sync(callback: types.CallbackQuery, bot: Bot):
         last_time = [0.0]
         async def progress_cb(stage: str, current: int, total: int, msg: str):
             now = time.time()
-            if now - last_time[0] < 5 and current < total:
+            if now - last_time[0] < 1.5 and current < total:
                 return
             last_time[0] = now
+            
+            # Calculate percentage and bar
+            percent = int(current / total * 100) if total > 0 else 0
+            progress_bar = "▓" * (percent // 10) + "░" * (10 - (percent // 10))
+            
+            # Format message with bar
+            formatted_msg = (
+                f"{msg}\n"
+                f"⏳ 进度: {percent}% ({current}/{total})\n"
+                f"{progress_bar}"
+            )
+            
             try:
-                await msg_obj.edit_text(msg, parse_mode="HTML")
+                await msg_obj.edit_text(formatted_msg, parse_mode="HTML")
             except Exception:
                 pass
         return progress_cb
