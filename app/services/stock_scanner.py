@@ -117,8 +117,8 @@ class StockScanner:
             if not stocks:
                 continue
             
-            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈", "startup_candidate": "🚀", "kuangbiao": "🏎️"}.get(signal_type, "•")
-            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列", "startup_candidate": "启动关注", "kuangbiao": "狂飙启动"}.get(signal_type, signal_type)
+            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈", "startup_candidate": "🚀", "kuangbiao": "🏎️", "triple_bullish_shrink_breakout": "🔥"}.get(signal_type, "•")
+            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列", "startup_candidate": "启动关注", "kuangbiao": "狂飙启动", "triple_bullish_shrink_breakout": "蓄势爆发"}.get(signal_type, signal_type)
             
             text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
             for s in stocks[:8]:
@@ -147,6 +147,7 @@ class StockScanner:
         signals = {
             "breakout": [],
             "kuangbiao": [], # 狂飙信号 (ScoreA + ScoreB)
+            "triple_bullish_shrink_breakout": [], # 三阳一缩一放
             "volume": [],
             "ma_bullish": [],
             "small_bullish_5": [],  # 底部连续5个小阳线
@@ -308,6 +309,9 @@ class StockScanner:
                     if self._check_kuangbiao(hist, pd, stock_info):
                         signals["kuangbiao"].append(stock_info)
 
+                    if self._check_triple_bullish_shrink_breakout(hist, pd):
+                        signals["triple_bullish_shrink_breakout"].append(stock_info)
+
                     if self._check_startup_candidate(hist, pd):
                         signals["startup_candidate"].append(stock_info)
 
@@ -353,6 +357,7 @@ class StockScanner:
                         stock_info in signals["volume_price"],
                         stock_info in signals["startup_candidate"],
                         stock_info in signals["kuangbiao"],
+                        stock_info in signals["triple_bullish_shrink_breakout"],
                         stock_info in signals["small_bullish_4"],
                         stock_info in signals["small_bullish_4_1_bearish"],
                         stock_info in signals["small_bullish_5_1_bearish"],
@@ -1185,6 +1190,90 @@ class StockScanner:
                 stock_info["score_b"] = score_b
                 return True
             return False
+        except:
+            return False
+
+    def _check_triple_bullish_shrink_breakout(self, hist, pd) -> bool:
+        """检查“三阳一缩一放”信号.
+        
+        模式:
+        1. T-4 到 T-2 (3天): 连续小阳线 (0.5% < 实体 < 4%)
+        2. T-1 (1天): 缩量小阴或十字星 (Vol < T-2 Vol)
+        3. T (今日): 放量实体突破 (Vol > T-1 Vol * 1.5, 收盘 > T-1最高, 实体饱满)
+        """
+        try:
+            if len(hist) < 6:
+                return False
+                
+            # Data slices
+            last_5 = hist.tail(5)
+            # Days: [-5, -4, -3, -2, -1] -> [T-4, T-3, T-2, T-1, T] in array indices 0..4
+            
+            # 1. Check T-4, T-3, T-2 (Indices 0, 1, 2) - Small Bullish
+            for i in range(3):
+                row = last_5.iloc[i]
+                op = row['开盘']
+                cl = row['收盘']
+                
+                # Must be Bullish
+                if cl <= op: return False
+                
+                # Body Check (0.5% - 4%)
+                body_pct = (cl - op) / op * 100
+                if not (0.5 <= body_pct <= 4.0):
+                    return False
+            
+            # 2. Check T-1 (Index 3) - Shrink + Small Bearish/Doji
+            t_minus_1 = last_5.iloc[3]
+            t_minus_2 = last_5.iloc[2]
+            
+            # Shrink Volume: Vol(T-1) < Vol(T-2)
+            if t_minus_1['成交量'] >= t_minus_2['成交量']:
+                return False
+                
+            # Candle Shape: Small Bearish OR Doji
+            op_1 = t_minus_1['开盘']
+            cl_1 = t_minus_1['收盘']
+            body_pct_1 = abs(cl_1 - op_1) / op_1 * 100
+            
+            is_bearish = cl_1 < op_1
+            is_doji = body_pct_1 < 0.5
+            
+            # Condition: Must be (Small Bearish) OR (Doji)
+            # If Bearish, body should not be massive (e.g. < 3%)
+            if is_bearish and body_pct_1 > 3.0:
+                return False
+            # If Bullish, MUST be Doji
+            if not is_bearish and not is_doji:
+                return False
+
+            # 3. Check T (Index 4) - Volume Surge + Breakout
+            t_now = last_5.iloc[4]
+            op_0 = t_now['开盘']
+            cl_0 = t_now['收盘']
+            vol_0 = t_now['成交量']
+            vol_1 = t_minus_1['成交量']
+            
+            # Bullish
+            if cl_0 <= op_0: return False
+            
+            # Volume Surge (vs T-1)
+            if vol_0 <= vol_1 * 1.5:
+                # Relax slightly if it's huge breakout? No, strict for now.
+                return False
+                
+            # Breakout T-1 High (to ensure we recover the wash)
+            if cl_0 <= t_minus_1['最高']:
+                return False
+                
+            # Solid Body? (Body > 1.5% or Body/Range > 0.5)
+            # Let's say Body > 1.5% to show strength
+            body_pct_0 = (cl_0 - op_0) / op_0 * 100
+            if body_pct_0 < 1.5:
+                return False
+                
+            return True
+
         except:
             return False
 
