@@ -134,14 +134,9 @@ class StockScanner:
         self._last_scan_used_cache = False
         self.is_scanning = False  # Scanning state lock
     
-    async def scan_all_stocks(self, force: bool = False, progress_callback=None) -> Dict[str, List[Dict]]:
-        """Scan ALL stocks for all signal types.
-        
-        Args:
-            force: Force full scan ignoring cache
-            progress_callback: Async callable(current, total) for progress updates
-            
-        Uses local stock_history database ONLY for maximum speed.
+    async def scan_all_stocks(self, force: bool = False, progress_callback = None) -> Dict[str, List[Dict]]:
+        """
+        Scan all stocks for signals. Wrapper for locking/error handling.
         """
         if self.is_scanning:
             logger.warn("⚠️ Scan already in progress, rejecting duplicate request")
@@ -152,7 +147,20 @@ class StockScanner:
             logger.info("🔍 Starting scan_all_stocks (full scan)")
             self._last_scan_used_cache = False
             
-            _, pd = self._get_libs()
+            return await self._scan_impl(force=force, progress_callback=progress_callback)
+            
+        except Exception as e:
+            logger.error(f"❌ Scan failed with error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return self._last_signals or {}
+        finally:
+            self.is_scanning = False
+
+    async def _scan_impl(self, force: bool = False, progress_callback = None) -> Dict[str, List[Dict]]:
+        """Internal scan implementation."""
+        # Note: lock and try/finally are handled in the wrapper
+        _, pd = self._get_libs()
         if not pd:
             logger.error("❌ Failed to load pandas/akshare libraries")
             return {}
@@ -524,12 +532,8 @@ class StockScanner:
             return signals
             
         except Exception as e:
-            logger.error(f"❌ Scan failed with error: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.error(f"❌ Scan implementation error: {e}")
             return signals
-        finally:
-            self.is_scanning = False
 
     
     async def _get_local_history_batch(self, codes: List[str]) -> Dict[str, any]:
@@ -1071,8 +1075,121 @@ class StockScanner:
             if len(hist) < 21:
                 return False
                 
-            # 1. Check Strong Trend (Gain > 30% in last 20 days)
-            # Use T-1 close vs T-21 close to avoid today's drop affecting    # --- Trend Channel (Linear Regression) Helpers ---
+            # Use T-1 close vs T-21 close to avoid today's drop affecting calculation
+            close = hist['收盘']
+            close_yesterday = close.iloc[-2]
+            close_20_ago = close.iloc[-21]
+            
+            if close_20_ago == 0:
+                return False
+                
+            gain_pct = (close_yesterday - close_20_ago) / close_20_ago
+            if gain_pct <= 0.3:
+                return False
+                
+            # 2. Check First Negative
+            # Yesterday (T-1) must be Bullish
+            yesterday = hist.iloc[-2]
+            if yesterday['收盘'] <= yesterday['开盘']:
+                return False
+                
+            # Today (T) must be Bearish
+            today = hist.iloc[-1]
+            if today['收盘'] >= today['开盘']:
+                return False
+                
+            return True
+        except:
+            return False
+
+    def _check_broken_limit_up_streak(self, hist, pd, code: str) -> bool:
+        """检查连板断板信号.
+        
+        条件:
+        1. 连板: T-2 和 T-1 都是涨停
+        2. 断板: T (今日) 不是涨停
+        """
+        try:
+            if len(hist) < 3:
+                return False
+                
+            # Determine limit up threshold
+            limit_pct = 9.5
+            if code.startswith('688') or code.startswith('300'):
+                limit_pct = 19.5
+                
+            # Check T-2 and T-1 (Must be Limit Up)
+            for i in [-2, -3]:
+                row = hist.iloc[i]
+                prev_close = hist.iloc[i-1]['收盘']
+                if prev_close == 0:
+                    return False
+                
+                gain = (row['收盘'] - prev_close) / prev_close * 100
+                if gain < limit_pct:
+                    return False
+            
+            # Check T (Today) - Must NOT be Limit Up
+            today = hist.iloc[-1]
+            yesterday_close = hist.iloc[-2]['收盘']
+            if yesterday_close == 0:
+                return False
+                
+            today_gain = (today['收盘'] - yesterday_close) / yesterday_close * 100
+            if today_gain >= limit_pct:
+                return False
+                
+            return True
+        except:
+            return False
+
+    def _check_ma_pullback(self, hist, pd, window: int) -> bool:
+        """检查均线回踩确认信号.
+        
+        条件:
+        1. 均线趋势向上 (当前MA > 5日前MA)
+        2. 昨日(T-1): 阴线回踩 (收盘 < 开盘, 最低 <= MA*1.01, 收盘 > MA)
+        3. 今日(T): 阳线确认 (收盘 > 开盘)
+        """
+        try:
+            if len(hist) < window + 5:
+                return False
+                
+            close = hist['收盘']
+            ma = close.rolling(window).mean()
+            
+            ma_curr = ma.iloc[-1]
+            ma_prev_5 = ma.iloc[-6]
+            
+            # 1. Trend is rising
+            if ma_curr <= ma_prev_5:
+                return False
+                
+            # Get Yesterday (T-1) and Today (T)
+            today = hist.iloc[-1]
+            yesterday = hist.iloc[-2]
+            ma_yesterday = ma.iloc[-2]
+            
+            # 2. Yesterday: Bearish Pullback
+            # Bearish
+            if yesterday['收盘'] >= yesterday['开盘']:
+                return False
+            # Pullback (Low touches MA or within 1%)
+            if yesterday['最低'] > ma_yesterday * 1.01:
+                return False
+            # Support (Close above MA)
+            if yesterday['收盘'] <= ma_yesterday:
+                return False
+                
+            # 3. Today: Bullish Confirmation
+            if today['收盘'] <= today['开盘']:
+                return False
+                
+            return True
+        except:
+            return False
+
+    # --- Trend Channel (Linear Regression) Helpers ---
     def _calculate_linreg_channel(self, series: pd.Series, window: int) -> Tuple[float, float, float, float]:
         """Calculate Linear Regression Channel for the window.
         
