@@ -15,6 +15,7 @@ import asyncio
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional, Callable
 import time
+import random
 
 from app.core.logger import Logger
 from app.core.database import db
@@ -453,10 +454,16 @@ class StockHistoryService:
 
         try:
             # Get current stock list
-            logger.info("Calling ak.stock_zh_a_spot_em (no timeout)...")
+            logger.info("Calling ak.stock_zh_a_spot_em (60s timeout)...")
             try:
-                # User requested no timeout for this critical initiation step
-                df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+                # Add timeout to prevent hanging indefinitely
+                df = await asyncio.wait_for(
+                    asyncio.to_thread(ak.stock_zh_a_spot_em),
+                    timeout=60.0
+                )
+            except asyncio.TimeoutError:
+                logger.error("Timeout calling ak.stock_zh_a_spot_em")
+                return []
             except Exception as e:
                 logger.error(f"Error calling stock_zh_a_spot_em: {e}")
                 raise e
@@ -573,8 +580,8 @@ class StockHistoryService:
         except Exception as e:
             raise e
     
-    async def update_all_stocks(self, progress_callback: Optional[Callable] = None):
-        """Daily update - fetch today's data for all stocks.
+    async def _update_all_stocks_concurrent(self, progress_callback: Optional[Callable] = None):
+        """Fallback: Concurrent update - fetch today's data for all stocks individually.
         
         Args:
             progress_callback: Optional async callback(stage, current, total, message)
@@ -584,58 +591,207 @@ class StockHistoryService:
             return
         
         today = china_today()
-        
-        # Skip weekends
-        if today.weekday() >= 5:
-            logger.info("Weekend, skipping daily update")
-            return
-        
         date_str = today.strftime("%Y%m%d")
-        logger.info(f"Starting daily update for {date_str}")
         
         # Get all stock codes
         codes = await self.get_all_stock_codes()
         if not codes:
             return
         
+        # Concurrency control
+        sem = asyncio.Semaphore(5)
+        
         success_count = 0
         error_count = 0
+        processed_count = 0
         last_progress_time = time.time()
         
-        for i, code in enumerate(codes):
-            try:
-                records = await self._fetch_and_save_history(code, date_str, date_str)
-                if records > 0:
-                    success_count += 1
-                
-                # Progress logging
-                if (i + 1) % 200 == 0:
-                    logger.info(f"Daily update progress: {i + 1}/{len(codes)} stocks")
-                
-                # Progress callback (every 10 seconds)
-                if progress_callback and time.time() - last_progress_time >= 10:
-                    last_progress_time = time.time()
-                    pct = int((i + 1) / len(codes) * 100)
-                    await progress_callback("数据同步", i + 1, len(codes), f"⏳ 数据同步中: {i+1}/{len(codes)} ({pct}%)")
-                
-                # Rate limiting
-                await asyncio.sleep(0.2)
-                
-            except Exception as e:
-                error_count += 1
-                if error_count <= 5:
-                    logger.warn(f"Failed to update {code}: {e}")
+        async def update_one(code):
+            nonlocal success_count, error_count, processed_count, last_progress_time
+            async with sem:
+                # Random sleep to prevent IP blocking
+                await asyncio.sleep(random.uniform(0.5, 1.5))
+                try:
+                    records = await self._fetch_and_save_history(code, date_str, date_str)
+                    if records > 0:
+                        success_count += 1
+                except Exception as e:
+                    error_count += 1
+                    if error_count <= 5:
+                        logger.warn(f"Failed to update {code}: {e}")
+                finally:
+                    processed_count += 1
+                    
+                    # Progress logging (every 200)
+                    if processed_count % 200 == 0:
+                        logger.info(f"Daily update progress: {processed_count}/{len(codes)} stocks")
+                    
+                    # Progress callback (every 2 seconds or 100 items)
+                    if progress_callback and (time.time() - last_progress_time >= 2 or processed_count % 100 == 0):
+                        last_progress_time = time.time()
+                        pct = int(processed_count / len(codes) * 100)
+                        try:
+                            await progress_callback("数据同步", processed_count, len(codes), f"⏳ 数据同步中 (Fallback): {processed_count}/{len(codes)} ({pct}%)")
+                        except:
+                            pass
+
+        # Run concurrently
+        tasks = [update_one(code) for code in codes]
+        await asyncio.gather(*tasks)
         
         # Invalidate cache after update
         await self.invalidate_stock_cache()
         
         # Final progress notification
         if progress_callback:
-            await progress_callback("数据同步", len(codes), len(codes), f"✅ 同步完成: {success_count}/{len(codes)} 只股票")
+            await progress_callback("数据同步", len(codes), len(codes), f"✅ 同步完成 (Fallback): {success_count}/{len(codes)} 只股票")
         
         logger.info(
-            f"✅ Daily update complete: {success_count}/{len(codes)} stocks updated"
+            f"✅ Daily update complete (Fallback): {success_count}/{len(codes)} stocks updated"
         )
+
+    async def update_all_stocks(self, progress_callback: Optional[Callable] = None):
+        """Daily update - fetch today's data for all stocks.
+        
+        Tries batch update first, falls back to concurrent individual update.
+        """
+        today = china_today()
+        # Skip weekends
+        if today.weekday() >= 5:
+            logger.info("Weekend, skipping daily update")
+            return
+
+        # Try batch update first
+        success = await self.update_all_stocks_batch(progress_callback)
+        
+        if success:
+            return
+            
+        # Fallback to concurrent update
+        logger.warn("Batch update failed, falling back to concurrent individual update...")
+        if progress_callback:
+            await progress_callback("数据同步", 0, 100, "⚠️ 批量更新失败，切换到备用模式...")
+            
+        await self._update_all_stocks_concurrent(progress_callback)
+    
+    async def update_all_stocks_batch(self, progress_callback: Optional[Callable] = None) -> bool:
+        """Batch update using ak.stock_zh_a_spot_em() - much faster.
+        
+        Returns:
+            bool: True if successful, False if failed (triggering fallback)
+        """
+        ak, pd = self._get_libs()
+        if not ak or not pd or not db.pool:
+            return False
+        
+        today = china_today()
+        date_str = today.strftime("%Y-%m-%d")
+        logger.info(f"Starting batch daily update for {date_str}")
+        
+        if progress_callback:
+            await progress_callback("数据同步", 0, 100, "⏳ 正在批量获取实时数据...")
+            
+        # Retry logic (3 attempts)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    logger.info(f"Retry attempt {attempt + 1}/{max_retries}...")
+                    if progress_callback:
+                        await progress_callback("数据同步", 0, 100, f"⏳ 正在重试 ({attempt + 1}/{max_retries})...")
+                    await asyncio.sleep(2 * attempt)  # Exponential backoff
+                
+                # Fetch all spot data with timeout
+                logger.info("Calling ak.stock_zh_a_spot_em()...")
+                df = await asyncio.wait_for(
+                    asyncio.to_thread(ak.stock_zh_a_spot_em),
+                    timeout=120.0  # 2 minute timeout
+                )
+                
+                if df is None or df.empty:
+                    logger.warn("Batch update returned empty data")
+                    continue
+                    
+                # Filter valid A-share stocks
+                df_filtered = df[
+                    ~df['名称'].str.contains('ST|退', na=False) &
+                    (df['代码'].str.match(r'^[036]'))
+                ].copy()
+                
+                total_stocks = len(df_filtered)
+                logger.info(f"Got {total_stocks} valid stocks from API")
+                
+                if progress_callback:
+                    await progress_callback("数据同步", 10, 100, f"⏳ 获取到 {total_stocks} 只股票，准备入库...")
+                
+                # Prepare records for bulk insert
+                records = []
+                for _, row in df_filtered.iterrows():
+                    try:
+                        code = str(row['代码'])
+                        close = float(row['最新价'])
+                        open_price = float(row['今开'])
+                        high = float(row['最高'])
+                        low = float(row['最低'])
+                        volume = float(row['成交量'])
+                        turnover = float(row['成交额'])
+                        change_pct = float(row['涨跌幅'])
+                        turnover_rate = float(row['换手率']) if pd.notna(row['换手率']) else 0.0
+                        amplitude = float(row['振幅']) if pd.notna(row['振幅']) else 0.0
+                        
+                        if close <= 0 or open_price <= 0:
+                            continue
+                            
+                        records.append((
+                            code, today, open_price, high, low, close, 
+                            volume, turnover, change_pct, turnover_rate, amplitude
+                        ))
+                    except Exception:
+                        continue
+                
+                if not records:
+                    logger.warn("No valid records to insert")
+                    return False
+                    
+                # Bulk insert
+                logger.info(f"Inserting {len(records)} records...")
+                if progress_callback:
+                    await progress_callback("数据同步", 50, 100, f"⏳ 正在写入 {len(records)} 条数据...")
+                    
+                async with db.pool.acquire() as conn:
+                    await conn.executemany("""
+                        INSERT INTO stock_history (
+                            code, date, open, high, low, close, 
+                            volume, turnover, change_pct, turnover_rate, amplitude
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                        ON CONFLICT (code, date) DO UPDATE SET
+                            open = EXCLUDED.open,
+                            high = EXCLUDED.high,
+                            low = EXCLUDED.low,
+                            close = EXCLUDED.close,
+                            volume = EXCLUDED.volume,
+                            turnover = EXCLUDED.turnover,
+                            change_pct = EXCLUDED.change_pct,
+                            turnover_rate = EXCLUDED.turnover_rate,
+                            amplitude = EXCLUDED.amplitude
+                    """, records)
+                    
+                logger.info(f"✅ Batch update complete: {len(records)} records inserted")
+                
+                # Invalidate cache
+                await self.invalidate_stock_cache()
+                
+                if progress_callback:
+                    await progress_callback("数据同步", 100, 100, f"✅ 批量同步完成: {len(records)} 只股票")
+                
+                return True
+                
+            except Exception as e:
+                logger.error(f"Batch update attempt {attempt + 1} failed: {e}")
+                
+        # All retries failed
+        logger.error("All batch update attempts failed")
+        return False
     
     async def sync_with_integrity_check(self, progress_callback: Optional[Callable] = None):
         """Sync data with integrity check - fills in missing 7-day data first.
@@ -750,45 +906,59 @@ class StockHistoryService:
         today = china_today()
         end_str = today.strftime("%Y%m%d")
         
+        today = china_today()
+        end_str = today.strftime("%Y%m%d")
+        
+        # Concurrency control
+        sem = asyncio.Semaphore(5)
+        
         success_count = 0
         error_count = 0
+        processed_count = 0
         last_progress_time = time.time()
         
-        for i, stock_info in enumerate(stocks_to_fix):
+        async def fix_one(stock_info):
+            nonlocal success_count, error_count, processed_count, last_progress_time
             code = stock_info['code']
             start_date = stock_info['missing_from']
             start_str = start_date.strftime("%Y%m%d")
             
-            try:
-                records = await self._fetch_and_save_history(code, start_str, end_str)
-                if records > 0:
-                    success_count += 1
-                    # Log first few successes for debugging
-                    if success_count <= 3:
-                        logger.debug(f"✅ Fixed {code}: {records} records ({start_str} to {end_str})")
-                else:
-                    # Log first few empty responses for debugging
-                    empty_count = (i + 1) - success_count - error_count
-                    if empty_count <= 5:
-                        logger.debug(f"⚠️ No data for {code} ({start_str} to {end_str}) - may be suspended or new listing")
+            async with sem:
+                # Random sleep to prevent IP blocking
+                await asyncio.sleep(random.uniform(0.5, 1.5))
+                try:
+                    records = await self._fetch_and_save_history(code, start_str, end_str)
+                    if records > 0:
+                        success_count += 1
+                        # Log first few successes for debugging
+                        if success_count <= 3:
+                            logger.debug(f"✅ Fixed {code}: {records} records ({start_str} to {end_str})")
+                    else:
+                        pass # Silent fail for empty data
+                        
+                except Exception as e:
+                    error_count += 1
+                    if error_count <= 5:
+                        logger.warn(f"Failed to fix {code}: {e}")
+                finally:
+                    processed_count += 1
                     
-                # Progress logging every 50 stocks
-                if (i + 1) % 50 == 0:
-                    logger.info(f"🔧 Integrity fix progress: {i+1}/{len(stocks_to_fix)} ({success_count} fixed)")
-                
-                # Progress callback (every 10 seconds)
-                if progress_callback and time.time() - last_progress_time >= 10:
-                    last_progress_time = time.time()
-                    pct = int((i + 1) / len(stocks_to_fix) * 100)
-                    await progress_callback("完整性修复", i + 1, len(stocks_to_fix), f"🔧 修复中: {i+1}/{len(stocks_to_fix)} ({pct}%)")
-                
-                # Rate limiting
-                await asyncio.sleep(0.3)
-                
-            except Exception as e:
-                error_count += 1
-                if error_count <= 5:
-                    logger.warn(f"Failed to fix {code}: {e}")
+                    # Progress logging every 50 stocks
+                    if processed_count % 50 == 0:
+                        logger.info(f"🔧 Integrity fix progress: {processed_count}/{len(stocks_to_fix)} ({success_count} fixed)")
+                    
+                    # Progress callback (every 2 seconds)
+                    if progress_callback and (time.time() - last_progress_time >= 2 or processed_count % 50 == 0):
+                        last_progress_time = time.time()
+                        pct = int(processed_count / len(stocks_to_fix) * 100)
+                        try:
+                            await progress_callback("完整性修复", processed_count, len(stocks_to_fix), f"🔧 修复中: {processed_count}/{len(stocks_to_fix)} ({pct}%)")
+                        except:
+                            pass
+
+        # Run concurrently
+        tasks = [fix_one(info) for info in stocks_to_fix]
+        await asyncio.gather(*tasks)
         
         if progress_callback:
             await progress_callback("完整性修复", len(stocks_to_fix), len(stocks_to_fix), f"✅ 修复完成: {success_count}/{len(stocks_to_fix)} 只股票")

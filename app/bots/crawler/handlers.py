@@ -1507,9 +1507,14 @@ async def cmd_dbsync(message: types.Message, bot: Bot):
             )
             
             try:
-                await msg_obj.edit_text(formatted_msg, parse_mode="HTML")
-            except Exception:
-                pass
+                if formatted_msg != msg_obj.text:
+                    await msg_obj.edit_text(formatted_msg, parse_mode="HTML")
+            except Exception as e:
+                # Ignore "message is not modified" errors
+                if "message is not modified" in str(e).lower():
+                    pass
+                else:
+                    logger.error(f"Failed to update progress message: {e}")
         return progress_cb
     
     # Trigger sync with progress callback
@@ -1550,9 +1555,14 @@ async def cb_db_sync(callback: types.CallbackQuery, bot: Bot):
             )
             
             try:
-                await msg_obj.edit_text(formatted_msg, parse_mode="HTML")
-            except Exception:
-                pass
+                if formatted_msg != msg_obj.text:
+                    await msg_obj.edit_text(formatted_msg, parse_mode="HTML")
+            except Exception as e:
+                # Ignore "message is not modified" errors
+                if "message is not modified" in str(e).lower():
+                    pass
+                else:
+                    logger.error(f"Failed to update progress message: {e}")
         return progress_cb
     
     try:

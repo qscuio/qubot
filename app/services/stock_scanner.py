@@ -120,8 +120,8 @@ class StockScanner:
             if not stocks:
                 continue
             
-            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈", "startup_candidate": "🚀", "kuangbiao": "🏎️", "triple_bullish_shrink_breakout": "🔥"}.get(signal_type, "•")
-            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列", "startup_candidate": "启动关注", "kuangbiao": "狂飙启动", "triple_bullish_shrink_breakout": "蓄势爆发"}.get(signal_type, signal_type)
+            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈", "startup_candidate": "🚀", "kuangbiao": "🏎️", "triple_bullish_shrink_breakout": "🔥", "small_bullish_6_in_7": "🌟"}.get(signal_type, "•")
+            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列", "startup_candidate": "启动关注", "kuangbiao": "狂飙启动", "triple_bullish_shrink_breakout": "蓄势爆发", "small_bullish_6_in_7": "7天六阳"}.get(signal_type, signal_type)
             
             text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
             for s in stocks[:8]:
@@ -182,6 +182,7 @@ class StockScanner:
             "small_bullish_5_1_bearish": [],  # 五阳一阴
             "small_bullish_3_1_bearish_1_bullish": [],  # 三阳一阴一阳
             "small_bullish_5_in_7": [],  # 地位七天五阳
+            "small_bullish_6_in_7": [],  # 7天六阳
             "strong_first_negative": [],  # 强势股首阴
             "broken_limit_up_streak": [],  # 连板断板
             "pullback_ma5": [],  # 5日线回踩
@@ -361,6 +362,9 @@ class StockScanner:
 
                     if self._check_small_bullish_5_in_7(hist, pd):
                         signals["small_bullish_5_in_7"].append(stock_info)
+
+                    if self._check_small_bullish_6_in_7(hist, pd):
+                        signals["small_bullish_6_in_7"].append(stock_info)
 
                     if self._check_strong_first_negative(hist, pd):
                         signals["strong_first_negative"].append(stock_info)
@@ -644,6 +648,7 @@ class StockScanner:
         1. 最近5日都是阳线 (收盘 > 开盘)
         2. 每日涨幅在0.5%-3%之间 (小阳线)
         3. 股价在近20日低位 (底部)
+        4. 收盘价一天比一天高
         """
         try:
             # Get last 5 days
@@ -651,6 +656,8 @@ class StockScanner:
             
             if len(last_5) < 5:
                 return False
+            
+            prev_close = 0
             
             # Check all 5 days are bullish (close > open) and small body
             for i in range(5):
@@ -661,6 +668,11 @@ class StockScanner:
                 # Must be bullish
                 if close <= open_price:
                     return False
+                
+                # Must be higher than previous day (except first day of sequence)
+                if i > 0 and close <= prev_close:
+                    return False
+                prev_close = close
                 
                 # Calculate body percentage
                 body_pct = (close - open_price) / open_price * 100
@@ -681,6 +693,39 @@ class StockScanner:
                 return position < 0.4
             
             return False
+        except:
+            return False
+
+    def _check_small_bullish_6_in_7(self, hist, pd) -> bool:
+        """检查7天6阳信号.
+        
+        条件:
+        1. 最近7天内至少有6根阳线
+        2. 阳线实体适中
+        3. 整体趋势向上
+        """
+        try:
+            # Get last 7 days
+            last_7 = hist.tail(7)
+            
+            if len(last_7) < 7:
+                return False
+            
+            bullish_count = 0
+            
+            for i in range(7):
+                row = last_7.iloc[i]
+                if row['收盘'] > row['开盘']:
+                    bullish_count += 1
+            
+            if bullish_count < 6:
+                return False
+                
+            # Check trend (current close > close 7 days ago)
+            if last_7['收盘'].iloc[-1] <= last_7['收盘'].iloc[0]:
+                return False
+                
+            return True
         except:
             return False
 
@@ -822,6 +867,8 @@ class StockScanner:
             if len(last_4) < 4:
                 return False
             
+            prev_close = 0
+            
             # Check all 4 days are small bullish
             for i in range(4):
                 row = last_4.iloc[i]
@@ -831,6 +878,11 @@ class StockScanner:
                 # Must be bullish
                 if close <= open_price:
                     return False
+                
+                # Must be higher than previous day (except first day of sequence)
+                if i > 0 and close <= prev_close:
+                    return False
+                prev_close = close
                     
                 # Calculate body percentage
                 body_pct = (close - open_price) / open_price * 100
@@ -869,6 +921,8 @@ class StockScanner:
             if len(last_5) < 5:
                 return False
             
+            prev_close = 0
+            
             # Check first 4 days are small bullish
             for i in range(4):
                 row = last_5.iloc[i]
@@ -878,6 +932,11 @@ class StockScanner:
                 # Must be bullish
                 if close <= open_price:
                     return False
+                
+                # Must be higher than previous day (except first day of sequence)
+                if i > 0 and close <= prev_close:
+                    return False
+                prev_close = close
                     
                 # Calculate body percentage
                 body_pct = (close - open_price) / open_price * 100
@@ -921,6 +980,8 @@ class StockScanner:
             if len(last_6) < 6:
                 return False
             
+            prev_close = 0
+            
             # Check first 5 days are small bullish
             for i in range(5):
                 row = last_6.iloc[i]
@@ -930,6 +991,11 @@ class StockScanner:
                 # Must be bullish
                 if close <= open_price:
                     return False
+                
+                # Must be higher than previous day (except first day of sequence)
+                if i > 0 and close <= prev_close:
+                    return False
+                prev_close = close
                     
                 # Calculate body percentage
                 body_pct = (close - open_price) / open_price * 100
@@ -973,6 +1039,8 @@ class StockScanner:
             if len(last_5) < 5:
                 return False
             
+            prev_close = 0
+            
             # 1. Check first 3 days are small bullish
             for i in range(3):
                 row = last_5.iloc[i]
@@ -981,6 +1049,18 @@ class StockScanner:
                 
                 # Must be bullish
                 if close <= open_price:
+                    return False
+                
+                # Must be higher than previous day (except first day of sequence)
+                if i > 0 and close <= prev_close:
+                    return False
+                prev_close = close
+                    
+                # Calculate body percentage
+                body_pct = (close - open_price) / open_price * 100
+                
+                # Small bullish: 0.5% - 3%
+                if body_pct < 0.5 or body_pct > 3.0:
                     return False
                     
                 # Calculate body percentage
