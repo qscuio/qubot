@@ -1128,6 +1128,7 @@ SIGNAL_NAMES = {
     "slow_bull_7": "7天慢牛",
     "slow_bull_5": "5天慢牛",
     "strong_first_negative": "强势股首阴",
+    "strong_fanbao": "强势股反包",
     "broken_limit_up_streak": "连板断板",
     "pullback_ma5": "5日线回踩",
     "pullback_ma20": "20日线回踩",
@@ -1231,6 +1232,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="🐂 7天慢牛", callback_data="scanner:scan:slow_bull_7")
     builder.button(text="🐂 5天慢牛", callback_data="scanner:scan:slow_bull_5")
     builder.button(text="🟢 强势股首阴", callback_data="scanner:scan:strong_first_negative")
+    builder.button(text="↩️ 强势股反包", callback_data="scanner:scan:strong_fanbao")
     builder.button(text="💔 连板断板", callback_data="scanner:scan:broken_limit_up_streak")
     builder.button(text="↩️ 5日线回踩", callback_data="scanner:scan:pullback_ma5")
     builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
