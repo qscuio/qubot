@@ -161,6 +161,16 @@ async def lifespan(app: FastAPI):
             allow_web_app = True
             try:
                 chat = await bot.get_chat(int(target_channel))
+                # Auto-resolve migrated group ID
+                if str(chat.id) != str(target_channel):
+                    logger.info(f"Target resolved to new ID: {chat.id} (was {target_channel})")
+                    target_channel = str(chat.id)
+                    # Update settings cache for future calls
+                    if settings.DABAN_GROUP:
+                        settings.DABAN_GROUP = target_channel
+                    elif settings.DABAN_CHANNEL:
+                        settings.DABAN_CHANNEL = target_channel
+
                 if getattr(chat, "type", None) == "channel":
                     allow_web_app = False
                     logger.info("Daban signal target is channel; skip WebApp buttons")
