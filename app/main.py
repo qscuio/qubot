@@ -181,6 +181,33 @@ async def lifespan(app: FastAPI):
             )
             return True
         except Exception as e:
+            from aiogram.exceptions import TelegramMigrateToChat
+            
+            # Handle Group Migration (auto-update ID for this call)
+            if isinstance(e, TelegramMigrateToChat) or "group chat was upgraded" in str(e):
+                try:
+                    # Try to get new ID from exception object or parse from string
+                    new_chat_id = getattr(e, "migrate_to_chat_id", None)
+                    if not new_chat_id:
+                        import re
+                        # Look for "id -100..." sequence
+                        match = re.search(r"id\s+(-?\d+)", str(e))
+                        if match:
+                            new_chat_id = match.group(1)
+                    
+                    if new_chat_id:
+                        logger.warning(f"Target migrated to {new_chat_id}. Retrying... (PLEASE UPDATE CONFIG)")
+                        # Retry with new ID
+                        await bot.send_message(
+                            int(new_chat_id),
+                            message,
+                            parse_mode="HTML",
+                            reply_markup=reply_markup
+                        )
+                        return True
+                except Exception as migrate_err:
+                    logger.error(f"Failed to retry after migration: {migrate_err}")
+
             err_text = str(e)
             if "BUTTON_TYPE_INVALID" in err_text and buttons:
                 logger.warn("WebApp button invalid for target; retrying with URL buttons")
