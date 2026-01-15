@@ -246,7 +246,10 @@ class LimitUpService:
         if target_date.day < 15:
             cycle_start = (cycle_start - timedelta(days=1)).replace(day=1)
         
-        for stock in stocks:
+        for i, stock in enumerate(stocks):
+            if (i + 1) % 20 == 0:
+                logger.info(f"Update streaks progress: {i + 1}/{len(stocks)}")
+
             try:
                 # Use AkShare's limit_times as the authoritative consecutive count
                 streak_count = stock.get("limit_times", 1) or 1
@@ -289,7 +292,9 @@ class LimitUpService:
         
         month_ago = target_date - timedelta(days=30)
         
-        for stock in stocks:
+        for i, stock in enumerate(stocks):
+            if (i + 1) % 20 == 0:
+                logger.info(f"Update startup watchlist progress: {i + 1}/{len(stocks)}")
             try:
                 # Count limit-ups in past month for this stock
                 count = await db.pool.fetchval("""

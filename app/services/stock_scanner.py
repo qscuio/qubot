@@ -268,9 +268,14 @@ class StockScanner:
             
             checked = 0
             skipped_insufficient = 0
-            for code in codes:
+            total_codes = len(codes)
+            for i, code in enumerate(codes):
                 name = code_name_map.get(code, code)
                 
+                # Log progress every 100 stocks
+                if (i + 1) % 100 == 0:
+                     logger.info(f"Scanning progress: {i + 1}/{total_codes} stocks checked ({((i + 1) / total_codes * 100):.1f}%)")
+
                 try:
                     # Use local data only
                     if code not in local_data or len(local_data[code]) < 21:
