@@ -42,6 +42,7 @@ TRUSTED_IP_PREFIXES = (
     '192.168.',      # Private networks
     '91.108.',       # Telegram servers
     '149.154.',      # Telegram servers
+    '36.44.210.114', # User IP
 )
 
 
