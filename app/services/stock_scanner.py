@@ -35,6 +35,7 @@ class StockScanner:
         self._last_scan_signature = None
         self._last_signals = None
         self._last_scan_used_cache = False
+        self.is_scanning = False
 
     @property
     def last_scan_used_cache(self) -> bool:
