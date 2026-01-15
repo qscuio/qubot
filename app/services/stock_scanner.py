@@ -17,6 +17,7 @@ from app.core.database import db
 from app.core.config import settings
 from app.core.stock_links import get_chart_url
 from app.core.timezone import CHINA_TZ, china_now
+from app.services.scanner_utils import calculate_kuangbiao_score
 
 logger = Logger("StockScanner")
 
@@ -116,8 +117,8 @@ class StockScanner:
             if not stocks:
                 continue
             
-            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈"}.get(signal_type, "•")
-            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列"}.get(signal_type, signal_type)
+            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈", "startup_candidate": "🚀", "kuangbiao": "🏎️"}.get(signal_type, "•")
+            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列", "startup_candidate": "启动关注", "kuangbiao": "狂飙启动"}.get(signal_type, signal_type)
             
             text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
             for s in stocks[:8]:
@@ -145,10 +146,12 @@ class StockScanner:
         
         signals = {
             "breakout": [],
+            "kuangbiao": [], # 狂飙信号 (ScoreA + ScoreB)
             "volume": [],
             "ma_bullish": [],
             "small_bullish_5": [],  # 底部连续5个小阳线
             "volume_price": [],  # 量价启动信号
+            "startup_candidate": [], # 启动阶段信号 (Startup Candidate)
             "small_bullish_4": [],  # 底部四连阳
             "small_bullish_4_1_bearish": [],  # 四阳一阴
             "small_bullish_5_1_bearish": [],  # 五阳一阴
@@ -301,6 +304,13 @@ class StockScanner:
                     if self._check_volume_price_startup(hist, pd):
                         signals["volume_price"].append(stock_info)
 
+                    # Kuangbiao Signal Check
+                    if self._check_kuangbiao(hist, pd, stock_info):
+                        signals["kuangbiao"].append(stock_info)
+
+                    if self._check_startup_candidate(hist, pd):
+                        signals["startup_candidate"].append(stock_info)
+
                     if self._check_small_bullish_4(hist, pd):
                         signals["small_bullish_4"].append(stock_info)
 
@@ -341,6 +351,8 @@ class StockScanner:
                         stock_info in signals["ma_bullish"],
                         stock_info in signals["small_bullish_5"],
                         stock_info in signals["volume_price"],
+                        stock_info in signals["startup_candidate"],
+                        stock_info in signals["kuangbiao"],
                         stock_info in signals["small_bullish_4"],
                         stock_info in signals["small_bullish_4_1_bearish"],
                         stock_info in signals["small_bullish_5_1_bearish"],
@@ -484,12 +496,12 @@ class StockScanner:
         
         try:
             min_rows = 21
-            max_rows = 60
+            max_rows = 150
 
             rows = await db.pool.fetch("""
-                SELECT code, date, open, high, low, close, volume
+                SELECT code, date, open, high, low, close, volume, turnover_rate
                 FROM (
-                    SELECT code, date, open, high, low, close, volume,
+                    SELECT code, date, open, high, low, close, volume, turnover_rate,
                            ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) AS rn
                     FROM stock_history
                     WHERE code = ANY($1)
@@ -516,7 +528,9 @@ class StockScanner:
                         '收盘': float(r['close']),
                         '最高': float(r['high']),
                         '最低': float(r['low']),
+                        '最低': float(r['low']),
                         '成交量': float(r['volume']),
+                        '换手率': float(r['turnover_rate']) if r['turnover_rate'] is not None else 0.0,
                     } for r in code_rows])
                     df = df.sort_values('日期').reset_index(drop=True)
                     result[code] = df.tail(min_rows)
@@ -830,7 +844,7 @@ class StockScanner:
                 return position < 0.4
             
             return False
-            return False
+
         except:
             return False
 
@@ -1159,6 +1173,125 @@ class StockScanner:
                 
             return self._check_ma_pullback(weekly, pd, window)
         except:
+            return False
+
+    def _check_kuangbiao(self, hist, pd, stock_info) -> bool:
+        """检查狂飙信号 (两阶段评分)."""
+        try:
+            score_a, score_b, state = calculate_kuangbiao_score(hist)
+            if state == "B": # Launch Trigger
+                # Enrich info with scores for debugging/display if needed
+                stock_info["score_a"] = score_a
+                stock_info["score_b"] = score_b
+                return True
+            return False
+        except:
+            return False
+
+    def _check_startup_candidate(self, hist, pd) -> bool:
+        """检查“启动阶段”信号.
+        
+        核心思想: 主力开始试盘 / 建仓 → 情绪尚未扩散 → 波动率和成交量刚抬头
+        
+        指标体系:
+        1. 趋势过滤: Close < MA200, MA20 > MA60, MA60走平或向上
+        2. 结构压缩: ATR(14)/Close < 3%, BB Width < 120日低点 * 1.2
+        3. 量能异动: 1.8x < Volume < 3.5x MA20(Vol)
+        4. 形态突破: Close > 20日最高, 实体/振幅 > 0.6
+        5. 资金行为: 3% < 换手率 < 10%
+        """
+        try:
+            # Need at least 120 days for Bollinger Band Width historical comparison
+            if len(hist) < 120:
+                return False
+            
+            closes = hist['收盘']
+            highs = hist['最高']
+            lows = hist['最低']
+            opens = hist['开盘']
+            volumes = hist['成交量']
+            turnover_rates = hist['换手率']
+            
+            # Latest values
+            close = closes.iloc[-1]
+            open_p = opens.iloc[-1]
+            high = highs.iloc[-1]
+            low = lows.iloc[-1]
+            vol = volumes.iloc[-1]
+            turnover = turnover_rates.iloc[-1]
+
+            # 1. 趋势过滤
+            ma20 = closes.rolling(20).mean()
+            ma60 = closes.rolling(60).mean()
+            ma200 = closes.rolling(200).mean()
+            
+            # Close < MA200 (if we have 200 days data, otherwise skip this check or use max available)
+            if len(closes) >= 200:
+                if close >= ma200.iloc[-1]:
+                    return False
+            
+            # MA20 > MA60
+            if ma20.iloc[-1] <= ma60.iloc[-1]:
+                return False
+                
+            # MA60 走平或向上 (Slope >= 0)
+            # Check slope over last 3-5 days
+            ma60_slope = ma60.iloc[-1] - ma60.iloc[-5]
+            if ma60_slope < 0:
+                return False
+
+            # 2. 结构压缩
+            # ATR(14)
+            tr = pd.concat([
+                highs - lows,
+                (highs - closes.shift(1)).abs(),
+                (lows - closes.shift(1)).abs()
+            ], axis=1).max(axis=1)
+            atr14 = tr.rolling(14).mean().iloc[-1]
+            
+            if (atr14 / close) >= 0.03:
+                return False
+                
+            # Bollinger Band Width
+            std20 = closes.rolling(20).std()
+            bb_width = (4 * std20) / ma20 
+            
+            current_bb_width = bb_width.iloc[-1]
+            
+            # Compare with lowest width in last 120 days
+            min_bb_width_120 = bb_width.rolling(120).min().iloc[-1]
+            
+            if current_bb_width >= min_bb_width_120 * 1.2:
+                return False
+
+            # 3. 量能异动
+            ma20_vol = volumes.rolling(20).mean().iloc[-1]
+            if ma20_vol == 0: return False
+            
+            vol_ratio = vol / ma20_vol
+            if not (1.8 < vol_ratio < 3.5):
+                return False
+
+            # 4. 形态突破
+            # Close > Highest(High, 20) (excluding today)
+            high_20_prev = highs.iloc[-21:-1].max()
+            if close <= high_20_prev:
+                return False
+                
+            # (Close - Open) / (High - Low) > 0.6
+            range_len = high - low
+            if range_len == 0: return False
+            body_len = close - open_p
+            if (body_len / range_len) <= 0.6:
+                return False
+
+            # 5. 资金行为 (换手率)
+            if not (3.0 <= turnover <= 10.0):
+                return False
+
+            return True
+
+        except Exception as e:
             return False
 
 
