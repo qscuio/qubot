@@ -1125,6 +1125,7 @@ SIGNAL_NAMES = {
     "small_bullish_5_in_7": "低位七天五阳",
     "small_bullish_6_in_7": "7天六阳",
     "slow_bull_7": "7天慢牛",
+    "slow_bull_5": "5天慢牛",
     "strong_first_negative": "强势股首阴",
     "broken_limit_up_streak": "连板断板",
     "pullback_ma5": "5日线回踩",
@@ -1163,6 +1164,7 @@ SIGNAL_ICONS = {
     "small_bullish_5_in_7": "📅",
     "small_bullish_6_in_7": "📅",
     "slow_bull_7": "🐂",
+    "slow_bull_5": "🐂",
     "strong_first_negative": "💪",
     "broken_limit_up_streak": "💔",
     "pullback_ma5": "5️⃣",
@@ -1226,6 +1228,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="🌤️ 七天五阳", callback_data="scanner:scan:small_bullish_5_in_7")
     builder.button(text="🌤️ 7天六阳", callback_data="scanner:scan:small_bullish_6_in_7")
     builder.button(text="🐂 7天慢牛", callback_data="scanner:scan:slow_bull_7")
+    builder.button(text="🐂 5天慢牛", callback_data="scanner:scan:slow_bull_5")
     builder.button(text="🟢 强势股首阴", callback_data="scanner:scan:strong_first_negative")
     builder.button(text="💔 连板断板", callback_data="scanner:scan:broken_limit_up_streak")
     builder.button(text="↩️ 5日线回踩", callback_data="scanner:scan:pullback_ma5")
@@ -1286,7 +1289,27 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     # 3, 3 (6 Gainers)
     # 2, 1 (Control: all, force | dbcheck, dbsync | back) -> 2, 2, 1
     
-    builder.adjust(3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 3, 3, 3, 3, 2, 2, 1)
+    # Layout: 3 cols for new signals, then 2, 2, ...
+    # Added 3 more buttons (7天六阳, 7天慢牛, 5天慢牛)
+    # Adjust layout: 3, 2, 2, 2, 3, 3, 3, 3, 3, 3, 2, 1 -> 3, 2, 2, 2, 3, 3, 3, 3, 3, 3, 2, 1
+    # Wait, let's count.
+    # New: 3
+    # 2 cols: 6 (breakout, volume, ma_bullish, small_bullish_5, volume_price, multi_signal) -> 3 rows of 2
+    # 2 cols: 4 (small_bullish_4, 4_1, 5_1, 3_1_1) -> 2 rows of 2
+    # 2 cols: 5 (5_in_7, 6_in_7, slow_bull_7, slow_bull_5, strong_first_negative) -> 2 rows of 2, then 1?
+    # Or make it 3 cols for these?
+    # Let's try to group them nicely.
+    # 5_in_7, 6_in_7, slow_bull_7, slow_bull_5, strong_first_negative
+    # Maybe 3, 2?
+    # 5_in_7, 6_in_7, slow_bull_7
+    # slow_bull_5, strong_first_negative
+    
+    # Current layout: 3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 3, 3, 3, 3, 2, 2, 1
+    # The 5th group (lines 1221-1225) now has 5 buttons.
+    # So we change the 5th '2' to '3' and '2'.
+    # 3, 2, 2, 2, 3, 2, 2, 2, 2, 1, 3, 3, 3, 3, 2, 2, 1
+    
+    builder.adjust(3, 2, 2, 2, 3, 2, 2, 2, 2, 1, 3, 3, 3, 3, 2, 2, 1)
     
     try:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
