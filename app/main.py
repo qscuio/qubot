@@ -171,9 +171,12 @@ async def lifespan(app: FastAPI):
                     elif settings.DABAN_CHANNEL:
                         settings.DABAN_CHANNEL = target_channel
 
-                if getattr(chat, "type", None) == "channel":
+                chat_type = getattr(chat, "type", None)
+                if chat_type != "private":
                     allow_web_app = False
-                    logger.info("Daban signal target is channel; skip WebApp buttons")
+                    logger.info(
+                        f"Daban signal target chat type={chat_type}; skip WebApp buttons"
+                    )
             except Exception as chat_err:
                 logger.warn(f"Failed to resolve daban signal target chat type: {chat_err}")
 
@@ -207,6 +210,29 @@ async def lifespan(app: FastAPI):
                     
                     if new_chat_id:
                         logger.warn(f"Target migrated to {new_chat_id}. Retrying... (PLEASE UPDATE CONFIG)")
+                        target_channel = str(new_chat_id)
+                        # Update settings cache for future calls
+                        if settings.DABAN_GROUP:
+                            settings.DABAN_GROUP = target_channel
+                        elif settings.DABAN_CHANNEL:
+                            settings.DABAN_CHANNEL = target_channel
+
+                        allow_web_app = False
+                        try:
+                            chat = await bot.get_chat(int(new_chat_id))
+                            if getattr(chat, "type", None) == "private":
+                                allow_web_app = True
+                            else:
+                                logger.info(
+                                    f"Daban signal migrated chat type={getattr(chat, 'type', None)}; "
+                                    "skip WebApp buttons"
+                                )
+                        except Exception as chat_err:
+                            logger.warn(
+                                f"Failed to resolve migrated chat type: {chat_err}"
+                            )
+
+                        reply_markup, _ = build_reply_markup(use_web_app=allow_web_app)
                         # Retry with new ID
                         await bot.send_message(
                             int(new_chat_id),
@@ -216,6 +242,24 @@ async def lifespan(app: FastAPI):
                         )
                         return True
                 except Exception as migrate_err:
+                    err_text = str(migrate_err)
+                    if new_chat_id and "BUTTON_TYPE_INVALID" in err_text and buttons:
+                        logger.warn(
+                            "WebApp button invalid for migrated target; retrying with URL buttons"
+                        )
+                        try:
+                            reply_markup, _ = build_reply_markup(use_web_app=False)
+                            await bot.send_message(
+                                int(new_chat_id),
+                                message,
+                                parse_mode="HTML",
+                                reply_markup=reply_markup
+                            )
+                            return True
+                        except Exception as retry_exc:
+                            logger.error(
+                                f"Failed to send daban signal after migration URL fallback: {retry_exc}"
+                            )
                     logger.error(f"Failed to retry after migration: {migrate_err}")
 
             err_text = str(e)
