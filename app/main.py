@@ -196,7 +196,8 @@ async def lifespan(app: FastAPI):
                 int(target_channel),
                 message,
                 parse_mode="HTML",
-                reply_markup=reply_markup
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
             )
             return True
         except Exception as e:

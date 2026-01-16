@@ -433,7 +433,7 @@ class WatchlistService:
                 
                 bot = get_bot("crawler")
                 if bot:
-                    await bot.send_message(user_id, report, parse_mode="HTML")
+                    await bot.send_message(user_id, report, parse_mode="HTML", disable_web_page_preview=True)
                     
             except Exception as e:
                 logger.warn(f"Failed to send intraday report to {user_id}: {e}")
@@ -485,7 +485,7 @@ class WatchlistService:
                 
                 bot = get_bot("crawler")
                 if bot:
-                    await bot.send_message(user_id, report, parse_mode="HTML")
+                    await bot.send_message(user_id, report, parse_mode="HTML", disable_web_page_preview=True)
                     
             except Exception as e:
                 logger.warn(f"Failed to send closing report to {user_id}: {e}")
