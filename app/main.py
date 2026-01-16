@@ -129,7 +129,8 @@ async def lifespan(app: FastAPI):
     async def daban_signal_callback(message: str, buttons=None):
         from app.bots.registry import get_bot
         bot = get_bot("crawler")
-        target_channel = settings.DABAN_GROUP or settings.DABAN_CHANNEL
+        # User request: "only send to DABAN group"
+        target_channel = settings.DABAN_GROUP
         if not bot:
             logger.warn("Daban signal bot not available; cannot send via bot")
             return False

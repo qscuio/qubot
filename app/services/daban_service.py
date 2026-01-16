@@ -565,7 +565,8 @@ class DabanService:
             from app.bots.registry import get_bot
             bot = get_bot("crawler")
             
-            target_channel = settings.DABAN_GROUP or settings.DABAN_CHANNEL
+            # User request: "Daban report only needs to be sent to DABAN group"
+            target_channel = settings.DABAN_GROUP
             if bot and target_channel:
                 report = await self.generate_daban_report()
                 await bot.send_message(
@@ -1051,7 +1052,8 @@ class DabanService:
         if not sent_via_callback:
             logger.warn("Signal notification falling back to userbot; web_app buttons unavailable")
             try:
-                target_channel = settings.DABAN_GROUP or settings.DABAN_CHANNEL
+                # User request: "only send to DABAN group"
+                target_channel = settings.DABAN_GROUP
                 if target_channel:
                     from app.core.bot import telegram_service
                     await telegram_service.send_message(
@@ -1117,6 +1119,22 @@ class DabanService:
             logger.warn(f"Failed to poll limit-up pool: {e}")
             return {}
     
+    async def _get_recent_limit_up_count(self, code: str, days: int = 30) -> int:
+        """Get number of limit-ups in recent days."""
+        if not db.pool:
+            return 0
+            
+        try:
+            count = await db.pool.fetchval("""
+                SELECT COUNT(*) FROM limit_up_stocks 
+                WHERE code = $1 AND is_sealed = TRUE 
+                AND date >= CURRENT_DATE - INTERVAL '30 days'
+            """, code)
+            return count or 0
+        except Exception as e:
+            logger.warn(f"Failed to get recent limit count for {code}: {e}")
+            return 0
+
     async def _detect_signals(self, current_state: Dict):
         """Compare current state with previous and detect signals."""
         signals = []
@@ -1215,6 +1233,14 @@ class DabanService:
                     'time': now_str,
                     'msg': f"炸板! 第{info['burst_count']}次",
                 })
+
+        # Enrich signals with monthly count
+        for sig in signals:
+            try:
+                count = await self._get_recent_limit_up_count(sig['code'])
+                sig['msg'] += f" 近1月{count}板"
+            except Exception as e:
+                logger.warn(f"Failed to add monthly stats to signal: {e}")
 
         return signals
     
