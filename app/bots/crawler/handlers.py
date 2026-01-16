@@ -1234,6 +1234,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="🟢 强势股首阴", callback_data="scanner:scan:strong_first_negative")
     builder.button(text="↩️ 强势股反包", callback_data="scanner:scan:strong_fanbao")
     builder.button(text="🏚️ 昨日断板", callback_data="scanner:scan:yesterday_broken_board")
+    builder.button(text="🏚️ 前日断板", callback_data="scanner:scan:day_before_yesterday_broken_board")
     builder.button(text="💔 连板断板", callback_data="scanner:scan:broken_limit_up_streak")
     builder.button(text="↩️ 5日线回踩", callback_data="scanner:scan:pullback_ma5")
     builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
