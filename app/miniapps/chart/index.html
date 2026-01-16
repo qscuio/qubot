@@ -1067,8 +1067,8 @@
             if (!chartMain) return;
             // Lazy init
             if (!sTrendLine) sTrendLine = chartMain.addLineSeries({ color: '#f59e0b', lineWidth: 2, lineStyle: 0, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
-            if (!sTrendUpper) sTrendUpper = chartMain.addLineSeries({ color: 'rgba(245, 158, 11, 0.3)', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
-            if (!sTrendLower) sTrendLower = chartMain.addLineSeries({ color: 'rgba(245, 158, 11, 0.3)', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+            if (!sTrendUpper) sTrendUpper = chartMain.addLineSeries({ color: '#f59e0b', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
+            if (!sTrendLower) sTrendLower = chartMain.addLineSeries({ color: '#f59e0b', lineWidth: 1, lineStyle: 2, lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false });
         }
 
         function drawTrendChannel(data) {
@@ -1436,6 +1436,8 @@
                     } else {
                         chartMain.timeScale().fitContent();
                     }
+                    // Force scroll to the latest data
+                    chartMain.timeScale().scrollToPosition(-2, false);
 
                     chartMain.priceScale('right').applyOptions({
                         autoScale: true,
