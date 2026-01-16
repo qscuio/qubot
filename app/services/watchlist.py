@@ -390,6 +390,7 @@ class WatchlistService:
     async def send_intraday_reports(self):
         """Send intraday watchlist performance reports."""
         from app.bots.registry import get_bot
+        from app.core.stock_links import get_chart_url
         
         if not db.pool:
             return
@@ -410,23 +411,24 @@ class WatchlistService:
                     "━━━━━━━━━━━━━━━━━━━━━"
                 ]
                 
-                # Top 3 gainers
-                for s in stocks[:3]:
-                    name = s.get('name', s['code'])
-                    change = s.get('today_change', 0)
-                    lines.append(f"🔴 <b>{name}</b>: {change:+.2f}%")
+                # Sort by change descending (Best to Worst)
+                stocks.sort(key=lambda x: x.get('today_change', 0), reverse=True)
                 
-                # Top 3 losers (if any, from bottom)
-                if len(stocks) > 3:
-                    losers = [s for s in stocks if s.get('today_change', 0) < 0]
-                    losers.sort(key=lambda x: x.get('today_change', 0)) # Ascending (worst first)
-                    if losers:
-                        lines.append("---")
-                        for s in losers[:3]:
-                            name = s.get('name', s['code'])
-                            change = s.get('today_change', 0)
-                            lines.append(f"🟢 <b>{name}</b>: {change:+.2f}%")
-                            
+                for s in stocks:
+                    name = s.get('name', s['code'])
+                    code = s['code']
+                    change = s.get('today_change', 0)
+                    
+                    if change > 0:
+                        icon = "🔴" 
+                    elif change < 0:
+                        icon = "🟢" 
+                    else:
+                        icon = "⚪"
+                    
+                    url = get_chart_url(code, name, context="watchlist_alert")
+                    lines.append(f"{icon} <a href=\"{url}\">{name}</a>: {change:+.2f}%")
+
                 report = "\n".join(lines)
                 
                 bot = get_bot("crawler")
@@ -441,6 +443,7 @@ class WatchlistService:
     async def send_closing_reports(self):
         """Send daily closing performance report."""
         from app.bots.registry import get_bot
+        from app.core.stock_links import get_chart_url
         
         if not db.pool:
             return
@@ -459,12 +462,24 @@ class WatchlistService:
                     "━━━━━━━━━━━━━━━━━━━━━"
                 ]
                 
+                # Sort by change descending
+                stocks.sort(key=lambda x: x.get('today_change', 0), reverse=True)
+                
                 for s in stocks:
                     name = s.get('name', s['code'])
+                    code = s['code']
                     change = s.get('today_change', 0)
                     price = s.get('current_price', 0)
-                    icon = "🔴" if change > 0 else ("🟢" if change < 0 else "⚪")
-                    lines.append(f"{icon} <b>{name}</b>: {price} ({change:+.2f}%)")
+                    
+                    if change > 0:
+                        icon = "🔴" 
+                    elif change < 0:
+                        icon = "🟢" 
+                    else:
+                        icon = "⚪"
+                        
+                    url = get_chart_url(code, name, context="watchlist_daily")
+                    lines.append(f"{icon} <a href=\"{url}\">{name}</a>: {price} ({change:+.2f}%)")
                     
                 report = "\n".join(lines)
                 

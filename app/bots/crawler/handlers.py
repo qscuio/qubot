@@ -3072,6 +3072,9 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Opti
     if use_webapp_buttons:
         text += "<i>点击下方按钮查看K线</i>\n"
     
+    if use_webapp_buttons:
+        logger.info(f"Watchlist: WebApp enabled, base={webapp_base}")
+    
     for idx, s in enumerate(page_stocks, start_idx + 1):
         name = s.get('name', s['code'])
         code = s['code']
@@ -3089,7 +3092,6 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Opti
             icon = "⬇️"  # Small loss
         else:
             icon = "🔴"  # Big loss
-
 
         chart_url = get_chart_url(code, name, context="watchlist")
         date_str = add_date.strftime('%m/%d') if add_date else ""
@@ -3130,9 +3132,18 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Opti
             )
     
     # Add delete buttons for current page stocks (limit to 8)
+    # Add delete buttons for current page stocks (limit to 8)
+    # Group in rows of 4
+    del_buttons = []
     for s in page_stocks[:8]:
         name_short = s.get('name', s['code'])[:6]
-        builder.button(text=f"❌ {name_short}", callback_data=f"watch:del:{s['code']}")
+        del_buttons.append(
+             types.InlineKeyboardButton(text=f"❌ {name_short}", callback_data=f"watch:del:{s['code']}")
+        )
+    if del_buttons:
+        # Split into chunks of 4
+        for i in range(0, len(del_buttons), 4):
+            builder.row(*del_buttons[i : i + 4])
     
     # Pagination buttons
     nav_buttons = []
