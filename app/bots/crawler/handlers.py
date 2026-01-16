@@ -3090,9 +3090,7 @@ async def get_watchlist_ui(user_id: int, realtime: bool = False, chat_type: Opti
         else:
             icon = "🔴"  # Big loss
 
-        if use_webapp_buttons:
-            continue
-        
+
         chart_url = get_chart_url(code, name, context="watchlist")
         date_str = add_date.strftime('%m/%d') if add_date else ""
         
