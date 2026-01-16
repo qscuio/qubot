@@ -99,7 +99,7 @@ class BurstMonitorService:
             try:
                 df = await asyncio.wait_for(
                     asyncio.to_thread(ak.stock_zh_a_spot_em),
-                    timeout=20.0
+                    timeout=300.0
                 )
             except asyncio.TimeoutError:
                 logger.warn("Timeout while polling realtime data")

@@ -120,8 +120,8 @@ class StockScanner:
             if not stocks:
                 continue
             
-            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈", "startup_candidate": "🚀", "kuangbiao": "🏎️", "triple_bullish_shrink_breakout": "🔥", "small_bullish_6_in_7": "🌟", "strong_fanbao": "↩️"}.get(signal_type, "•")
-            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列", "startup_candidate": "启动关注", "kuangbiao": "狂飙启动", "triple_bullish_shrink_breakout": "蓄势爆发", "small_bullish_6_in_7": "7天六阳", "strong_fanbao": "强势反包"}.get(signal_type, signal_type)
+            icon = {"breakout": "🔺", "volume": "📊", "ma_bullish": "📈", "startup_candidate": "🚀", "kuangbiao": "🏎️", "triple_bullish_shrink_breakout": "🔥", "small_bullish_6_in_7": "🌟", "strong_fanbao": "↩️", "yesterday_broken_board": "🏚️"}.get(signal_type, "•")
+            name = {"breakout": "突破信号", "volume": "放量信号", "ma_bullish": "多头排列", "startup_candidate": "启动关注", "kuangbiao": "狂飙启动", "triple_bullish_shrink_breakout": "蓄势爆发", "small_bullish_6_in_7": "7天六阳", "strong_fanbao": "强势反包", "yesterday_broken_board": "昨日断板"}.get(signal_type, signal_type)
             
             text += f"{icon} <b>{name}</b> ({len(stocks)})\n"
             for s in stocks[:8]:
@@ -187,6 +187,7 @@ class StockScanner:
             "slow_bull_5": [],  # 5天慢牛
             "strong_first_negative": [],  # 强势股首阴
             "strong_fanbao": [],  # 强势股反包
+            "yesterday_broken_board": [], # 昨日断板
             "broken_limit_up_streak": [],  # 连板断板
             "pullback_ma5": [],  # 5日线回踩
             "pullback_ma20": [],  # 20日线回踩
@@ -384,6 +385,9 @@ class StockScanner:
                     if self._check_broken_limit_up_streak(hist, pd, code):
                         signals["broken_limit_up_streak"].append(stock_info)
 
+                    if self._check_yesterday_broken_board(hist, pd, code):
+                        signals["yesterday_broken_board"].append(stock_info)
+
                     if self._check_ma_pullback(hist, pd, 5):
                         signals["pullback_ma5"].append(stock_info)
 
@@ -432,6 +436,7 @@ class StockScanner:
                         stock_info in signals["slow_bull_5"],
                         stock_info in signals["strong_first_negative"],
                         stock_info in signals["strong_fanbao"],
+                        stock_info in signals["yesterday_broken_board"],
                         stock_info in signals["broken_limit_up_streak"],
                         stock_info in signals["pullback_ma5"],
                         stock_info in signals["pullback_ma20"],
@@ -1236,6 +1241,50 @@ class StockScanner:
                 
             today_gain = (today['收盘'] - yesterday_close) / yesterday_close * 100
             if today_gain >= limit_pct:
+                return False
+                
+            return True
+        except:
+            return False
+
+    def _check_yesterday_broken_board(self, hist, pd, code: str) -> bool:
+        """检查昨日断板信号.
+        
+        条件:
+        1. 连板: T-3 和 T-2 都是涨停
+        2. 断板: T-1 (昨日) 不是涨停
+        """
+        try:
+            if len(hist) < 4:
+                return False
+                
+            # Determine limit up threshold
+            limit_pct = 9.5
+            if code.startswith(('688', '300')):
+                limit_pct = 19.5
+                
+            # Check T-3 and T-2 (Must be Limit Up)
+            # hist[-1] is Today. hist[-2] is Yesterday. hist[-3] is Day before Yesterday.
+            for i in [-3, -4]:
+                row = hist.iloc[i]
+                prev_close = hist.iloc[i-1]['收盘']
+                if prev_close == 0:
+                    return False
+                
+                gain = (row['收盘'] - prev_close) / prev_close * 100
+                if gain < limit_pct:
+                    return False
+            
+            # Check T-1 (Yesterday) - Must NOT be Limit Up
+            yesterday = hist.iloc[-2]
+            day_before_close = hist.iloc[-3]['收盘']
+            
+            if day_before_close == 0:
+                return False
+                
+            yesterday_gain = (yesterday['收盘'] - day_before_close) / day_before_close * 100
+            
+            if yesterday_gain >= limit_pct:
                 return False
                 
             return True
