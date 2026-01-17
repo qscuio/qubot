@@ -450,6 +450,7 @@ jobs:
             export CRAWLER_BOT_TOKEN='${{ secrets.CRAWLER_BOT_TOKEN }}'
             export VIBE_BOT_TOKEN='${{ secrets.VIBE_BOT_TOKEN }}'
             export BOT_GITHUB_TOKEN='${{ secrets.BOT_GITHUB_TOKEN }}'
+            export FILE_TARGET_GROUP='${{ secrets.FILE_TARGET_GROUP }}'
             
             # Create .env file for NON-SENSITIVE config only (with restrictive permissions)
             cat > .env << 'EOF'
@@ -483,6 +484,7 @@ jobs:
             printf 'BLACKLIST_CHANNELS=%s\n' '${{ secrets.BLACKLIST_CHANNELS }}' >> .env
             printf 'STOCK_ALERT_CHANNEL=%s\n' '${{ secrets.STOCK_ALERT_CHANNEL }}' >> .env
             printf 'ALERT_CHANNEL=%s\n' '${{ secrets.ALERT_CHANNEL }}' >> .env
+            printf 'FILE_TARGET_GROUP=%s\n' '${{ secrets.FILE_TARGET_GROUP }}' >> .env
             
             # Deploy with smart rebuild logic
             docker compose down || true

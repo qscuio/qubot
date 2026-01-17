@@ -1,0 +1,37 @@
+# Git files
+.git
+.gitignore
+
+# Development files
+node_modules/
+*.log
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Documentation
+*.md
+!README.md
+
+# Mini app development files
+app/miniapps/chart/index-old.html
+app/miniapps/chart/package-lock.json
+app/miniapps/chart/node_modules/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/

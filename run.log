@@ -1,1226 +1,0 @@
-/home/ubuntu/work/qubot/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:151: UserWarning: Field "model_custom_emoji_id" has conflict with protected namespace "model_".
-
-You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
-  warnings.warn(
-2026-01-16 05:48:09,379 - ForwardFilters - INFO - Created filter chain with 10 filters
-2026-01-16 05:48:09,441 - AiService - WARNING - ⚠️ Provider groq selected but not configured (missing API key).
-INFO:     Will watch for changes in these directories: ['/home/ubuntu/work/qubot']
-INFO:     Uvicorn running on http://0.0.0.0:6887 (Press CTRL+C to quit)
-INFO:     Started reloader process [2842056] using WatchFiles
-/home/ubuntu/work/qubot/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:151: UserWarning: Field "model_custom_emoji_id" has conflict with protected namespace "model_".
-
-You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
-  warnings.warn(
-2026-01-16 05:48:14,657 - ForwardFilters - INFO - Created filter chain with 10 filters
-2026-01-16 05:48:14,724 - AiService - WARNING - ⚠️ Provider groq selected but not configured (missing API key).
-INFO:     Started server process [2842119]
-INFO:     Waiting for application startup.
-2026-01-16 05:48:15,138 - Main - INFO - 🚀 Starting Qubot (Python)...
-2026-01-16 05:48:15,138 - TelegramService - INFO - SESSIONS_JSON raw value present: False
-2026-01-16 05:48:15,138 - TelegramService - INFO - sessions_list parsed: 0 items
-2026-01-16 05:48:15,138 - TelegramService - ERROR - No session configs found. Please set SESSIONS_JSON (or TG_SESSIONS_JSON).
-2026-01-16 05:48:15,139 - BotDispatcher - INFO - monitor-bot skipped (token not configured)
-2026-01-16 05:48:15,139 - BotDispatcher - INFO - ai-bot skipped (token not configured)
-2026-01-16 05:48:15,139 - BotDispatcher - INFO - agent-bot skipped (token not configured)
-2026-01-16 05:48:15,139 - BotDispatcher - INFO - rss-bot skipped (token not configured)
-2026-01-16 05:48:15,139 - BotDispatcher - INFO - crawler-bot skipped (token not configured)
-2026-01-16 05:48:15,139 - BotDispatcher - INFO - vibe-bot skipped (token not configured)
-2026-01-16 05:48:15,139 - MonitorService - INFO - Initializing MonitorService...
-2026-01-16 05:48:15,139 - MonitorService - INFO - MonitorService initialized with 0 sources, 0 VIPs, 19 blocked.
-2026-01-16 05:48:15,139 - MonitorService - ERROR - Telegram service not connected!
-2026-01-16 05:48:15,139 - GitHubService - INFO - Cloning git@github.com:qscuio/qnote.git...
-2026-01-16 05:48:15,139 - RssService - INFO - ✅ RSS Service started
-2026-01-16 05:48:15,139 - TwitterService - INFO - Initializing TwitterService...
-2026-01-16 05:48:15,139 - TwitterService - WARNING - TWITTER_ACCOUNTS not configured. Twitter monitoring disabled.
-2026-01-16 05:48:15,170 - CrawlerService - INFO - ✅ Crawler Service started
-2026-01-16 05:48:15,171 - LimitUpService - INFO - ✅ Limit-Up Tracker started
-2026-01-16 05:48:15,429 - StockScanner - INFO - ✅ Stock Scanner started
-2026-01-16 05:48:15,429 - SectorService - INFO - ✅ Sector Tracker started
-2026-01-16 05:48:15,429 - MarketReportService - INFO - Market Report Service initialized
-2026-01-16 05:48:15,429 - MarketReportService - INFO - ✅ Market Report Service started
-2026-01-16 05:48:15,430 - StockHistoryService - INFO - ✅ Stock History Service started
-2026-01-16 05:48:15,430 - ChipDistributionService - INFO - ✅ Chip Distribution Service started
-2026-01-16 05:48:15,430 - WatchlistService - INFO - ✅ Watchlist Service started
-2026-01-16 05:48:15,431 - PortfolioService - INFO - ✅ Portfolio Service started
-2026-01-16 05:48:15,431 - TradingSimulator - INFO - ✅ Trading Simulator started
-2026-01-16 05:48:15,432 - DabanService - INFO - ✅ 打板 盘后复盘 + 实时监控 started
-2026-01-16 05:48:15,433 - DabanSimulator - INFO - ✅ 打板 Simulator started
-2026-01-16 05:48:15,433 - StockHistoryService - WARNING - Database not connected, skipping initialization
-2026-01-16 05:48:15,433 - TradingSimulator - INFO - Next t_trade at 2026-01-16 14:30
-2026-01-16 05:48:15,433 - DabanService - INFO - Starting intraday monitoring loop
-INFO:     Application startup complete.
-2026-01-16 05:48:17,152 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 05:48:17,153 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (1/3)
-<i>13:48:17</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600058_daban_signal">五矿发展</a></b> (600058)
-   新上板 2板 换手0.3% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603056_daban_signal">德邦股份</a></b> (603056)
-   新上板 3板 换手2.6% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600841_daban_signal">动力新科</a></b> (600841)
-   新上板 1板 换手1.2% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002028_daban_signal">思源电气</a></b> (002028)
-   新上板 1板 换手1.7% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601163_daban_signal">三角轮胎</a></b> (601163)
-   新上板 1板 换手3.7% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001255_daban_signal">博菲电气</a></b> (001255)
-   新上板 5板 换手3.5% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002358_daban_signal">森源电气</a></b> (002358)
-   新上板 1板 换手4.0% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002119_daban_signal">康强电子</a></b> (002119)
-   新上板 2板 换手18.9% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300952_daban_signal">恒辉安防</a></b> (300952)
-   新上板 1板 换手5.2% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600785_daban_signal">新华百货</a></b> (600785)
-   新上板 3板 换手21.4% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600623_daban_signal">华谊集团</a></b> (600623)
-   新上板 1板 换手3.9% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001207_daban_signal">联科科技</a></b> (001207)
-   新上板 1板 换手6.5% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=605167_daban_signal">利柏特</a></b> (605167)
-   新上板 1板 换手1.7% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603626_daban_signal">科森科技</a></b> (603626)
-   新上板 1板 换手7.2% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002498_daban_signal">汉缆股份</a></b> (002498)
-   新上板 1板 换手2.7% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603163_daban_signal">圣晖集成</a></b> (603163)
-   新上板 1板 换手2.9% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601096_daban_signal">宏盛华源</a></b> (601096)
-   新上板 1板 换手9.8% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603929_daban_signal">亚翔集成</a></b> (603929)
-   新上板 1板 换手2.5% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601616_daban_signal">广电电气</a></b> (601616)
-   新上板 1板 换手12.6% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000720_daban_signal">新能泰山</a></b> (000720)
-   新上板 1板 换手5.8% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002953_daban_signal">日丰股份</a></b> (002953)
-   新上板 1板 换手9.3% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300215_daban_signal">电科院</a></b> (300215)
-   新上板 1板 换手15.4% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002830_daban_signal">名雕股份</a></b> (002830)
-   新上板 1板 换手7.9% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688376_daban_signal">美埃科技</a></b> (688376)
-   新上板 1板 换手4.1% 近1月0板 @ 13:48:17
-
-2026-01-16 05:48:17,153 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:48:17,153 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:48:17,153 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:48:17,153 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 05:48:17,153 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (2/3)
-<i>13:48:17</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301529_daban_signal">福赛科技</a></b> (301529)
-   新上板 1板 换手10.7% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603052_daban_signal">可川科技</a></b> (603052)
-   新上板 1板 换手7.2% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002796_daban_signal">世嘉科技</a></b> (002796)
-   新上板 2板 换手10.3% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002339_daban_signal">积成电子</a></b> (002339)
-   新上板 1板 换手14.5% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600584_daban_signal">长电科技</a></b> (600584)
-   新上板 1板 换手10.7% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603638_daban_signal">艾迪精密</a></b> (603638)
-   新上板 1板 换手1.9% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002196_daban_signal">方正电机</a></b> (002196)
-   新上板 1板 换手14.9% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300606_daban_signal">金太阳</a></b> (300606)
-   新上板 1板 换手19.6% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603058_daban_signal">永吉股份</a></b> (603058)
-   新上板 1板 换手12.0% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603861_daban_signal">白云电器</a></b> (603861)
-   新上板 1板 换手10.1% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001233_daban_signal">海安集团</a></b> (001233)
-   新上板 1板 换手15.7% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600234_daban_signal">科新发展</a></b> (600234)
-   新上板 1板 换手3.2% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603667_daban_signal">五洲新春</a></b> (603667)
-   新上板 1板 换手14.3% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600266_daban_signal">城建发展</a></b> (600266)
-   新上板 1板 换手14.1% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300669_daban_signal">沪宁股份</a></b> (300669)
-   新上板 1板 换手4.9% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300780_daban_signal">德恩精工</a></b> (300780)
-   新上板 1板 换手28.5% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688234_daban_signal">天岳先进</a></b> (688234)
-   新上板 1板 换手4.8% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002331_daban_signal">皖通科技</a></b> (002331)
-   新上板 1板 换手11.2% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603665_daban_signal">康隆达</a></b> (603665)
-   新上板 1板 换手4.3% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601133_daban_signal">柏诚股份</a></b> (601133)
-   新上板 1板 换手23.6% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603061_daban_signal">金海通</a></b> (603061)
-   新上板 1板 换手8.8% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600198_daban_signal">大唐电信</a></b> (600198)
-   新上板 1板 换手8.5% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301235_daban_signal">华康洁净</a></b> (301235)
-   新上板 1板 换手21.1% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603038_daban_signal">华立股份</a></b> (603038)
-   新上板 1板 换手7.3% 近1月0板 @ 13:48:17
-
-2026-01-16 05:48:17,153 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:48:17,153 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:48:17,153 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:48:17,153 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 05:48:17,153 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (3/3)
-<i>13:48:17</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603306_daban_signal">华懋科技</a></b> (603306)
-   新上板 1板 换手5.4% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000620_daban_signal">盈新发展</a></b> (000620)
-   新上板 1板 换手11.0% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600703_daban_signal">三安光电</a></b> (600703)
-   新上板 1板 换手5.2% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002156_daban_signal">通富微电</a></b> (002156)
-   新上板 1板 换手11.3% 近1月0板 @ 13:48:17
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600667_daban_signal">太极实业</a></b> (600667)
-   新上板 1板 换手14.1% 近1月0板 @ 13:48:17
-
-2026-01-16 05:48:17,153 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:48:17,153 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:48:17,153 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:48:17,153 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 05:48:19,009 - GitHubService - INFO - ✅ GitHubService initialized.
-Timeout while polling realtime data
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:04<04:06,  4.39s/it]2026-01-16 05:49:18,798 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 05:49:18,799 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>13:49:18</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002048_daban_signal">宁波华翔</a></b> (002048)
-   新上板 1板 换手9.3% 近1月0板 @ 13:49:18
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603986_daban_signal">兆易创新</a></b> (603986)
-   新上板 1板 换手6.4% 近1月0板 @ 13:49:18
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600623_daban_signal">华谊集团</a></b> (600623)
-   炸板! 第1次 近1月0板 @ 13:49:18
-
-2026-01-16 05:49:18,799 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:49:18,799 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:49:18,799 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:49:18,799 - TelegramService - WARNING - Cannot send message, no main client connected
-  4%|▎         | 2/57 [00:07<03:22,  3.69s/it]  5%|▌         | 3/57 [00:11<03:16,  3.65s/it]Timeout while polling realtime data
-  7%|▋         | 4/57 [00:13<02:54,  3.28s/it]WARNING:  WatchFiles detected changes in 'test_akshare.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-2026-01-16 05:49:29,156 - Main - INFO - 🛑 Shutting down...
-2026-01-16 05:49:29,157 - RssService - INFO - RSS Service stopped
-2026-01-16 05:49:29,157 - TwitterService - INFO - Twitter monitoring stopped
-2026-01-16 05:49:29,160 - CrawlerService - INFO - Crawler Service stopped
-2026-01-16 05:49:29,160 - LimitUpService - INFO - Limit-Up Tracker stopped
-2026-01-16 05:49:29,161 - StockScanner - INFO - Stock Scanner stopped
-2026-01-16 05:49:29,161 - SectorService - INFO - Sector Tracker stopped
-2026-01-16 05:49:29,161 - MarketReportService - INFO - Market Report Service stopped
-2026-01-16 05:49:29,161 - StockHistoryService - INFO - Stock History Service stopped
-2026-01-16 05:49:29,161 - PortfolioService - INFO - Portfolio Service stopped
-2026-01-16 05:49:29,161 - WatchlistService - INFO - Watchlist Service stopped
-2026-01-16 05:49:29,161 - TradingSimulator - INFO - Trading Simulator stopped
-2026-01-16 05:49:29,161 - DabanService - INFO - 打板 service stopped
-2026-01-16 05:49:29,161 - DabanSimulator - INFO - 打板 Simulator stopped
-INFO:     Application shutdown complete.
-INFO:     Finished server process [2842119]
-  9%|▉         | 5/57 [00:16<02:45,  3.19s/it] 11%|█         | 6/57 [00:19<02:37,  3.10s/it] 12%|█▏        | 7/57 [00:23<02:40,  3.21s/it] 14%|█▍        | 8/57 [00:26<02:44,  3.37s/it] 16%|█▌        | 9/57 [00:30<02:37,  3.29s/it] 18%|█▊        | 10/57 [00:33<02:34,  3.30s/it] 19%|█▉        | 11/57 [00:37<02:37,  3.43s/it] 21%|██        | 12/57 [00:39<02:25,  3.24s/it] 23%|██▎       | 13/57 [00:43<02:23,  3.26s/it] 25%|██▍       | 14/57 [00:46<02:14,  3.13s/it] 26%|██▋       | 15/57 [00:50<02:21,  3.38s/it] 28%|██▊       | 16/57 [00:53<02:22,  3.48s/it] 30%|██▉       | 17/57 [00:56<02:09,  3.23s/it] 32%|███▏      | 18/57 [00:59<02:09,  3.32s/it] 33%|███▎      | 19/57 [01:02<02:00,  3.17s/it] 35%|███▌      | 20/57 [01:05<01:53,  3.06s/it] 37%|███▋      | 21/57 [01:08<01:53,  3.16s/it] 39%|███▊      | 22/57 [01:11<01:48,  3.10s/it] 40%|████      | 23/57 [01:14<01:41,  2.98s/it] 42%|████▏     | 24/57 [01:17<01:39,  3.00s/it] 44%|████▍     | 25/57 [01:20<01:31,  2.86s/it] 46%|████▌     | 26/57 [01:27<02:11,  4.25s/it] 47%|████▋     | 27/57 [01:30<01:51,  3.70s/it] 49%|████▉     | 28/57 [01:33<01:44,  3.61s/it] 51%|█████     | 29/57 [01:37<01:42,  3.68s/it] 53%|█████▎    | 30/57 [01:40<01:35,  3.53s/it] 54%|█████▍    | 31/57 [01:43<01:29,  3.46s/it] 56%|█████▌    | 32/57 [01:46<01:22,  3.29s/it] 58%|█████▊    | 33/57 [01:49<01:13,  3.08s/it] 60%|█████▉    | 34/57 [01:52<01:11,  3.10s/it] 61%|██████▏   | 35/57 [01:55<01:06,  3.02s/it] 63%|██████▎   | 36/57 [01:58<01:01,  2.94s/it] 65%|██████▍   | 37/57 [02:01<01:02,  3.14s/it] 67%|██████▋   | 38/57 [02:04<01:00,  3.19s/it] 68%|██████▊   | 39/57 [02:08<01:01,  3.44s/it] 70%|███████   | 40/57 [02:12<00:58,  3.47s/it] 72%|███████▏  | 41/57 [02:16<00:56,  3.51s/it] 74%|███████▎  | 42/57 [02:19<00:52,  3.48s/it] 75%|███████▌  | 43/57 [02:22<00:45,  3.26s/it] 77%|███████▋  | 44/57 [02:26<00:44,  3.41s/it] 79%|███████▉  | 45/57 [02:28<00:39,  3.25s/it] 81%|████████  | 46/57 [02:31<00:34,  3.13s/it] 82%|████████▏ | 47/57 [02:35<00:32,  3.24s/it] 84%|████████▍ | 48/57 [02:39<00:31,  3.53s/it] 86%|████████▌ | 49/57 [02:42<00:27,  3.46s/it] 88%|████████▊ | 50/57 [02:45<00:23,  3.33s/it] 89%|████████▉ | 51/57 [02:49<00:20,  3.34s/it] 91%|█████████ | 52/57 [02:52<00:17,  3.41s/it] 93%|█████████▎| 53/57 [02:55<00:13,  3.31s/it] 95%|█████████▍| 54/57 [02:59<00:09,  3.29s/it] 96%|█████████▋| 55/57 [03:02<00:06,  3.29s/it] 98%|█████████▊| 56/57 [03:05<00:03,  3.18s/it]100%|██████████| 57/57 [03:08<00:00,  3.30s/it]                                               WARNING:  WatchFiles detected changes in 'test_akshare.py', 'app/services/burst_monitor.py'. Reloading...
-/home/ubuntu/work/qubot/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:151: UserWarning: Field "model_custom_emoji_id" has conflict with protected namespace "model_".
-
-You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
-  warnings.warn(
-2026-01-16 05:52:27,836 - ForwardFilters - INFO - Created filter chain with 10 filters
-2026-01-16 05:52:27,902 - AiService - WARNING - ⚠️ Provider groq selected but not configured (missing API key).
-INFO:     Started server process [2845157]
-INFO:     Waiting for application startup.
-2026-01-16 05:52:28,314 - Main - INFO - 🚀 Starting Qubot (Python)...
-2026-01-16 05:52:28,315 - TelegramService - INFO - SESSIONS_JSON raw value present: False
-2026-01-16 05:52:28,315 - TelegramService - INFO - sessions_list parsed: 0 items
-2026-01-16 05:52:28,315 - TelegramService - ERROR - No session configs found. Please set SESSIONS_JSON (or TG_SESSIONS_JSON).
-2026-01-16 05:52:28,315 - BotDispatcher - INFO - monitor-bot skipped (token not configured)
-2026-01-16 05:52:28,316 - BotDispatcher - INFO - ai-bot skipped (token not configured)
-2026-01-16 05:52:28,316 - BotDispatcher - INFO - agent-bot skipped (token not configured)
-2026-01-16 05:52:28,316 - BotDispatcher - INFO - rss-bot skipped (token not configured)
-2026-01-16 05:52:28,316 - BotDispatcher - INFO - crawler-bot skipped (token not configured)
-2026-01-16 05:52:28,316 - BotDispatcher - INFO - vibe-bot skipped (token not configured)
-2026-01-16 05:52:28,316 - MonitorService - INFO - Initializing MonitorService...
-2026-01-16 05:52:28,316 - MonitorService - INFO - MonitorService initialized with 0 sources, 0 VIPs, 19 blocked.
-2026-01-16 05:52:28,316 - MonitorService - ERROR - Telegram service not connected!
-2026-01-16 05:52:28,316 - RssService - INFO - ✅ RSS Service started
-2026-01-16 05:52:28,316 - TwitterService - INFO - Initializing TwitterService...
-2026-01-16 05:52:28,316 - TwitterService - WARNING - TWITTER_ACCOUNTS not configured. Twitter monitoring disabled.
-2026-01-16 05:52:28,318 - GitHubService - INFO - Pulling latest changes...
-2026-01-16 05:52:28,346 - CrawlerService - INFO - ✅ Crawler Service started
-2026-01-16 05:52:28,346 - LimitUpService - INFO - ✅ Limit-Up Tracker started
-2026-01-16 05:52:28,603 - StockScanner - INFO - ✅ Stock Scanner started
-2026-01-16 05:52:28,603 - SectorService - INFO - ✅ Sector Tracker started
-2026-01-16 05:52:28,603 - MarketReportService - INFO - Market Report Service initialized
-2026-01-16 05:52:28,603 - MarketReportService - INFO - ✅ Market Report Service started
-2026-01-16 05:52:28,604 - StockHistoryService - INFO - ✅ Stock History Service started
-2026-01-16 05:52:28,605 - ChipDistributionService - INFO - ✅ Chip Distribution Service started
-2026-01-16 05:52:28,605 - WatchlistService - INFO - ✅ Watchlist Service started
-2026-01-16 05:52:28,605 - PortfolioService - INFO - ✅ Portfolio Service started
-2026-01-16 05:52:28,605 - TradingSimulator - INFO - ✅ Trading Simulator started
-2026-01-16 05:52:28,607 - DabanService - INFO - ✅ 打板 盘后复盘 + 实时监控 started
-2026-01-16 05:52:28,607 - DabanSimulator - INFO - ✅ 打板 Simulator started
-2026-01-16 05:52:28,611 - StockHistoryService - WARNING - Database not connected, skipping initialization
-2026-01-16 05:52:28,611 - TradingSimulator - INFO - Next t_trade at 2026-01-16 14:30
-2026-01-16 05:52:28,611 - DabanService - INFO - Starting intraday monitoring loop
-INFO:     Application startup complete.
-2026-01-16 05:52:30,228 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 05:52:30,228 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (1/3)
-<i>13:52:30</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600058_daban_signal">五矿发展</a></b> (600058)
-   新上板 2板 换手0.3% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603056_daban_signal">德邦股份</a></b> (603056)
-   新上板 3板 换手2.7% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600841_daban_signal">动力新科</a></b> (600841)
-   新上板 1板 换手1.2% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002028_daban_signal">思源电气</a></b> (002028)
-   新上板 1板 换手1.7% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601163_daban_signal">三角轮胎</a></b> (601163)
-   新上板 1板 换手3.7% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001255_daban_signal">博菲电气</a></b> (001255)
-   新上板 5板 换手3.5% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002358_daban_signal">森源电气</a></b> (002358)
-   新上板 1板 换手4.0% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002119_daban_signal">康强电子</a></b> (002119)
-   新上板 2板 换手18.9% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300952_daban_signal">恒辉安防</a></b> (300952)
-   新上板 1板 换手5.2% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600785_daban_signal">新华百货</a></b> (600785)
-   新上板 3板 换手21.5% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001207_daban_signal">联科科技</a></b> (001207)
-   新上板 1板 换手6.6% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=605167_daban_signal">利柏特</a></b> (605167)
-   新上板 1板 换手1.7% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603626_daban_signal">科森科技</a></b> (603626)
-   新上板 1板 换手7.2% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002498_daban_signal">汉缆股份</a></b> (002498)
-   新上板 1板 换手2.7% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603163_daban_signal">圣晖集成</a></b> (603163)
-   新上板 1板 换手2.9% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601096_daban_signal">宏盛华源</a></b> (601096)
-   新上板 1板 换手9.8% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603929_daban_signal">亚翔集成</a></b> (603929)
-   新上板 1板 换手2.5% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601616_daban_signal">广电电气</a></b> (601616)
-   新上板 1板 换手12.6% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000720_daban_signal">新能泰山</a></b> (000720)
-   新上板 1板 换手5.8% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002953_daban_signal">日丰股份</a></b> (002953)
-   新上板 1板 换手9.3% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300215_daban_signal">电科院</a></b> (300215)
-   新上板 1板 换手15.5% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002830_daban_signal">名雕股份</a></b> (002830)
-   新上板 1板 换手7.9% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688376_daban_signal">美埃科技</a></b> (688376)
-   新上板 1板 换手4.1% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301529_daban_signal">福赛科技</a></b> (301529)
-   新上板 1板 换手10.7% 近1月0板 @ 13:52:30
-
-2026-01-16 05:52:30,228 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:52:30,229 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:52:30,229 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:52:30,229 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 05:52:30,229 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (2/3)
-<i>13:52:30</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603052_daban_signal">可川科技</a></b> (603052)
-   新上板 1板 换手7.2% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002796_daban_signal">世嘉科技</a></b> (002796)
-   新上板 2板 换手10.3% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002339_daban_signal">积成电子</a></b> (002339)
-   新上板 1板 换手14.6% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600584_daban_signal">长电科技</a></b> (600584)
-   新上板 1板 换手10.7% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603638_daban_signal">艾迪精密</a></b> (603638)
-   新上板 1板 换手1.9% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002196_daban_signal">方正电机</a></b> (002196)
-   新上板 1板 换手14.9% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300606_daban_signal">金太阳</a></b> (300606)
-   新上板 1板 换手19.6% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603058_daban_signal">永吉股份</a></b> (603058)
-   新上板 1板 换手12.0% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603861_daban_signal">白云电器</a></b> (603861)
-   新上板 1板 换手10.2% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001233_daban_signal">海安集团</a></b> (001233)
-   新上板 1板 换手15.7% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600234_daban_signal">科新发展</a></b> (600234)
-   新上板 1板 换手3.2% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603667_daban_signal">五洲新春</a></b> (603667)
-   新上板 1板 换手14.3% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600266_daban_signal">城建发展</a></b> (600266)
-   新上板 1板 换手14.1% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300669_daban_signal">沪宁股份</a></b> (300669)
-   新上板 1板 换手4.9% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300780_daban_signal">德恩精工</a></b> (300780)
-   新上板 1板 换手28.5% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688234_daban_signal">天岳先进</a></b> (688234)
-   新上板 1板 换手4.8% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002331_daban_signal">皖通科技</a></b> (002331)
-   新上板 1板 换手11.2% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603665_daban_signal">康隆达</a></b> (603665)
-   新上板 1板 换手4.3% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601133_daban_signal">柏诚股份</a></b> (601133)
-   新上板 1板 换手23.6% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603061_daban_signal">金海通</a></b> (603061)
-   新上板 1板 换手8.8% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600198_daban_signal">大唐电信</a></b> (600198)
-   新上板 1板 换手8.6% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301235_daban_signal">华康洁净</a></b> (301235)
-   新上板 1板 换手21.1% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603038_daban_signal">华立股份</a></b> (603038)
-   新上板 1板 换手7.3% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603306_daban_signal">华懋科技</a></b> (603306)
-   新上板 1板 换手5.4% 近1月0板 @ 13:52:30
-
-2026-01-16 05:52:30,229 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:52:30,229 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:52:30,229 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:52:30,229 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 05:52:30,229 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (3/3)
-<i>13:52:30</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000620_daban_signal">盈新发展</a></b> (000620)
-   新上板 1板 换手11.1% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600703_daban_signal">三安光电</a></b> (600703)
-   新上板 1板 换手5.3% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002156_daban_signal">通富微电</a></b> (002156)
-   新上板 1板 换手11.4% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600667_daban_signal">太极实业</a></b> (600667)
-   新上板 1板 换手14.1% 近1月0板 @ 13:52:30
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603986_daban_signal">兆易创新</a></b> (603986)
-   新上板 1板 换手6.5% 近1月0板 @ 13:52:30
-
-2026-01-16 05:52:30,229 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:52:30,229 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:52:30,229 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:52:30,229 - TelegramService - WARNING - Cannot send message, no main client connected
-  0%|          | 0/57 [00:00<?, ?it/s]2026-01-16 05:52:31,073 - GitHubService - INFO - ✅ GitHubService initialized.
-  2%|▏         | 1/57 [00:02<02:44,  2.93s/it]  4%|▎         | 2/57 [00:06<03:05,  3.37s/it]  5%|▌         | 3/57 [00:09<03:02,  3.37s/it]  7%|▋         | 4/57 [00:12<02:47,  3.17s/it]  9%|▉         | 5/57 [00:16<02:51,  3.29s/it] 11%|█         | 6/57 [00:19<02:41,  3.17s/it] 12%|█▏        | 7/57 [00:22<02:40,  3.21s/it] 14%|█▍        | 8/57 [00:26<02:42,  3.32s/it] 16%|█▌        | 9/57 [00:29<02:42,  3.39s/it] 18%|█▊        | 10/57 [00:32<02:36,  3.34s/it] 19%|█▉        | 11/57 [00:35<02:27,  3.20s/it] 21%|██        | 12/57 [00:39<02:25,  3.23s/it] 23%|██▎       | 13/57 [00:42<02:22,  3.24s/it] 25%|██▍       | 14/57 [00:46<02:25,  3.39s/it] 26%|██▋       | 15/57 [00:49<02:27,  3.51s/it] 28%|██▊       | 16/57 [00:52<02:15,  3.30s/it] 30%|██▉       | 17/57 [00:56<02:23,  3.59s/it] 32%|███▏      | 18/57 [01:00<02:18,  3.55s/it] 33%|███▎      | 19/57 [01:03<02:10,  3.45s/it] 35%|███▌      | 20/57 [01:06<02:03,  3.35s/it] 37%|███▋      | 21/57 [01:10<01:59,  3.33s/it] 39%|███▊      | 22/57 [01:13<02:02,  3.50s/it] 40%|████      | 23/57 [01:17<02:04,  3.65s/it] 42%|████▏     | 24/57 [01:21<01:59,  3.62s/it] 44%|████▍     | 25/57 [01:24<01:54,  3.58s/it] 46%|████▌     | 26/57 [01:28<01:54,  3.70s/it] 47%|████▋     | 27/57 [01:33<02:00,  4.01s/it] 49%|████▉     | 28/57 [01:38<02:05,  4.34s/it] 51%|█████     | 29/57 [01:42<01:56,  4.16s/it] 53%|█████▎    | 30/57 [01:45<01:44,  3.88s/it] 54%|█████▍    | 31/57 [01:49<01:39,  3.84s/it] 56%|█████▌    | 32/57 [01:53<01:38,  3.93s/it] 58%|█████▊    | 33/57 [01:57<01:35,  3.98s/it] 60%|█████▉    | 34/57 [02:00<01:24,  3.66s/it]2026-01-16 05:54:33,346 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 05:54:33,346 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>13:54:33</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002048_daban_signal">宁波华翔</a></b> (002048)
-   新上板 1板 换手9.5% 近1月0板 @ 13:54:33
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002208_daban_signal">合肥城建</a></b> (002208)
-   新上板 1板 换手12.4% 近1月0板 @ 13:54:33
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603667_daban_signal">五洲新春</a></b> (603667)
-   炸板! 第1次 近1月0板 @ 13:54:33
-
-2026-01-16 05:54:33,346 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:54:33,346 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:54:33,346 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:54:33,346 - TelegramService - WARNING - Cannot send message, no main client connected
- 61%|██████▏   | 35/57 [02:03<01:16,  3.46s/it] 63%|██████▎   | 36/57 [02:06<01:11,  3.41s/it] 65%|██████▍   | 37/57 [02:08<00:59,  2.99s/it] 67%|██████▋   | 38/57 [02:11<00:54,  2.88s/it] 68%|██████▊   | 39/57 [02:14<00:49,  2.76s/it] 70%|███████   | 40/57 [02:15<00:42,  2.49s/it] 72%|███████▏  | 41/57 [02:17<00:37,  2.32s/it] 74%|███████▎  | 42/57 [02:19<00:33,  2.20s/it] 75%|███████▌  | 43/57 [02:22<00:34,  2.48s/it] 77%|███████▋  | 44/57 [02:24<00:30,  2.36s/it] 79%|███████▉  | 45/57 [02:26<00:26,  2.22s/it] 81%|████████  | 46/57 [02:30<00:29,  2.65s/it] 82%|████████▏ | 47/57 [02:33<00:27,  2.73s/it] 84%|████████▍ | 48/57 [02:36<00:25,  2.85s/it] 86%|████████▌ | 49/57 [02:38<00:20,  2.56s/it] 88%|████████▊ | 50/57 [02:40<00:17,  2.49s/it] 89%|████████▉ | 51/57 [02:43<00:14,  2.49s/it] 91%|█████████ | 52/57 [02:45<00:12,  2.52s/it] 93%|█████████▎| 53/57 [02:48<00:10,  2.56s/it] 95%|█████████▍| 54/57 [02:50<00:07,  2.52s/it] 96%|█████████▋| 55/57 [02:53<00:05,  2.55s/it] 98%|█████████▊| 56/57 [02:56<00:02,  2.71s/it]100%|██████████| 57/57 [02:59<00:00,  2.85s/it]                                               2026-01-16 05:55:34,867 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 05:55:34,867 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>13:55:34</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002943_daban_signal">宇晶股份</a></b> (002943)
-   新上板 1板 换手9.6% 近1月0板 @ 13:55:34
-
-2026-01-16 05:55:34,867 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:55:34,867 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:55:34,867 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:55:34,867 - TelegramService - WARNING - Cannot send message, no main client connected
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:03<02:49,  3.04s/it]  4%|▎         | 2/57 [00:06<02:55,  3.19s/it]  5%|▌         | 3/57 [00:09<02:45,  3.06s/it]  7%|▋         | 4/57 [00:12<02:41,  3.05s/it]  9%|▉         | 5/57 [00:15<02:44,  3.17s/it] 11%|█         | 6/57 [00:19<02:45,  3.25s/it] 12%|█▏        | 7/57 [00:22<02:40,  3.21s/it] 14%|█▍        | 8/57 [00:24<02:21,  2.88s/it] 16%|█▌        | 9/57 [00:29<02:47,  3.49s/it] 18%|█▊        | 10/57 [00:31<02:33,  3.26s/it]2026-01-16 05:56:36,385 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 05:56:36,385 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>13:56:36</i>
-
-🔄 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603667_daban_signal">五洲新春</a></b> (603667)
-   回封成功! 第1次 近1月0板 @ 13:56:36
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600053_daban_signal">九鼎投资</a></b> (600053)
-   新上板 1板 换手4.8% 近1月0板 @ 13:56:36
-
-2026-01-16 05:56:36,385 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:56:36,385 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:56:36,385 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:56:36,385 - TelegramService - WARNING - Cannot send message, no main client connected
- 19%|█▉        | 11/57 [00:35<02:31,  3.29s/it] 21%|██        | 12/57 [00:38<02:21,  3.15s/it] 23%|██▎       | 13/57 [00:41<02:15,  3.08s/it] 25%|██▍       | 14/57 [00:43<02:00,  2.81s/it] 26%|██▋       | 15/57 [00:46<02:02,  2.91s/it] 28%|██▊       | 16/57 [00:49<01:57,  2.86s/it] 30%|██▉       | 17/57 [00:51<01:51,  2.79s/it] 32%|███▏      | 18/57 [00:54<01:50,  2.82s/it] 33%|███▎      | 19/57 [00:57<01:50,  2.90s/it] 35%|███▌      | 20/57 [01:00<01:40,  2.73s/it] 37%|███▋      | 21/57 [01:02<01:36,  2.69s/it] 39%|███▊      | 22/57 [01:05<01:34,  2.69s/it] 40%|████      | 23/57 [01:07<01:26,  2.55s/it] 42%|████▏     | 24/57 [01:10<01:23,  2.52s/it] 44%|████▍     | 25/57 [01:13<01:33,  2.91s/it] 46%|████▌     | 26/57 [01:16<01:29,  2.89s/it] 47%|████▋     | 27/57 [01:20<01:35,  3.19s/it] 49%|████▉     | 28/57 [01:24<01:41,  3.50s/it] 51%|█████     | 29/57 [01:28<01:40,  3.59s/it] 53%|█████▎    | 30/57 [01:32<01:39,  3.70s/it]2026-01-16 05:57:37,941 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 05:57:37,941 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>13:57:37</i>
-
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600703_daban_signal">三安光电</a></b> (600703)
-   炸板! 第1次 近1月0板 @ 13:57:37
-
-2026-01-16 05:57:37,941 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:57:37,941 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:57:37,941 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:57:37,941 - TelegramService - WARNING - Cannot send message, no main client connected
- 54%|█████▍    | 31/57 [01:37<01:46,  4.11s/it] 56%|█████▌    | 32/57 [01:42<01:47,  4.32s/it] 58%|█████▊    | 33/57 [01:47<01:45,  4.40s/it] 60%|█████▉    | 34/57 [01:50<01:32,  4.01s/it] 61%|██████▏   | 35/57 [01:54<01:31,  4.17s/it] 63%|██████▎   | 36/57 [01:57<01:20,  3.84s/it] 65%|██████▍   | 37/57 [02:01<01:18,  3.94s/it] 67%|██████▋   | 38/57 [02:04<01:09,  3.65s/it] 68%|██████▊   | 39/57 [02:08<01:03,  3.51s/it] 70%|███████   | 40/57 [02:11<00:57,  3.38s/it] 72%|███████▏  | 41/57 [02:15<00:59,  3.71s/it] 74%|███████▎  | 42/57 [02:19<00:57,  3.86s/it] 75%|███████▌  | 43/57 [02:25<01:00,  4.29s/it] 77%|███████▋  | 44/57 [02:28<00:51,  3.92s/it] 79%|███████▉  | 45/57 [02:31<00:44,  3.74s/it]2026-01-16 05:58:39,432 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 05:58:39,432 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>13:58:39</i>
-
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002028_daban_signal">思源电气</a></b> (002028)
-   炸板! 第1次 近1月0板 @ 13:58:39
-
-2026-01-16 05:58:39,432 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:58:39,432 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:58:39,432 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:58:39,432 - TelegramService - WARNING - Cannot send message, no main client connected
- 81%|████████  | 46/57 [02:36<00:46,  4.24s/it] 82%|████████▏ | 47/57 [02:39<00:38,  3.82s/it] 84%|████████▍ | 48/57 [02:43<00:32,  3.66s/it] 86%|████████▌ | 49/57 [02:45<00:27,  3.42s/it] 88%|████████▊ | 50/57 [02:48<00:22,  3.14s/it] 89%|████████▉ | 51/57 [02:55<00:25,  4.22s/it] 91%|█████████ | 52/57 [02:57<00:18,  3.75s/it] 93%|█████████▎| 53/57 [03:03<00:17,  4.32s/it] 95%|█████████▍| 54/57 [03:06<00:11,  3.84s/it] 96%|█████████▋| 55/57 [03:08<00:06,  3.47s/it] 98%|█████████▊| 56/57 [03:11<00:03,  3.20s/it]100%|██████████| 57/57 [03:14<00:00,  3.08s/it]                                               2026-01-16 05:59:17,882 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 05:59:41,007 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 05:59:41,007 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>13:59:41</i>
-
-🔄 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002028_daban_signal">思源电气</a></b> (002028)
-   回封成功! 第1次 近1月0板 @ 13:59:41
-
-2026-01-16 05:59:41,007 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 05:59:41,007 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 05:59:41,007 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 05:59:41,007 - TelegramService - WARNING - Cannot send message, no main client connected
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:04<04:34,  4.89s/it]  4%|▎         | 2/57 [00:08<03:38,  3.97s/it]  5%|▌         | 3/57 [00:12<03:32,  3.93s/it]  7%|▋         | 4/57 [00:15<03:18,  3.75s/it]  9%|▉         | 5/57 [00:18<03:08,  3.63s/it] 11%|█         | 6/57 [00:22<03:01,  3.56s/it] 12%|█▏        | 7/57 [00:25<02:44,  3.30s/it] 14%|█▍        | 8/57 [00:28<02:42,  3.32s/it] 16%|█▌        | 9/57 [00:31<02:37,  3.28s/it] 18%|█▊        | 10/57 [00:35<02:35,  3.30s/it] 19%|█▉        | 11/57 [00:37<02:25,  3.17s/it] 21%|██        | 12/57 [00:41<02:28,  3.29s/it] 23%|██▎       | 13/57 [00:45<02:28,  3.38s/it]2026-01-16 06:00:42,504 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:00:42,505 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:00:42</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603938_daban_signal">三孚股份</a></b> (603938)
-   新上板 2板 换手10.5% 近1月0板 @ 14:00:42
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603667_daban_signal">五洲新春</a></b> (603667)
-   炸板! 第2次 近1月0板 @ 14:00:42
-
-2026-01-16 06:00:42,505 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:00:42,506 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:00:42,506 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:00:42,509 - TelegramService - WARNING - Cannot send message, no main client connected
- 25%|██▍       | 14/57 [00:48<02:26,  3.41s/it] 26%|██▋       | 15/57 [00:51<02:21,  3.38s/it] 28%|██▊       | 16/57 [00:55<02:20,  3.44s/it] 30%|██▉       | 17/57 [00:59<02:19,  3.49s/it] 32%|███▏      | 18/57 [01:01<02:07,  3.28s/it] 33%|███▎      | 19/57 [01:04<02:02,  3.23s/it] 35%|███▌      | 20/57 [01:08<01:58,  3.19s/it] 37%|███▋      | 21/57 [01:11<01:55,  3.21s/it] 39%|███▊      | 22/57 [01:14<01:54,  3.26s/it] 40%|████      | 23/57 [01:17<01:43,  3.04s/it] 42%|████▏     | 24/57 [01:20<01:40,  3.06s/it] 44%|████▍     | 25/57 [01:24<01:46,  3.32s/it] 46%|████▌     | 26/57 [01:27<01:42,  3.30s/it] 47%|████▋     | 27/57 [01:31<01:40,  3.36s/it] 49%|████▉     | 28/57 [01:34<01:35,  3.30s/it] 51%|█████     | 29/57 [01:36<01:28,  3.15s/it] 53%|█████▎    | 30/57 [01:39<01:22,  3.06s/it] 54%|█████▍    | 31/57 [01:43<01:21,  3.13s/it] 56%|█████▌    | 32/57 [01:46<01:21,  3.28s/it]2026-01-16 06:01:44,007 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:01:44,007 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:01:44</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002664_daban_signal">信质集团</a></b> (002664)
-   新上板 1板 换手6.8% 近1月0板 @ 14:01:44
-
-2026-01-16 06:01:44,007 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:01:44,007 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:01:44,007 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:01:44,007 - TelegramService - WARNING - Cannot send message, no main client connected
- 58%|█████▊    | 33/57 [01:50<01:19,  3.31s/it] 60%|█████▉    | 34/57 [01:53<01:15,  3.28s/it] 61%|██████▏   | 35/57 [01:57<01:18,  3.57s/it] 63%|██████▎   | 36/57 [02:01<01:18,  3.74s/it] 65%|██████▍   | 37/57 [02:03<01:05,  3.30s/it] 67%|██████▋   | 38/57 [02:05<00:55,  2.90s/it] 68%|██████▊   | 39/57 [02:08<00:49,  2.73s/it] 70%|███████   | 40/57 [02:10<00:44,  2.61s/it] 72%|███████▏  | 41/57 [02:13<00:41,  2.57s/it] 74%|███████▎  | 42/57 [02:15<00:36,  2.42s/it] 75%|███████▌  | 43/57 [02:18<00:36,  2.62s/it] 77%|███████▋  | 44/57 [02:20<00:33,  2.55s/it] 79%|███████▉  | 45/57 [02:22<00:29,  2.44s/it] 81%|████████  | 46/57 [02:25<00:27,  2.51s/it] 82%|████████▏ | 47/57 [02:27<00:25,  2.51s/it] 84%|████████▍ | 48/57 [02:30<00:21,  2.42s/it] 86%|████████▌ | 49/57 [02:33<00:21,  2.63s/it] 88%|████████▊ | 50/57 [02:35<00:17,  2.52s/it] 89%|████████▉ | 51/57 [02:37<00:14,  2.38s/it] 91%|█████████ | 52/57 [02:39<00:11,  2.24s/it] 93%|█████████▎| 53/57 [02:42<00:09,  2.49s/it] 95%|█████████▍| 54/57 [02:45<00:08,  2.73s/it] 96%|█████████▋| 55/57 [02:48<00:05,  2.80s/it]2026-01-16 06:02:45,477 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:02:45,477 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:02:45</i>
-
-🔄 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600703_daban_signal">三安光电</a></b> (600703)
-   回封成功! 第1次 近1月0板 @ 14:02:45
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002028_daban_signal">思源电气</a></b> (002028)
-   炸板! 第2次 近1月0板 @ 14:02:45
-
-2026-01-16 06:02:45,477 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:02:45,477 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:02:45,477 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:02:45,477 - TelegramService - WARNING - Cannot send message, no main client connected
- 98%|█████████▊| 56/57 [02:51<00:02,  2.82s/it]100%|██████████| 57/57 [02:53<00:00,  2.58s/it]                                               2026-01-16 06:02:48,086 - TelegramService - WARNING - Cannot send message, no main client connected
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:02<02:44,  2.94s/it]  4%|▎         | 2/57 [00:06<02:48,  3.06s/it]  5%|▌         | 3/57 [00:09<02:44,  3.05s/it]  7%|▋         | 4/57 [00:12<02:51,  3.24s/it]  9%|▉         | 5/57 [00:15<02:41,  3.10s/it] 11%|█         | 6/57 [00:18<02:39,  3.12s/it] 12%|█▏        | 7/57 [00:22<02:42,  3.26s/it]2026-01-16 06:03:47,064 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:03:47,064 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:03:47</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603283_daban_signal">赛腾股份</a></b> (603283)
-   新上板 1板 换手10.1% 近1月0板 @ 14:03:47
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600703_daban_signal">三安光电</a></b> (600703)
-   炸板! 第2次 近1月0板 @ 14:03:47
-
-2026-01-16 06:03:47,064 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:03:47,064 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:03:47,065 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:03:47,065 - TelegramService - WARNING - Cannot send message, no main client connected
- 14%|█▍        | 8/57 [00:26<02:49,  3.45s/it] 16%|█▌        | 9/57 [00:29<02:42,  3.38s/it] 18%|█▊        | 10/57 [00:32<02:35,  3.30s/it] 19%|█▉        | 11/57 [00:35<02:29,  3.24s/it] 21%|██        | 12/57 [00:38<02:21,  3.15s/it] 23%|██▎       | 13/57 [00:41<02:23,  3.25s/it] 25%|██▍       | 14/57 [00:44<02:15,  3.16s/it] 26%|██▋       | 15/57 [00:48<02:14,  3.21s/it] 28%|██▊       | 16/57 [00:50<02:04,  3.04s/it] 30%|██▉       | 17/57 [00:54<02:04,  3.12s/it] 32%|███▏      | 18/57 [00:57<01:58,  3.03s/it] 33%|███▎      | 19/57 [01:00<01:58,  3.13s/it] 35%|███▌      | 20/57 [01:03<01:55,  3.14s/it] 37%|███▋      | 21/57 [01:06<01:55,  3.20s/it] 39%|███▊      | 22/57 [01:09<01:51,  3.18s/it] 40%|████      | 23/57 [01:13<01:51,  3.27s/it] 42%|████▏     | 24/57 [01:16<01:49,  3.33s/it] 44%|████▍     | 25/57 [01:20<01:46,  3.32s/it] 46%|████▌     | 26/57 [01:24<01:48,  3.49s/it] 47%|████▋     | 27/57 [01:27<01:46,  3.56s/it] 49%|████▉     | 28/57 [01:32<01:55,  3.99s/it] 51%|█████     | 29/57 [01:36<01:46,  3.81s/it] 53%|█████▎    | 30/57 [01:40<01:43,  3.83s/it] 54%|█████▍    | 31/57 [01:43<01:33,  3.61s/it] 56%|█████▌    | 32/57 [01:46<01:31,  3.65s/it] 58%|█████▊    | 33/57 [01:50<01:26,  3.62s/it] 60%|█████▉    | 34/57 [01:54<01:28,  3.85s/it] 61%|██████▏   | 35/57 [01:59<01:26,  3.93s/it] 63%|██████▎   | 36/57 [02:02<01:22,  3.91s/it] 65%|██████▍   | 37/57 [02:05<01:12,  3.63s/it] 67%|██████▋   | 38/57 [02:09<01:07,  3.56s/it] 68%|██████▊   | 39/57 [02:11<00:57,  3.21s/it] 70%|███████   | 40/57 [02:15<00:56,  3.32s/it] 72%|███████▏  | 41/57 [02:18<00:53,  3.34s/it] 74%|███████▎  | 42/57 [02:21<00:46,  3.11s/it] 75%|███████▌  | 43/57 [02:23<00:41,  2.94s/it] 77%|███████▋  | 44/57 [02:27<00:40,  3.12s/it]2026-01-16 06:05:50,058 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:05:50,058 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:05:50</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688362_daban_signal">甬矽电子</a></b> (688362)
-   新上板 1板 换手8.6% 近1月0板 @ 14:05:50
-
-2026-01-16 06:05:50,058 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:05:50,058 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:05:50,058 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:05:50,058 - TelegramService - WARNING - Cannot send message, no main client connected
- 79%|███████▉  | 45/57 [02:29<00:34,  2.87s/it] 81%|████████  | 46/57 [02:32<00:31,  2.83s/it] 82%|████████▏ | 47/57 [02:35<00:28,  2.84s/it] 84%|████████▍ | 48/57 [02:38<00:25,  2.86s/it] 86%|████████▌ | 49/57 [02:41<00:23,  2.89s/it] 88%|████████▊ | 50/57 [02:43<00:19,  2.75s/it] 89%|████████▉ | 51/57 [02:46<00:16,  2.74s/it] 91%|█████████ | 52/57 [02:49<00:13,  2.78s/it] 93%|█████████▎| 53/57 [02:51<00:10,  2.66s/it] 95%|█████████▍| 54/57 [02:53<00:07,  2.58s/it] 96%|█████████▋| 55/57 [02:56<00:04,  2.48s/it] 98%|█████████▊| 56/57 [02:58<00:02,  2.42s/it]100%|██████████| 57/57 [03:00<00:00,  2.34s/it]                                               2026-01-16 06:06:22,478 - TelegramService - WARNING - Cannot send message, no main client connected
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:03<03:00,  3.22s/it]  4%|▎         | 2/57 [00:05<02:41,  2.93s/it]  5%|▌         | 3/57 [00:08<02:29,  2.77s/it]  7%|▋         | 4/57 [00:11<02:32,  2.88s/it]  9%|▉         | 5/57 [00:14<02:31,  2.91s/it] 11%|█         | 6/57 [00:18<02:39,  3.14s/it] 12%|█▏        | 7/57 [00:20<02:32,  3.05s/it] 14%|█▍        | 8/57 [00:23<02:22,  2.90s/it] 16%|█▌        | 9/57 [00:26<02:21,  2.95s/it] 18%|█▊        | 10/57 [00:30<02:32,  3.24s/it] 19%|█▉        | 11/57 [00:33<02:22,  3.10s/it] 21%|██        | 12/57 [00:38<02:48,  3.75s/it] 23%|██▎       | 13/57 [00:42<02:41,  3.67s/it] 25%|██▍       | 14/57 [00:44<02:24,  3.37s/it] 26%|██▋       | 15/57 [00:47<02:16,  3.25s/it] 28%|██▊       | 16/57 [00:50<02:06,  3.07s/it] 30%|██▉       | 17/57 [00:53<02:01,  3.04s/it]2026-01-16 06:07:53,104 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:07:53,104 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:07:53</i>
-
-🔄 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603667_daban_signal">五洲新春</a></b> (603667)
-   回封成功! 第2次 近1月0板 @ 14:07:53
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603861_daban_signal">白云电器</a></b> (603861)
-   炸板! 第1次 近1月0板 @ 14:07:53
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603938_daban_signal">三孚股份</a></b> (603938)
-   炸板! 第1次 近1月0板 @ 14:07:53
-
-2026-01-16 06:07:53,104 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:07:53,104 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:07:53,105 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:07:53,105 - TelegramService - WARNING - Cannot send message, no main client connected
- 32%|███▏      | 18/57 [00:59<02:39,  4.09s/it] 33%|███▎      | 19/57 [01:03<02:34,  4.05s/it] 35%|███▌      | 20/57 [01:07<02:23,  3.87s/it] 37%|███▋      | 21/57 [01:11<02:22,  3.97s/it] 39%|███▊      | 22/57 [01:15<02:16,  3.90s/it] 40%|████      | 23/57 [01:18<02:04,  3.65s/it] 42%|████▏     | 24/57 [01:21<01:58,  3.59s/it] 44%|████▍     | 25/57 [01:25<01:58,  3.70s/it] 46%|████▌     | 26/57 [01:28<01:49,  3.53s/it] 47%|████▋     | 27/57 [01:32<01:44,  3.49s/it] 49%|████▉     | 28/57 [01:35<01:41,  3.49s/it] 51%|█████     | 29/57 [01:38<01:34,  3.39s/it] 53%|█████▎    | 30/57 [01:41<01:29,  3.31s/it] 54%|█████▍    | 31/57 [01:45<01:26,  3.33s/it] 56%|█████▌    | 32/57 [01:48<01:22,  3.31s/it] 58%|█████▊    | 33/57 [01:51<01:20,  3.34s/it] 60%|█████▉    | 34/57 [01:55<01:14,  3.26s/it]2026-01-16 06:08:54,606 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:08:54,606 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:08:54</i>
-
-🔄 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600703_daban_signal">三安光电</a></b> (600703)
-   回封成功! 第2次 近1月0板 @ 14:08:54
-
-2026-01-16 06:08:54,607 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:08:54,607 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:08:54,607 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:08:54,607 - TelegramService - WARNING - Cannot send message, no main client connected
- 61%|██████▏   | 35/57 [01:58<01:14,  3.38s/it] 63%|██████▎   | 36/57 [02:01<01:08,  3.27s/it] 65%|██████▍   | 37/57 [02:08<01:24,  4.25s/it] 67%|██████▋   | 38/57 [02:11<01:14,  3.94s/it] 68%|██████▊   | 39/57 [02:14<01:05,  3.64s/it] 70%|███████   | 40/57 [02:17<01:01,  3.59s/it] 72%|███████▏  | 41/57 [02:21<00:56,  3.55s/it] 74%|███████▎  | 42/57 [02:24<00:52,  3.51s/it] 75%|███████▌  | 43/57 [02:28<00:50,  3.64s/it] 77%|███████▋  | 44/57 [02:31<00:44,  3.38s/it] 79%|███████▉  | 45/57 [02:34<00:39,  3.28s/it] 81%|████████  | 46/57 [02:37<00:35,  3.25s/it] 82%|████████▏ | 47/57 [02:40<00:32,  3.24s/it] 84%|████████▍ | 48/57 [02:44<00:29,  3.22s/it] 86%|████████▌ | 49/57 [02:47<00:26,  3.33s/it] 88%|████████▊ | 50/57 [02:51<00:25,  3.61s/it] 89%|████████▉ | 51/57 [02:55<00:21,  3.64s/it] 91%|█████████ | 52/57 [02:59<00:17,  3.59s/it] 93%|█████████▎| 53/57 [03:01<00:13,  3.31s/it] 95%|█████████▍| 54/57 [03:05<00:09,  3.31s/it] 96%|█████████▋| 55/57 [03:09<00:07,  3.76s/it] 98%|█████████▊| 56/57 [03:13<00:03,  3.63s/it]100%|██████████| 57/57 [03:17<00:00,  3.70s/it]                                               2026-01-16 06:10:15,209 - TelegramService - WARNING - Cannot send message, no main client connected
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:03<03:01,  3.24s/it]  4%|▎         | 2/57 [00:06<02:58,  3.24s/it]  5%|▌         | 3/57 [00:10<03:18,  3.68s/it]  7%|▋         | 4/57 [00:13<03:03,  3.45s/it]  9%|▉         | 5/57 [00:16<02:53,  3.33s/it] 11%|█         | 6/57 [00:20<02:52,  3.39s/it] 12%|█▏        | 7/57 [00:22<02:32,  3.05s/it] 14%|█▍        | 8/57 [00:24<02:15,  2.76s/it] 16%|█▌        | 9/57 [00:26<02:02,  2.55s/it] 18%|█▊        | 10/57 [00:29<01:53,  2.41s/it] 19%|█▉        | 11/57 [00:49<06:02,  7.88s/it] 21%|██        | 12/57 [00:52<04:44,  6.32s/it] 23%|██▎       | 13/57 [00:54<03:47,  5.18s/it] 25%|██▍       | 14/57 [00:57<03:16,  4.56s/it] 26%|██▋       | 15/57 [01:00<02:48,  4.01s/it] 28%|██▊       | 16/57 [01:03<02:27,  3.60s/it] 30%|██▉       | 17/57 [01:05<02:04,  3.10s/it] 32%|███▏      | 18/57 [01:07<01:49,  2.80s/it] 33%|███▎      | 19/57 [01:09<01:41,  2.67s/it]2026-01-16 06:11:59,434 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:11:59,434 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:11:59</i>
-
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603986_daban_signal">兆易创新</a></b> (603986)
-   炸板! 第1次 近1月0板 @ 14:11:59
-
-2026-01-16 06:11:59,434 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:11:59,434 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:11:59,434 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:11:59,434 - TelegramService - WARNING - Cannot send message, no main client connected
- 35%|███▌      | 20/57 [01:12<01:39,  2.68s/it] 37%|███▋      | 21/57 [01:15<01:38,  2.73s/it] 39%|███▊      | 22/57 [01:37<04:56,  8.48s/it] 40%|████      | 23/57 [01:41<04:08,  7.32s/it] 42%|████▏     | 24/57 [01:45<03:29,  6.34s/it] 44%|████▍     | 25/57 [01:49<02:55,  5.49s/it] 46%|████▌     | 26/57 [01:55<02:53,  5.59s/it] 47%|████▋     | 27/57 [01:58<02:31,  5.05s/it] 49%|████▉     | 28/57 [02:03<02:27,  5.08s/it] 51%|█████     | 29/57 [02:09<02:29,  5.35s/it] 53%|█████▎    | 30/57 [02:13<02:11,  4.89s/it] 54%|█████▍    | 31/57 [02:17<01:57,  4.53s/it] 56%|█████▌    | 32/57 [02:21<01:48,  4.36s/it] 58%|█████▊    | 33/57 [02:25<01:41,  4.22s/it] 60%|█████▉    | 34/57 [02:30<01:42,  4.47s/it] 61%|██████▏   | 35/57 [02:34<01:33,  4.23s/it] 63%|██████▎   | 36/57 [02:38<01:27,  4.18s/it] 65%|██████▍   | 37/57 [02:41<01:19,  3.96s/it] 67%|██████▋   | 38/57 [02:44<01:11,  3.77s/it] 68%|██████▊   | 39/57 [02:48<01:05,  3.65s/it] 70%|███████   | 40/57 [02:51<01:00,  3.53s/it] 72%|███████▏  | 41/57 [02:54<00:55,  3.49s/it] 74%|███████▎  | 42/57 [02:59<00:56,  3.77s/it] 75%|███████▌  | 43/57 [03:02<00:50,  3.62s/it] 77%|███████▋  | 44/57 [03:05<00:44,  3.39s/it] 79%|███████▉  | 45/57 [03:08<00:40,  3.41s/it] 81%|████████  | 46/57 [03:12<00:37,  3.39s/it]2026-01-16 06:14:02,484 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:14:02,484 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:14:02</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600858_daban_signal">银座股份</a></b> (600858)
-   新上板 1板 换手10.4% 近1月0板 @ 14:14:02
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603667_daban_signal">五洲新春</a></b> (603667)
-   炸板! 第3次 近1月0板 @ 14:14:02
-
-2026-01-16 06:14:02,484 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:14:02,484 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:14:02,484 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:14:02,485 - TelegramService - WARNING - Cannot send message, no main client connected
- 82%|████████▏ | 47/57 [03:15<00:34,  3.48s/it] 84%|████████▍ | 48/57 [03:19<00:31,  3.47s/it] 86%|████████▌ | 49/57 [03:22<00:27,  3.38s/it] 88%|████████▊ | 50/57 [03:25<00:22,  3.16s/it] 89%|████████▉ | 51/57 [03:29<00:20,  3.42s/it] 91%|█████████ | 52/57 [03:32<00:16,  3.35s/it] 93%|█████████▎| 53/57 [03:36<00:14,  3.69s/it] 95%|█████████▍| 54/57 [03:41<00:11,  3.88s/it] 96%|█████████▋| 55/57 [03:44<00:07,  3.60s/it] 98%|█████████▊| 56/57 [03:47<00:03,  3.41s/it]100%|██████████| 57/57 [03:51<00:00,  3.70s/it]                                               2026-01-16 06:14:39,494 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:15:03,988 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:15:03,988 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:15:03</i>
-
-⚠️ <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600858_daban_signal">银座股份</a></b> (600858)
-   炸板! 第1次 近1月0板 @ 14:15:03
-
-2026-01-16 06:15:03,988 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:15:03,988 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:15:03,988 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:15:03,988 - TelegramService - WARNING - Cannot send message, no main client connected
-WARNING:  WatchFiles detected changes in 'app/services/stock_scanner.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-2026-01-16 06:15:11,412 - Main - INFO - 🛑 Shutting down...
-2026-01-16 06:15:11,412 - RssService - INFO - RSS Service stopped
-2026-01-16 06:15:11,412 - TwitterService - INFO - Twitter monitoring stopped
-2026-01-16 06:15:11,416 - CrawlerService - INFO - Crawler Service stopped
-2026-01-16 06:15:11,416 - LimitUpService - INFO - Limit-Up Tracker stopped
-2026-01-16 06:15:11,416 - StockScanner - INFO - Stock Scanner stopped
-2026-01-16 06:15:11,416 - SectorService - INFO - Sector Tracker stopped
-2026-01-16 06:15:11,416 - MarketReportService - INFO - Market Report Service stopped
-2026-01-16 06:15:11,416 - StockHistoryService - INFO - Stock History Service stopped
-2026-01-16 06:15:11,416 - PortfolioService - INFO - Portfolio Service stopped
-2026-01-16 06:15:11,416 - WatchlistService - INFO - Watchlist Service stopped
-2026-01-16 06:15:11,416 - TradingSimulator - INFO - Trading Simulator stopped
-2026-01-16 06:15:11,416 - DabanService - INFO - 打板 service stopped
-2026-01-16 06:15:11,417 - DabanSimulator - INFO - 打板 Simulator stopped
-INFO:     Application shutdown complete.
-INFO:     Finished server process [2845157]
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:04<04:11,  4.49s/it]  4%|▎         | 2/57 [00:09<04:11,  4.58s/it]  5%|▌         | 3/57 [00:12<03:45,  4.17s/it]  7%|▋         | 4/57 [00:17<03:54,  4.43s/it]  9%|▉         | 5/57 [00:20<03:19,  3.84s/it]                                              WARNING:  WatchFiles detected changes in 'app/services/stock_scanner.py', 'app/bots/crawler/handlers.py'. Reloading...
-/home/ubuntu/work/qubot/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:151: UserWarning: Field "model_custom_emoji_id" has conflict with protected namespace "model_".
-
-You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
-  warnings.warn(
-2026-01-16 06:16:31,643 - ForwardFilters - INFO - Created filter chain with 10 filters
-2026-01-16 06:16:31,711 - AiService - WARNING - ⚠️ Provider groq selected but not configured (missing API key).
-INFO:     Started server process [2858530]
-INFO:     Waiting for application startup.
-2026-01-16 06:16:32,128 - Main - INFO - 🚀 Starting Qubot (Python)...
-2026-01-16 06:16:32,129 - TelegramService - INFO - SESSIONS_JSON raw value present: False
-2026-01-16 06:16:32,129 - TelegramService - INFO - sessions_list parsed: 0 items
-2026-01-16 06:16:32,129 - TelegramService - ERROR - No session configs found. Please set SESSIONS_JSON (or TG_SESSIONS_JSON).
-2026-01-16 06:16:32,129 - BotDispatcher - INFO - monitor-bot skipped (token not configured)
-2026-01-16 06:16:32,129 - BotDispatcher - INFO - ai-bot skipped (token not configured)
-2026-01-16 06:16:32,129 - BotDispatcher - INFO - agent-bot skipped (token not configured)
-2026-01-16 06:16:32,129 - BotDispatcher - INFO - rss-bot skipped (token not configured)
-2026-01-16 06:16:32,129 - BotDispatcher - INFO - crawler-bot skipped (token not configured)
-2026-01-16 06:16:32,129 - BotDispatcher - INFO - vibe-bot skipped (token not configured)
-2026-01-16 06:16:32,130 - MonitorService - INFO - Initializing MonitorService...
-2026-01-16 06:16:32,130 - MonitorService - INFO - MonitorService initialized with 0 sources, 0 VIPs, 19 blocked.
-2026-01-16 06:16:32,130 - MonitorService - ERROR - Telegram service not connected!
-2026-01-16 06:16:32,130 - RssService - INFO - ✅ RSS Service started
-2026-01-16 06:16:32,130 - TwitterService - INFO - Initializing TwitterService...
-2026-01-16 06:16:32,130 - TwitterService - WARNING - TWITTER_ACCOUNTS not configured. Twitter monitoring disabled.
-2026-01-16 06:16:32,131 - GitHubService - INFO - Pulling latest changes...
-2026-01-16 06:16:32,160 - CrawlerService - INFO - ✅ Crawler Service started
-2026-01-16 06:16:32,160 - LimitUpService - INFO - ✅ Limit-Up Tracker started
-2026-01-16 06:16:32,425 - StockScanner - INFO - ✅ Stock Scanner started
-2026-01-16 06:16:32,426 - SectorService - INFO - ✅ Sector Tracker started
-2026-01-16 06:16:32,426 - MarketReportService - INFO - Market Report Service initialized
-2026-01-16 06:16:32,426 - MarketReportService - INFO - ✅ Market Report Service started
-2026-01-16 06:16:32,426 - StockHistoryService - INFO - ✅ Stock History Service started
-2026-01-16 06:16:32,427 - ChipDistributionService - INFO - ✅ Chip Distribution Service started
-2026-01-16 06:16:32,427 - WatchlistService - INFO - ✅ Watchlist Service started
-2026-01-16 06:16:32,427 - PortfolioService - INFO - ✅ Portfolio Service started
-2026-01-16 06:16:32,427 - TradingSimulator - INFO - ✅ Trading Simulator started
-2026-01-16 06:16:32,429 - DabanService - INFO - ✅ 打板 盘后复盘 + 实时监控 started
-2026-01-16 06:16:32,429 - DabanSimulator - INFO - ✅ 打板 Simulator started
-2026-01-16 06:16:32,430 - StockHistoryService - WARNING - Database not connected, skipping initialization
-2026-01-16 06:16:32,430 - TradingSimulator - INFO - Next t_trade at 2026-01-16 14:30
-2026-01-16 06:16:32,430 - DabanService - INFO - Starting intraday monitoring loop
-INFO:     Application startup complete.
-2026-01-16 06:16:34,168 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:16:34,169 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (1/3)
-<i>14:16:34</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600058_daban_signal">五矿发展</a></b> (600058)
-   新上板 2板 换手0.3% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603056_daban_signal">德邦股份</a></b> (603056)
-   新上板 3板 换手2.7% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600841_daban_signal">动力新科</a></b> (600841)
-   新上板 1板 换手1.2% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601163_daban_signal">三角轮胎</a></b> (601163)
-   新上板 1板 换手3.7% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001255_daban_signal">博菲电气</a></b> (001255)
-   新上板 5板 换手3.5% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002358_daban_signal">森源电气</a></b> (002358)
-   新上板 1板 换手4.1% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002119_daban_signal">康强电子</a></b> (002119)
-   新上板 2板 换手19.0% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300952_daban_signal">恒辉安防</a></b> (300952)
-   新上板 1板 换手5.2% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600785_daban_signal">新华百货</a></b> (600785)
-   新上板 3板 换手21.9% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001207_daban_signal">联科科技</a></b> (001207)
-   新上板 1板 换手6.6% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=605167_daban_signal">利柏特</a></b> (605167)
-   新上板 1板 换手1.8% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603626_daban_signal">科森科技</a></b> (603626)
-   新上板 1板 换手7.3% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002498_daban_signal">汉缆股份</a></b> (002498)
-   新上板 1板 换手2.7% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603163_daban_signal">圣晖集成</a></b> (603163)
-   新上板 1板 换手2.9% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601096_daban_signal">宏盛华源</a></b> (601096)
-   新上板 1板 换手9.8% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603929_daban_signal">亚翔集成</a></b> (603929)
-   新上板 1板 换手2.5% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601616_daban_signal">广电电气</a></b> (601616)
-   新上板 1板 换手12.7% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000720_daban_signal">新能泰山</a></b> (000720)
-   新上板 1板 换手5.9% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002953_daban_signal">日丰股份</a></b> (002953)
-   新上板 1板 换手9.4% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300215_daban_signal">电科院</a></b> (300215)
-   新上板 1板 换手15.6% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002830_daban_signal">名雕股份</a></b> (002830)
-   新上板 1板 换手7.9% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688376_daban_signal">美埃科技</a></b> (688376)
-   新上板 1板 换手4.1% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301529_daban_signal">福赛科技</a></b> (301529)
-   新上板 1板 换手10.8% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603052_daban_signal">可川科技</a></b> (603052)
-   新上板 1板 换手7.3% 近1月0板 @ 14:16:34
-
-2026-01-16 06:16:34,169 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:16:34,169 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:16:34,169 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:16:34,169 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:16:34,169 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (2/3)
-<i>14:16:34</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002796_daban_signal">世嘉科技</a></b> (002796)
-   新上板 2板 换手10.3% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002339_daban_signal">积成电子</a></b> (002339)
-   新上板 1板 换手14.6% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002048_daban_signal">宁波华翔</a></b> (002048)
-   新上板 1板 换手9.7% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600584_daban_signal">长电科技</a></b> (600584)
-   新上板 1板 换手10.8% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603638_daban_signal">艾迪精密</a></b> (603638)
-   新上板 1板 换手1.9% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002196_daban_signal">方正电机</a></b> (002196)
-   新上板 1板 换手15.0% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300606_daban_signal">金太阳</a></b> (300606)
-   新上板 1板 换手19.8% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603058_daban_signal">永吉股份</a></b> (603058)
-   新上板 1板 换手12.1% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001233_daban_signal">海安集团</a></b> (001233)
-   新上板 1板 换手15.8% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600234_daban_signal">科新发展</a></b> (600234)
-   新上板 1板 换手3.2% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600266_daban_signal">城建发展</a></b> (600266)
-   新上板 1板 换手14.2% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300669_daban_signal">沪宁股份</a></b> (300669)
-   新上板 1板 换手5.0% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300780_daban_signal">德恩精工</a></b> (300780)
-   新上板 1板 换手28.9% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688234_daban_signal">天岳先进</a></b> (688234)
-   新上板 1板 换手4.8% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002331_daban_signal">皖通科技</a></b> (002331)
-   新上板 1板 换手11.3% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603665_daban_signal">康隆达</a></b> (603665)
-   新上板 1板 换手4.3% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601133_daban_signal">柏诚股份</a></b> (601133)
-   新上板 1板 换手23.8% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603061_daban_signal">金海通</a></b> (603061)
-   新上板 1板 换手8.9% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600198_daban_signal">大唐电信</a></b> (600198)
-   新上板 1板 换手9.0% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301235_daban_signal">华康洁净</a></b> (301235)
-   新上板 1板 换手21.3% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603038_daban_signal">华立股份</a></b> (603038)
-   新上板 1板 换手7.4% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603306_daban_signal">华懋科技</a></b> (603306)
-   新上板 1板 换手5.5% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000620_daban_signal">盈新发展</a></b> (000620)
-   新上板 1板 换手11.3% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600703_daban_signal">三安光电</a></b> (600703)
-   新上板 1板 换手6.3% 近1月0板 @ 14:16:34
-
-2026-01-16 06:16:34,169 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:16:34,169 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:16:34,169 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:16:34,169 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:16:34,169 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (3/3)
-<i>14:16:34</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002156_daban_signal">通富微电</a></b> (002156)
-   新上板 1板 换手11.5% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600667_daban_signal">太极实业</a></b> (600667)
-   新上板 1板 换手14.4% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002208_daban_signal">合肥城建</a></b> (002208)
-   新上板 1板 换手13.0% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002943_daban_signal">宇晶股份</a></b> (002943)
-   新上板 1板 换手10.0% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600053_daban_signal">九鼎投资</a></b> (600053)
-   新上板 1板 换手5.0% 近1月0板 @ 14:16:34
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002664_daban_signal">信质集团</a></b> (002664)
-   新上板 1板 换手7.3% 近1月0板 @ 14:16:34
-
-2026-01-16 06:16:34,169 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:16:34,169 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:16:34,169 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:16:34,169 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:16:34,923 - GitHubService - INFO - ✅ GitHubService initialized.
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:02<02:23,  2.56s/it]  4%|▎         | 2/57 [00:05<02:22,  2.59s/it]  5%|▌         | 3/57 [00:08<02:32,  2.83s/it]  7%|▋         | 4/57 [00:11<02:47,  3.16s/it]  9%|▉         | 5/57 [00:14<02:40,  3.09s/it] 11%|█         | 6/57 [00:18<02:44,  3.23s/it] 12%|█▏        | 7/57 [00:21<02:43,  3.28s/it] 14%|█▍        | 8/57 [00:25<02:43,  3.34s/it] 16%|█▌        | 9/57 [00:27<02:29,  3.11s/it] 18%|█▊        | 10/57 [00:30<02:24,  3.07s/it] 19%|█▉        | 11/57 [00:33<02:10,  2.84s/it] 21%|██        | 12/57 [00:35<02:03,  2.75s/it] 23%|██▎       | 13/57 [00:37<01:53,  2.59s/it] 25%|██▍       | 14/57 [00:40<01:50,  2.57s/it] 26%|██▋       | 15/57 [00:43<01:55,  2.76s/it] 28%|██▊       | 16/57 [00:46<01:48,  2.64s/it] 30%|██▉       | 17/57 [00:47<01:36,  2.42s/it] 32%|███▏      | 18/57 [00:50<01:36,  2.48s/it] 33%|███▎      | 19/57 [00:53<01:42,  2.69s/it] 35%|███▌      | 20/57 [00:55<01:32,  2.50s/it] 37%|███▋      | 21/57 [00:58<01:30,  2.51s/it]WARNING:  WatchFiles detected changes in 'app/services/stock_scanner.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-2026-01-16 06:17:34,010 - Main - INFO - 🛑 Shutting down...
-2026-01-16 06:17:34,010 - RssService - INFO - RSS Service stopped
-2026-01-16 06:17:34,010 - TwitterService - INFO - Twitter monitoring stopped
-2026-01-16 06:17:34,013 - CrawlerService - INFO - Crawler Service stopped
-2026-01-16 06:17:34,014 - LimitUpService - INFO - Limit-Up Tracker stopped
-2026-01-16 06:17:34,014 - StockScanner - INFO - Stock Scanner stopped
-2026-01-16 06:17:34,014 - SectorService - INFO - Sector Tracker stopped
-2026-01-16 06:17:34,014 - MarketReportService - INFO - Market Report Service stopped
-2026-01-16 06:17:34,014 - StockHistoryService - INFO - Stock History Service stopped
-2026-01-16 06:17:34,014 - PortfolioService - INFO - Portfolio Service stopped
-2026-01-16 06:17:34,014 - WatchlistService - INFO - Watchlist Service stopped
-2026-01-16 06:17:34,014 - TradingSimulator - INFO - Trading Simulator stopped
-2026-01-16 06:17:34,014 - DabanService - INFO - 打板 service stopped
-2026-01-16 06:17:34,014 - DabanSimulator - INFO - 打板 Simulator stopped
-INFO:     Application shutdown complete.
-INFO:     Finished server process [2858530]
- 39%|███▊      | 22/57 [01:02<01:48,  3.09s/it] 40%|████      | 23/57 [01:23<04:48,  8.47s/it] 42%|████▏     | 24/57 [01:27<03:48,  6.91s/it] 44%|████▍     | 25/57 [01:30<03:07,  5.85s/it] 46%|████▌     | 26/57 [01:33<02:39,  5.13s/it] 47%|████▋     | 27/57 [01:37<02:19,  4.66s/it] 49%|████▉     | 28/57 [01:40<02:05,  4.32s/it] 51%|█████     | 29/57 [01:44<01:54,  4.09s/it] 53%|█████▎    | 30/57 [01:48<01:45,  3.93s/it] 54%|█████▍    | 31/57 [01:51<01:40,  3.88s/it] 56%|█████▌    | 32/57 [01:55<01:37,  3.91s/it] 58%|█████▊    | 33/57 [01:58<01:27,  3.66s/it] 60%|█████▉    | 34/57 [02:03<01:32,  4.04s/it] 61%|██████▏   | 35/57 [02:06<01:22,  3.76s/it] 63%|██████▎   | 36/57 [02:10<01:16,  3.65s/it] 65%|██████▍   | 37/57 [02:14<01:17,  3.86s/it] 67%|██████▋   | 38/57 [02:18<01:12,  3.83s/it] 68%|██████▊   | 39/57 [02:21<01:04,  3.57s/it] 70%|███████   | 40/57 [02:25<01:02,  3.66s/it] 72%|███████▏  | 41/57 [02:28<00:54,  3.38s/it] 74%|███████▎  | 42/57 [02:31<00:51,  3.43s/it] 75%|███████▌  | 43/57 [02:36<00:52,  3.77s/it] 77%|███████▋  | 44/57 [02:38<00:44,  3.44s/it] 79%|███████▉  | 45/57 [02:42<00:40,  3.42s/it] 81%|████████  | 46/57 [02:45<00:37,  3.43s/it] 82%|████████▏ | 47/57 [02:48<00:33,  3.35s/it] 84%|████████▍ | 48/57 [02:52<00:30,  3.38s/it] 86%|████████▌ | 49/57 [02:55<00:26,  3.30s/it] 88%|████████▊ | 50/57 [02:58<00:22,  3.25s/it] 89%|████████▉ | 51/57 [03:01<00:19,  3.20s/it] 91%|█████████ | 52/57 [03:05<00:16,  3.37s/it] 93%|█████████▎| 53/57 [03:08<00:13,  3.35s/it] 95%|█████████▍| 54/57 [03:12<00:10,  3.45s/it] 96%|█████████▋| 55/57 [03:16<00:07,  3.55s/it] 98%|█████████▊| 56/57 [03:19<00:03,  3.57s/it]100%|██████████| 57/57 [03:23<00:00,  3.60s/it]                                               WARNING:  WatchFiles detected changes in 'app/services/stock_scanner.py', 'app/bots/crawler/handlers.py'. Reloading...
-/home/ubuntu/work/qubot/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:151: UserWarning: Field "model_custom_emoji_id" has conflict with protected namespace "model_".
-
-You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
-  warnings.warn(
-2026-01-16 06:20:05,029 - ForwardFilters - INFO - Created filter chain with 10 filters
-2026-01-16 06:20:05,095 - AiService - WARNING - ⚠️ Provider groq selected but not configured (missing API key).
-INFO:     Started server process [2860653]
-INFO:     Waiting for application startup.
-2026-01-16 06:20:05,507 - Main - INFO - 🚀 Starting Qubot (Python)...
-2026-01-16 06:20:05,508 - TelegramService - INFO - SESSIONS_JSON raw value present: False
-2026-01-16 06:20:05,508 - TelegramService - INFO - sessions_list parsed: 0 items
-2026-01-16 06:20:05,509 - TelegramService - ERROR - No session configs found. Please set SESSIONS_JSON (or TG_SESSIONS_JSON).
-2026-01-16 06:20:05,509 - BotDispatcher - INFO - monitor-bot skipped (token not configured)
-2026-01-16 06:20:05,509 - BotDispatcher - INFO - ai-bot skipped (token not configured)
-2026-01-16 06:20:05,509 - BotDispatcher - INFO - agent-bot skipped (token not configured)
-2026-01-16 06:20:05,509 - BotDispatcher - INFO - rss-bot skipped (token not configured)
-2026-01-16 06:20:05,509 - BotDispatcher - INFO - crawler-bot skipped (token not configured)
-2026-01-16 06:20:05,509 - BotDispatcher - INFO - vibe-bot skipped (token not configured)
-2026-01-16 06:20:05,509 - MonitorService - INFO - Initializing MonitorService...
-2026-01-16 06:20:05,509 - MonitorService - INFO - MonitorService initialized with 0 sources, 0 VIPs, 19 blocked.
-2026-01-16 06:20:05,509 - MonitorService - ERROR - Telegram service not connected!
-2026-01-16 06:20:05,509 - RssService - INFO - ✅ RSS Service started
-2026-01-16 06:20:05,509 - TwitterService - INFO - Initializing TwitterService...
-2026-01-16 06:20:05,510 - TwitterService - WARNING - TWITTER_ACCOUNTS not configured. Twitter monitoring disabled.
-2026-01-16 06:20:05,512 - GitHubService - INFO - Pulling latest changes...
-2026-01-16 06:20:05,549 - CrawlerService - INFO - ✅ Crawler Service started
-2026-01-16 06:20:05,549 - LimitUpService - INFO - ✅ Limit-Up Tracker started
-2026-01-16 06:20:05,858 - StockScanner - INFO - ✅ Stock Scanner started
-2026-01-16 06:20:05,858 - SectorService - INFO - ✅ Sector Tracker started
-2026-01-16 06:20:05,858 - MarketReportService - INFO - Market Report Service initialized
-2026-01-16 06:20:05,858 - MarketReportService - INFO - ✅ Market Report Service started
-2026-01-16 06:20:05,859 - StockHistoryService - INFO - ✅ Stock History Service started
-2026-01-16 06:20:05,860 - ChipDistributionService - INFO - ✅ Chip Distribution Service started
-2026-01-16 06:20:05,860 - WatchlistService - INFO - ✅ Watchlist Service started
-2026-01-16 06:20:05,860 - PortfolioService - INFO - ✅ Portfolio Service started
-2026-01-16 06:20:05,860 - TradingSimulator - INFO - ✅ Trading Simulator started
-2026-01-16 06:20:05,862 - DabanService - INFO - ✅ 打板 盘后复盘 + 实时监控 started
-2026-01-16 06:20:05,862 - DabanSimulator - INFO - ✅ 打板 Simulator started
-2026-01-16 06:20:05,863 - StockHistoryService - WARNING - Database not connected, skipping initialization
-2026-01-16 06:20:05,863 - TradingSimulator - INFO - Next t_trade at 2026-01-16 14:30
-2026-01-16 06:20:05,863 - DabanService - INFO - Starting intraday monitoring loop
-INFO:     Application startup complete.
-2026-01-16 06:20:07,499 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:20:07,500 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (1/3)
-<i>14:20:07</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600058_daban_signal">五矿发展</a></b> (600058)
-   新上板 2板 换手0.4% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603056_daban_signal">德邦股份</a></b> (603056)
-   新上板 3板 换手2.7% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600841_daban_signal">动力新科</a></b> (600841)
-   新上板 1板 换手1.2% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601163_daban_signal">三角轮胎</a></b> (601163)
-   新上板 1板 换手3.7% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001255_daban_signal">博菲电气</a></b> (001255)
-   新上板 5板 换手3.5% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002358_daban_signal">森源电气</a></b> (002358)
-   新上板 1板 换手4.1% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002119_daban_signal">康强电子</a></b> (002119)
-   新上板 2板 换手19.0% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300952_daban_signal">恒辉安防</a></b> (300952)
-   新上板 1板 换手5.2% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600785_daban_signal">新华百货</a></b> (600785)
-   新上板 3板 换手21.9% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001207_daban_signal">联科科技</a></b> (001207)
-   新上板 1板 换手6.6% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=605167_daban_signal">利柏特</a></b> (605167)
-   新上板 1板 换手1.8% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603626_daban_signal">科森科技</a></b> (603626)
-   新上板 1板 换手7.3% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002498_daban_signal">汉缆股份</a></b> (002498)
-   新上板 1板 换手2.7% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603163_daban_signal">圣晖集成</a></b> (603163)
-   新上板 1板 换手2.9% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601096_daban_signal">宏盛华源</a></b> (601096)
-   新上板 1板 换手9.9% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603929_daban_signal">亚翔集成</a></b> (603929)
-   新上板 1板 换手2.5% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601616_daban_signal">广电电气</a></b> (601616)
-   新上板 1板 换手12.7% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000720_daban_signal">新能泰山</a></b> (000720)
-   新上板 1板 换手5.9% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002953_daban_signal">日丰股份</a></b> (002953)
-   新上板 1板 换手9.4% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300215_daban_signal">电科院</a></b> (300215)
-   新上板 1板 换手15.7% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002830_daban_signal">名雕股份</a></b> (002830)
-   新上板 1板 换手8.0% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688376_daban_signal">美埃科技</a></b> (688376)
-   新上板 1板 换手4.1% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301529_daban_signal">福赛科技</a></b> (301529)
-   新上板 1板 换手10.8% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603052_daban_signal">可川科技</a></b> (603052)
-   新上板 1板 换手7.3% 近1月0板 @ 14:20:07
-
-2026-01-16 06:20:07,501 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:20:07,501 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:20:07,501 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:20:07,502 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:20:07,502 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (2/3)
-<i>14:20:07</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002796_daban_signal">世嘉科技</a></b> (002796)
-   新上板 2板 换手10.4% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002339_daban_signal">积成电子</a></b> (002339)
-   新上板 1板 换手14.6% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002048_daban_signal">宁波华翔</a></b> (002048)
-   新上板 1板 换手9.7% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600584_daban_signal">长电科技</a></b> (600584)
-   新上板 1板 换手10.8% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603638_daban_signal">艾迪精密</a></b> (603638)
-   新上板 1板 换手1.9% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002196_daban_signal">方正电机</a></b> (002196)
-   新上板 1板 换手15.1% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300606_daban_signal">金太阳</a></b> (300606)
-   新上板 1板 换手19.8% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603058_daban_signal">永吉股份</a></b> (603058)
-   新上板 1板 换手12.2% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001233_daban_signal">海安集团</a></b> (001233)
-   新上板 1板 换手15.8% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600234_daban_signal">科新发展</a></b> (600234)
-   新上板 1板 换手3.2% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603667_daban_signal">五洲新春</a></b> (603667)
-   新上板 1板 换手16.0% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600266_daban_signal">城建发展</a></b> (600266)
-   新上板 1板 换手14.2% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300669_daban_signal">沪宁股份</a></b> (300669)
-   新上板 1板 换手5.0% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300780_daban_signal">德恩精工</a></b> (300780)
-   新上板 1板 换手29.0% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688234_daban_signal">天岳先进</a></b> (688234)
-   新上板 1板 换手4.9% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002331_daban_signal">皖通科技</a></b> (002331)
-   新上板 1板 换手11.3% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603665_daban_signal">康隆达</a></b> (603665)
-   新上板 1板 换手4.3% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601133_daban_signal">柏诚股份</a></b> (601133)
-   新上板 1板 换手23.8% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603061_daban_signal">金海通</a></b> (603061)
-   新上板 1板 换手8.9% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600198_daban_signal">大唐电信</a></b> (600198)
-   新上板 1板 换手9.0% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301235_daban_signal">华康洁净</a></b> (301235)
-   新上板 1板 换手21.3% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603038_daban_signal">华立股份</a></b> (603038)
-   新上板 1板 换手7.4% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603306_daban_signal">华懋科技</a></b> (603306)
-   新上板 1板 换手5.5% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000620_daban_signal">盈新发展</a></b> (000620)
-   新上板 1板 换手11.4% 近1月0板 @ 14:20:07
-
-2026-01-16 06:20:07,502 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:20:07,502 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:20:07,502 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:20:07,502 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:20:07,502 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (3/3)
-<i>14:20:07</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600703_daban_signal">三安光电</a></b> (600703)
-   新上板 1板 换手6.4% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002156_daban_signal">通富微电</a></b> (002156)
-   新上板 1板 换手11.5% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600667_daban_signal">太极实业</a></b> (600667)
-   新上板 1板 换手14.5% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002208_daban_signal">合肥城建</a></b> (002208)
-   新上板 1板 换手13.1% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002943_daban_signal">宇晶股份</a></b> (002943)
-   新上板 1板 换手10.0% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600053_daban_signal">九鼎投资</a></b> (600053)
-   新上板 1板 换手5.1% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002664_daban_signal">信质集团</a></b> (002664)
-   新上板 1板 换手7.4% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603283_daban_signal">赛腾股份</a></b> (603283)
-   新上板 1板 换手11.9% 近1月0板 @ 14:20:07
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688362_daban_signal">甬矽电子</a></b> (688362)
-   新上板 1板 换手8.9% 近1月0板 @ 14:20:07
-
-2026-01-16 06:20:07,502 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:20:07,502 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:20:07,502 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:20:07,502 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:20:08,235 - GitHubService - INFO - ✅ GitHubService initialized.
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:03<02:57,  3.17s/it]  4%|▎         | 2/57 [00:07<03:19,  3.62s/it]  5%|▌         | 3/57 [00:11<03:26,  3.82s/it]  7%|▋         | 4/57 [00:14<03:19,  3.77s/it]  9%|▉         | 5/57 [00:18<03:06,  3.58s/it] 11%|█         | 6/57 [00:21<02:59,  3.53s/it] 12%|█▏        | 7/57 [00:24<02:53,  3.47s/it] 14%|█▍        | 8/57 [00:28<02:47,  3.42s/it] 16%|█▌        | 9/57 [00:31<02:49,  3.52s/it] 18%|█▊        | 10/57 [00:36<02:57,  3.78s/it] 19%|█▉        | 11/57 [00:41<03:09,  4.11s/it] 21%|██        | 12/57 [00:44<02:59,  3.99s/it] 23%|██▎       | 13/57 [00:49<02:58,  4.05s/it] 25%|██▍       | 14/57 [00:52<02:49,  3.95s/it] 26%|██▋       | 15/57 [00:57<02:56,  4.21s/it] 28%|██▊       | 16/57 [01:02<02:58,  4.35s/it] 30%|██▉       | 17/57 [01:06<02:46,  4.17s/it] 32%|███▏      | 18/57 [01:12<03:06,  4.79s/it] 33%|███▎      | 19/57 [01:15<02:45,  4.37s/it] 35%|███▌      | 20/57 [01:18<02:29,  4.03s/it] 37%|███▋      | 21/57 [01:22<02:23,  3.99s/it] 39%|███▊      | 22/57 [01:27<02:32,  4.36s/it] 40%|████      | 23/57 [01:32<02:25,  4.29s/it] 42%|████▏     | 24/57 [01:36<02:27,  4.46s/it] 44%|████▍     | 25/57 [01:40<02:16,  4.28s/it] 46%|████▌     | 26/57 [01:44<02:07,  4.12s/it] 47%|████▋     | 27/57 [01:48<02:02,  4.07s/it] 49%|████▉     | 28/57 [01:53<02:07,  4.41s/it] 51%|█████     | 29/57 [01:58<02:02,  4.38s/it]2026-01-16 06:22:10,725 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:22:10,725 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b>
-<i>14:22:10</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603986_daban_signal">兆易创新</a></b> (603986)
-   新上板 1板 换手7.4% 近1月0板 @ 14:22:10
-
-2026-01-16 06:22:10,725 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:22:10,725 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:22:10,725 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:22:10,725 - TelegramService - WARNING - Cannot send message, no main client connected
- 53%|█████▎    | 30/57 [02:01<01:53,  4.22s/it] 54%|█████▍    | 31/57 [02:04<01:39,  3.83s/it] 56%|█████▌    | 32/57 [02:07<01:27,  3.49s/it] 58%|█████▊    | 33/57 [02:10<01:18,  3.26s/it] 60%|█████▉    | 34/57 [02:13<01:11,  3.12s/it] 61%|██████▏   | 35/57 [02:16<01:12,  3.29s/it]WARNING:  WatchFiles detected changes in 'app/bots/crawler/handlers.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-2026-01-16 06:22:25,968 - Main - INFO - 🛑 Shutting down...
-2026-01-16 06:22:25,968 - RssService - INFO - RSS Service stopped
-2026-01-16 06:22:25,968 - TwitterService - INFO - Twitter monitoring stopped
-2026-01-16 06:22:25,972 - CrawlerService - INFO - Crawler Service stopped
-2026-01-16 06:22:25,972 - LimitUpService - INFO - Limit-Up Tracker stopped
-2026-01-16 06:22:25,972 - StockScanner - INFO - Stock Scanner stopped
-2026-01-16 06:22:25,972 - SectorService - INFO - Sector Tracker stopped
-2026-01-16 06:22:25,972 - MarketReportService - INFO - Market Report Service stopped
-2026-01-16 06:22:25,972 - StockHistoryService - INFO - Stock History Service stopped
-2026-01-16 06:22:25,972 - PortfolioService - INFO - Portfolio Service stopped
-2026-01-16 06:22:25,972 - WatchlistService - INFO - Watchlist Service stopped
-2026-01-16 06:22:25,972 - TradingSimulator - INFO - Trading Simulator stopped
-2026-01-16 06:22:25,972 - DabanService - INFO - 打板 service stopped
-2026-01-16 06:22:25,972 - DabanSimulator - INFO - 打板 Simulator stopped
-INFO:     Application shutdown complete.
-INFO:     Finished server process [2860653]
- 63%|██████▎   | 36/57 [02:21<01:17,  3.71s/it] 65%|██████▍   | 37/57 [02:24<01:10,  3.50s/it] 67%|██████▋   | 38/57 [02:27<01:05,  3.46s/it] 68%|██████▊   | 39/57 [02:31<01:03,  3.50s/it] 70%|███████   | 40/57 [02:36<01:06,  3.90s/it] 72%|███████▏  | 41/57 [02:39<01:00,  3.76s/it] 74%|███████▎  | 42/57 [02:43<00:54,  3.64s/it] 75%|███████▌  | 43/57 [02:46<00:51,  3.67s/it] 77%|███████▋  | 44/57 [02:49<00:46,  3.54s/it] 79%|███████▉  | 45/57 [02:54<00:44,  3.73s/it] 81%|████████  | 46/57 [02:57<00:38,  3.54s/it] 82%|████████▏ | 47/57 [03:02<00:41,  4.12s/it] 84%|████████▍ | 48/57 [03:07<00:39,  4.39s/it] 86%|████████▌ | 49/57 [03:11<00:32,  4.09s/it] 88%|████████▊ | 50/57 [03:15<00:28,  4.03s/it] 89%|████████▉ | 51/57 [03:21<00:28,  4.79s/it] 91%|█████████ | 52/57 [03:26<00:23,  4.75s/it] 93%|█████████▎| 53/57 [03:29<00:17,  4.44s/it] 95%|█████████▍| 54/57 [03:33<00:12,  4.23s/it] 96%|█████████▋| 55/57 [03:37<00:08,  4.17s/it] 98%|█████████▊| 56/57 [03:41<00:03,  3.91s/it]100%|██████████| 57/57 [03:47<00:00,  4.55s/it]                                               WARNING:  WatchFiles detected changes in 'app/bots/crawler/handlers.py'. Reloading...
-/home/ubuntu/work/qubot/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:151: UserWarning: Field "model_custom_emoji_id" has conflict with protected namespace "model_".
-
-You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
-  warnings.warn(
-2026-01-16 06:24:02,776 - ForwardFilters - INFO - Created filter chain with 10 filters
-2026-01-16 06:24:02,842 - AiService - WARNING - ⚠️ Provider groq selected but not configured (missing API key).
-INFO:     Started server process [2863554]
-INFO:     Waiting for application startup.
-2026-01-16 06:24:03,250 - Main - INFO - 🚀 Starting Qubot (Python)...
-2026-01-16 06:24:03,251 - TelegramService - INFO - SESSIONS_JSON raw value present: False
-2026-01-16 06:24:03,251 - TelegramService - INFO - sessions_list parsed: 0 items
-2026-01-16 06:24:03,251 - TelegramService - ERROR - No session configs found. Please set SESSIONS_JSON (or TG_SESSIONS_JSON).
-2026-01-16 06:24:03,251 - BotDispatcher - INFO - monitor-bot skipped (token not configured)
-2026-01-16 06:24:03,251 - BotDispatcher - INFO - ai-bot skipped (token not configured)
-2026-01-16 06:24:03,251 - BotDispatcher - INFO - agent-bot skipped (token not configured)
-2026-01-16 06:24:03,251 - BotDispatcher - INFO - rss-bot skipped (token not configured)
-2026-01-16 06:24:03,251 - BotDispatcher - INFO - crawler-bot skipped (token not configured)
-2026-01-16 06:24:03,251 - BotDispatcher - INFO - vibe-bot skipped (token not configured)
-2026-01-16 06:24:03,251 - MonitorService - INFO - Initializing MonitorService...
-2026-01-16 06:24:03,251 - MonitorService - INFO - MonitorService initialized with 0 sources, 0 VIPs, 19 blocked.
-2026-01-16 06:24:03,251 - MonitorService - ERROR - Telegram service not connected!
-2026-01-16 06:24:03,251 - RssService - INFO - ✅ RSS Service started
-2026-01-16 06:24:03,252 - TwitterService - INFO - Initializing TwitterService...
-2026-01-16 06:24:03,252 - TwitterService - WARNING - TWITTER_ACCOUNTS not configured. Twitter monitoring disabled.
-2026-01-16 06:24:03,253 - GitHubService - INFO - Pulling latest changes...
-2026-01-16 06:24:03,283 - CrawlerService - INFO - ✅ Crawler Service started
-2026-01-16 06:24:03,283 - LimitUpService - INFO - ✅ Limit-Up Tracker started
-2026-01-16 06:24:03,540 - StockScanner - INFO - ✅ Stock Scanner started
-2026-01-16 06:24:03,540 - SectorService - INFO - ✅ Sector Tracker started
-2026-01-16 06:24:03,540 - MarketReportService - INFO - Market Report Service initialized
-2026-01-16 06:24:03,540 - MarketReportService - INFO - ✅ Market Report Service started
-2026-01-16 06:24:03,541 - StockHistoryService - INFO - ✅ Stock History Service started
-2026-01-16 06:24:03,541 - ChipDistributionService - INFO - ✅ Chip Distribution Service started
-2026-01-16 06:24:03,542 - WatchlistService - INFO - ✅ Watchlist Service started
-2026-01-16 06:24:03,542 - PortfolioService - INFO - ✅ Portfolio Service started
-2026-01-16 06:24:03,542 - TradingSimulator - INFO - ✅ Trading Simulator started
-2026-01-16 06:24:03,544 - DabanService - INFO - ✅ 打板 盘后复盘 + 实时监控 started
-2026-01-16 06:24:03,544 - DabanSimulator - INFO - ✅ 打板 Simulator started
-2026-01-16 06:24:03,544 - StockHistoryService - WARNING - Database not connected, skipping initialization
-2026-01-16 06:24:03,545 - TradingSimulator - INFO - Next t_trade at 2026-01-16 14:30
-2026-01-16 06:24:03,545 - DabanService - INFO - Starting intraday monitoring loop
-INFO:     Application startup complete.
-2026-01-16 06:24:05,208 - DabanService - INFO - Signal alert link mode=web_app base=https://cweb.278141394.xyz
-2026-01-16 06:24:05,209 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (1/3)
-<i>14:24:05</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600058_daban_signal">五矿发展</a></b> (600058)
-   新上板 2板 换手0.4% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603056_daban_signal">德邦股份</a></b> (603056)
-   新上板 3板 换手2.8% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600841_daban_signal">动力新科</a></b> (600841)
-   新上板 1板 换手1.2% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601163_daban_signal">三角轮胎</a></b> (601163)
-   新上板 1板 换手3.8% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001255_daban_signal">博菲电气</a></b> (001255)
-   新上板 5板 换手3.5% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002358_daban_signal">森源电气</a></b> (002358)
-   新上板 1板 换手4.1% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002119_daban_signal">康强电子</a></b> (002119)
-   新上板 2板 换手19.0% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300952_daban_signal">恒辉安防</a></b> (300952)
-   新上板 1板 换手5.2% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600785_daban_signal">新华百货</a></b> (600785)
-   新上板 3板 换手22.0% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001207_daban_signal">联科科技</a></b> (001207)
-   新上板 1板 换手6.6% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=605167_daban_signal">利柏特</a></b> (605167)
-   新上板 1板 换手1.8% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603626_daban_signal">科森科技</a></b> (603626)
-   新上板 1板 换手7.3% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002498_daban_signal">汉缆股份</a></b> (002498)
-   新上板 1板 换手2.7% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603163_daban_signal">圣晖集成</a></b> (603163)
-   新上板 1板 换手2.9% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601096_daban_signal">宏盛华源</a></b> (601096)
-   新上板 1板 换手9.9% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603929_daban_signal">亚翔集成</a></b> (603929)
-   新上板 1板 换手2.5% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601616_daban_signal">广电电气</a></b> (601616)
-   新上板 1板 换手12.8% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000720_daban_signal">新能泰山</a></b> (000720)
-   新上板 1板 换手5.9% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002953_daban_signal">日丰股份</a></b> (002953)
-   新上板 1板 换手9.4% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300215_daban_signal">电科院</a></b> (300215)
-   新上板 1板 换手15.7% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002830_daban_signal">名雕股份</a></b> (002830)
-   新上板 1板 换手8.0% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688376_daban_signal">美埃科技</a></b> (688376)
-   新上板 1板 换手4.1% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301529_daban_signal">福赛科技</a></b> (301529)
-   新上板 1板 换手10.8% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603052_daban_signal">可川科技</a></b> (603052)
-   新上板 1板 换手7.3% 近1月0板 @ 14:24:05
-
-2026-01-16 06:24:05,209 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:24:05,209 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:24:05,209 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:24:05,209 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:24:05,210 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (2/3)
-<i>14:24:05</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002796_daban_signal">世嘉科技</a></b> (002796)
-   新上板 2板 换手10.4% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002339_daban_signal">积成电子</a></b> (002339)
-   新上板 1板 换手14.7% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002048_daban_signal">宁波华翔</a></b> (002048)
-   新上板 1板 换手9.7% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600584_daban_signal">长电科技</a></b> (600584)
-   新上板 1板 换手10.8% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603638_daban_signal">艾迪精密</a></b> (603638)
-   新上板 1板 换手1.9% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002196_daban_signal">方正电机</a></b> (002196)
-   新上板 1板 换手15.1% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300606_daban_signal">金太阳</a></b> (300606)
-   新上板 1板 换手19.8% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603058_daban_signal">永吉股份</a></b> (603058)
-   新上板 1板 换手12.2% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=001233_daban_signal">海安集团</a></b> (001233)
-   新上板 1板 换手15.8% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600234_daban_signal">科新发展</a></b> (600234)
-   新上板 1板 换手3.2% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603667_daban_signal">五洲新春</a></b> (603667)
-   新上板 1板 换手16.0% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600266_daban_signal">城建发展</a></b> (600266)
-   新上板 1板 换手14.2% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300669_daban_signal">沪宁股份</a></b> (300669)
-   新上板 1板 换手5.0% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=300780_daban_signal">德恩精工</a></b> (300780)
-   新上板 1板 换手29.0% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688234_daban_signal">天岳先进</a></b> (688234)
-   新上板 1板 换手4.9% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002331_daban_signal">皖通科技</a></b> (002331)
-   新上板 1板 换手11.3% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603665_daban_signal">康隆达</a></b> (603665)
-   新上板 1板 换手4.3% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=601133_daban_signal">柏诚股份</a></b> (601133)
-   新上板 1板 换手23.8% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603061_daban_signal">金海通</a></b> (603061)
-   新上板 1板 换手8.9% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600198_daban_signal">大唐电信</a></b> (600198)
-   新上板 1板 换手9.0% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=301235_daban_signal">华康洁净</a></b> (301235)
-   新上板 1板 换手21.3% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603038_daban_signal">华立股份</a></b> (603038)
-   新上板 1板 换手7.4% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603306_daban_signal">华懋科技</a></b> (603306)
-   新上板 1板 换手5.5% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=000620_daban_signal">盈新发展</a></b> (000620)
-   新上板 1板 换手11.4% 近1月0板 @ 14:24:05
-
-2026-01-16 06:24:05,210 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:24:05,210 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:24:05,210 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:24:05,210 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:24:05,210 - DabanService - INFO - [SIGNAL] 🎯 <b>打板实时信号</b> (3/3)
-<i>14:24:05</i>
-
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600703_daban_signal">三安光电</a></b> (600703)
-   新上板 1板 换手6.4% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002156_daban_signal">通富微电</a></b> (002156)
-   新上板 1板 换手11.5% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600667_daban_signal">太极实业</a></b> (600667)
-   新上板 1板 换手14.5% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603986_daban_signal">兆易创新</a></b> (603986)
-   新上板 1板 换手7.4% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002208_daban_signal">合肥城建</a></b> (002208)
-   新上板 1板 换手13.1% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002943_daban_signal">宇晶股份</a></b> (002943)
-   新上板 1板 换手10.0% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=600053_daban_signal">九鼎投资</a></b> (600053)
-   新上板 1板 换手5.1% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=002664_daban_signal">信质集团</a></b> (002664)
-   新上板 1板 换手7.4% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=603283_daban_signal">赛腾股份</a></b> (603283)
-   新上板 1板 换手12.0% 近1月0板 @ 14:24:05
-🔥 <b><a href="https://t.me/q_tty_crawler_bot/chart?startapp=688362_daban_signal">甬矽电子</a></b> (688362)
-   新上板 1板 换手9.0% 近1月0板 @ 14:24:05
-
-2026-01-16 06:24:05,210 - Main - WARNING - Daban signal bot not available; cannot send via bot
-2026-01-16 06:24:05,210 - DabanService - WARNING - Signal notification callback reported failure
-2026-01-16 06:24:05,210 - DabanService - WARNING - Signal notification falling back to userbot; web_app buttons unavailable
-2026-01-16 06:24:05,210 - TelegramService - WARNING - Cannot send message, no main client connected
-2026-01-16 06:24:05,928 - GitHubService - INFO - ✅ GitHubService initialized.
-  0%|          | 0/57 [00:00<?, ?it/s]  2%|▏         | 1/57 [00:03<03:24,  3.65s/it]WARNING:  WatchFiles detected changes in 'app/services/watchlist.py'. Reloading...
-INFO:     Shutting down
-  4%|▎         | 2/57 [00:06<03:11,  3.47s/it]INFO:     Waiting for application shutdown.
-2026-01-16 06:24:13,368 - Main - INFO - 🛑 Shutting down...
-2026-01-16 06:24:13,368 - RssService - INFO - RSS Service stopped
-2026-01-16 06:24:13,368 - TwitterService - INFO - Twitter monitoring stopped
-2026-01-16 06:24:13,372 - CrawlerService - INFO - Crawler Service stopped
-2026-01-16 06:24:13,372 - LimitUpService - INFO - Limit-Up Tracker stopped
-2026-01-16 06:24:13,372 - StockScanner - INFO - Stock Scanner stopped
-2026-01-16 06:24:13,372 - SectorService - INFO - Sector Tracker stopped
-2026-01-16 06:24:13,372 - MarketReportService - INFO - Market Report Service stopped
-2026-01-16 06:24:13,372 - StockHistoryService - INFO - Stock History Service stopped
-2026-01-16 06:24:13,373 - PortfolioService - INFO - Portfolio Service stopped
-2026-01-16 06:24:13,373 - WatchlistService - INFO - Watchlist Service stopped
-2026-01-16 06:24:13,373 - TradingSimulator - INFO - Trading Simulator stopped
-2026-01-16 06:24:13,373 - DabanService - INFO - 打板 service stopped
-2026-01-16 06:24:13,373 - DabanSimulator - INFO - 打板 Simulator stopped
-INFO:     Application shutdown complete.
-INFO:     Finished server process [2863554]
-  5%|▌         | 3/57 [00:11<03:25,  3.80s/it]  7%|▋         | 4/57 [00:15<03:29,  3.96s/it]  9%|▉         | 5/57 [00:22<04:22,  5.04s/it] 11%|█         | 6/57 [00:35<06:44,  7.94s/it] 12%|█▏        | 7/57 [00:39<05:28,  6.57s/it] 14%|█▍        | 8/57 [00:43<04:41,  5.76s/it] 16%|█▌        | 9/57 [00:46<03:58,  4.96s/it] 18%|█▊        | 10/57 [00:51<03:45,  4.79s/it] 19%|█▉        | 11/57 [00:54<03:13,  4.21s/it] 21%|██        | 12/57 [00:57<03:00,  4.01s/it] 23%|██▎       | 13/57 [01:01<02:55,  4.00s/it] 25%|██▍       | 14/57 [01:07<03:18,  4.61s/it] 26%|██▋       | 15/57 [01:11<03:03,  4.37s/it] 28%|██▊       | 16/57 [01:15<02:47,  4.10s/it] 30%|██▉       | 17/57 [01:19<02:47,  4.18s/it] 32%|███▏      | 18/57 [01:23<02:45,  4.24s/it] 33%|███▎      | 19/57 [01:27<02:34,  4.06s/it] 35%|███▌      | 20/57 [01:33<02:56,  4.78s/it] 37%|███▋      | 21/57 [01:39<02:57,  4.93s/it] 39%|███▊      | 22/57 [01:43<02:43,  4.67s/it] 40%|████      | 23/57 [01:48<02:45,  4.86s/it] 42%|████▏     | 24/57 [01:52<02:32,  4.63s/it] 44%|████▍     | 25/57 [01:58<02:40,  5.01s/it] 46%|████▌     | 26/57 [02:02<02:23,  4.62s/it] 47%|████▋     | 27/57 [02:06<02:14,  4.49s/it] 49%|████▉     | 28/57 [02:10<02:08,  4.43s/it] 51%|█████     | 29/57 [02:15<02:07,  4.55s/it] 53%|█████▎    | 30/57 [02:19<01:57,  4.34s/it] 54%|█████▍    | 31/57 [02:23<01:51,  4.30s/it] 56%|█████▌    | 32/57 [02:27<01:41,  4.04s/it] 58%|█████▊    | 33/57 [02:29<01:28,  3.69s/it] 60%|█████▉    | 34/57 [02:32<01:14,  3.24s/it] 61%|██████▏   | 35/57 [02:34<01:08,  3.13s/it] 63%|██████▎   | 36/57 [02:38<01:05,  3.13s/it] 65%|██████▍   | 37/57 [02:41<01:02,  3.12s/it] 67%|██████▋   | 38/57 [02:44<00:59,  3.11s/it] 68%|██████▊   | 39/57 [02:47<00:57,  3.17s/it] 70%|███████   | 40/57 [02:50<00:51,  3.00s/it] 72%|███████▏  | 41/57 [02:52<00:44,  2.79s/it] 74%|███████▎  | 42/57 [02:57<00:51,  3.41s/it] 75%|███████▌  | 43/57 [02:59<00:42,  3.05s/it] 77%|███████▋  | 44/57 [03:01<00:33,  2.61s/it] 79%|███████▉  | 45/57 [03:03<00:30,  2.55s/it] 81%|████████  | 46/57 [03:05<00:27,  2.53s/it] 82%|████████▏ | 47/57 [03:07<00:22,  2.25s/it] 84%|████████▍ | 48/57 [03:09<00:19,  2.12s/it] 86%|████████▌ | 49/57 [03:11<00:16,  2.02s/it] 88%|████████▊ | 50/57 [03:13<00:14,  2.02s/it] 89%|████████▉ | 51/57 [03:14<00:11,  1.92s/it] 91%|█████████ | 52/57 [03:16<00:08,  1.71s/it] 93%|█████████▎| 53/57 [03:17<00:06,  1.65s/it] 95%|█████████▍| 54/57 [03:20<00:05,  1.87s/it]

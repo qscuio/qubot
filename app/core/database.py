@@ -548,6 +548,32 @@ class Database:
                 );
             """)
 
+            # Chat History Table (聊天记录)
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS chat_history (
+                    id SERIAL PRIMARY KEY,
+                    source_id TEXT NOT NULL,
+                    message_id BIGINT NOT NULL,
+                    sender_id TEXT,
+                    sender_name TEXT,
+                    text TEXT,
+                    media_type TEXT,
+                    file_id TEXT,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    UNIQUE(source_id, message_id)
+                );
+            """)
+            
+            # Index for chat history queries
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_chat_history_source 
+                ON chat_history(source_id);
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_chat_history_created 
+                ON chat_history(created_at DESC);
+            """)
+
             logger.info("Database tables initialized")
 
 db = Database()
