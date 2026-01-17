@@ -508,9 +508,9 @@ export function updateDynamicAnalysis() {
         // Trigger Trend Tips
         if (mainChannel) {
             if (mainChannel.dir === 1) {
-                tipsEngine.showRandomTip(['UPTREND_CHASE', 'UPTREND_PULLBACK', 'UPTREND_RISK']);
+                tipsEngine.showRandomTip(['UPTREND_CHASE', 'UPTREND_PULLBACK', 'UPTREND_RISK', 'PREDICT_TOP', 'PREDICT_REVERSAL']);
             } else if (mainChannel.dir === -1) {
-                tipsEngine.showRandomTip(['DOWNTREND_KNIFE', 'DOWNTREND_WAIT', 'DOWNTREND_RETEST']);
+                tipsEngine.showRandomTip(['DOWNTREND_KNIFE', 'DOWNTREND_WAIT', 'DOWNTREND_RETEST', 'DOWNTREND_DONT_ADD', 'DOWNTREND_CUT_LOSS', 'DOWNTREND_NO_HOPE', 'PREDICT_BOTTOM', 'PREDICT_REVERSAL']);
             }
         }
 

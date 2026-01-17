@@ -21,6 +21,14 @@ export const TIPS_LIBRARY = {
     DOWNTREND_KNIFE: '🔪 下跌趋势不言底，左侧交易是接飞刀。',
     DOWNTREND_WAIT: '🛑 下跌不言底，等待结构破坏再进场。',
     DOWNTREND_RETEST: '📉 下跌趋势中的反弹往往是诱多，关注压力位。',
+    DOWNTREND_DONT_ADD: '⛔ 亏损加仓 = 破产加速器。只在盈利时加仓！',
+    DOWNTREND_CUT_LOSS: '✂️ 扛单是爆仓的开始。错了就要认，挨打要立正。',
+    DOWNTREND_NO_HOPE: '💭 别幻想反弹解套，市场不关心你的成本。',
+
+    // Anti-Prediction Tips
+    PREDICT_TOP: '🔮 只有神知道顶在哪里。做跟随者，不做预言家。',
+    PREDICT_BOTTOM: '🕳️ 抄底是接飞刀的代名词。底部是走出来的，不是猜出来的。',
+    PREDICT_REVERSAL: '✋ 别试图阻挡趋势列车。右侧交易虽迟但稳。',
 
     // Uptrend Tips
     UPTREND_CHASE: '🚀 上涨不言顶，但连续大涨后切勿追高。',
@@ -48,16 +56,18 @@ export class TipsEngine {
         this.tipContainer = document.createElement('div');
         this.tipContainer.id = 'tips-container';
         this.tipContainer.style.cssText = `
-            position: absolute; top: 40px; right: 10px; z-index: 30;
-            max-width: 280px; font-size: 11px; pointer-events: none;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 30; overflow: hidden;
         `;
         document.getElementById('main-chart').appendChild(this.tipContainer);
 
         this.permanentTipEl = document.createElement('div');
         this.permanentTipEl.style.cssText = `
+            position: absolute; top: 40px; right: 10px;
             background: rgba(236, 72, 153, 0.15); color: #ec4899;
             padding: 6px 10px; border-radius: 6px; margin-bottom: 6px;
-            border-left: 3px solid #ec4899;
+            border-left: 3px solid #ec4899; font-size: 11px;
+            pointer-events: auto;
         `;
         this.permanentTipEl.textContent = PERMANENT_TIP;
         this.tipContainer.appendChild(this.permanentTipEl);
@@ -90,21 +100,37 @@ export class TipsEngine {
         if (!text) return;
 
         const tipEl = document.createElement('div');
+
+        // Random position within 10% - 60% of width/height to avoid edges and clutter
+        const top = 15 + Math.random() * 50;
+        const left = 10 + Math.random() * 60;
+
         tipEl.style.cssText = `
-            background: rgba(41, 98, 255, 0.2); color: #60a5fa;
-            padding: 8px 12px; border-radius: 6px; margin-bottom: 6px;
-            animation: tipFadeIn 0.3s ease-out;
-            border-left: 3px solid #2962ff;
+            position: absolute;
+            top: ${top}%;
+            left: ${left}%;
+            background: rgba(41, 98, 255, 0.85); 
+            color: #ffffff;
+            padding: 8px 12px; 
+            border-radius: 6px; 
+            font-size: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: tipFloatIn 0.5s ease-out;
+            border-left: 3px solid #ffffff;
+            pointer-events: auto;
+            max-width: 200px;
+            z-index: 100;
         `;
         tipEl.textContent = text;
         this.tipContainer.appendChild(tipEl);
 
-        // Auto remove after 8 seconds
+        // Auto remove after 6 seconds
         setTimeout(() => {
             tipEl.style.opacity = '0';
-            tipEl.style.transition = 'opacity 0.5s';
+            tipEl.style.transform = 'translateY(-10px)';
+            tipEl.style.transition = 'all 0.5s';
             setTimeout(() => tipEl.remove(), 500);
-        }, 8000);
+        }, 6000);
     }
 
     /**
