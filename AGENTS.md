@@ -58,6 +58,7 @@ QuBot is a multi-bot Telegram application composed of:
 - `app/api/routes.py`: REST API; `chart_router` always enabled.
 - `app/core/security.py`: Rate limiting, scanner detection, iptables blocking.
 - `app/core/database.py`: Postgres + Redis connection, schema initialization.
+- `app/miniapps/chart/`: Stock chart Telegram Mini App (see Mini Apps section).
 
 ## Configuration Rules
 - All settings are loaded via Pydantic in `app/core/config.py`.
@@ -76,6 +77,69 @@ QuBot is a multi-bot Telegram application composed of:
 - Static hosting:
   - `/web` serves `web/`
   - `/miniapp` serves `app/miniapps/`
+
+## Mini Apps Architecture
+
+### Chart Mini App (`app/miniapps/chart/`)
+A stock charting application for Telegram Mini Apps.
+
+#### Technical Stack
+- **No build step**: Vanilla ES6 modules, loaded directly by browser
+- **Charting**: Lightweight Charts v4.1.0 (TradingView)
+- **Telegram SDK**: `telegram-web-app.js` for Mini App integration
+- **CSS**: Modular CSS with custom properties for theming
+
+#### Directory Structure
+```
+app/miniapps/chart/
+├── index.html              # Entry point, loads all CSS and main.js
+├── css/
+│   ├── variables.css       # Theme colors, spacing tokens
+│   ├── base.css            # Reset, body, loading spinner
+│   ├── layout.css          # Header, toolbar, panels, grid structure
+│   ├── components.css      # Buttons, dropdowns, badges, search
+│   └── responsive.css      # Mobile and landscape breakpoints
+└── js/
+    ├── main.js             # Init + event listener setup
+    ├── core/               # Config, state, API, utilities
+    ├── chart/              # Lightweight Charts wrappers, indicators
+    ├── analysis/           # Chips, signals, tips, trend analysis
+    ├── ui/                 # Header, toolbar, search, watchlist UI
+    └── integrations/       # Telegram SDK, navigation, watchlist API
+```
+
+#### Design Decisions
+- **Centralized State** (`js/core/state.js`): All app state in one object.
+  Modify via `updateState()`. Series references kept in `mainSeries`/`subSeries`.
+- **Authenticated Fetch** (`js/core/api.js`): All API calls use
+  `authenticatedFetch()` which attaches `X-Telegram-Init-Data` header.
+- **Modular CSS**: Each file has single responsibility. `layout.css` handles
+  structure only; `components.css` handles individual element styles.
+- **Header Layout**: Four rows (title, price, actions, stats), each centered.
+  Uses `.header-row-*` classes in `layout.css`.
+- **Mobile-First**: Search collapses to icon on mobile, expands on focus.
+  Watchlist dropdown uses absolute positioning with high z-index.
+
+#### API Endpoints
+- `GET /api/chart/data/{code}?days=N&period=daily|weekly|monthly`
+- `GET /api/chart/search?q={query}`
+- `GET /api/chart/watchlist/list?user_id={id}`
+- `POST /api/chart/watchlist/add` / `remove`
+
+#### Debugging
+- **Console**: All modules use `console.warn/error` for issues
+- **URL params**: `?debug_user_id=123` bypasses Telegram for local testing
+- **State inspection**: `window.state` not exposed; add temporarily if needed
+- **Network**: Check `/api/chart/*` calls in DevTools Network tab
+- **CSS issues**: Dropdowns require parent `overflow: visible`; check z-index
+  hierarchy (header: 20, dropdowns: 100-1000)
+
+#### Modification Guidelines
+- **New UI component**: Add to `index.html` → style in `components.css` →
+  logic in `js/ui/*.js` → wire events in `main.js`
+- **New indicator**: Calculation in `indicators.js` → series ref in `state.js`
+  → render in `chart-main.js` or `chart-sub.js`
+- **New API call**: Use `authenticatedFetch()` from `js/core/api.js`
 
 ## Concurrency and Lifecycle Constraints
 - Startup uses `asyncio.gather` for Telethon + Aiogram.
@@ -125,30 +189,77 @@ QuBot is a multi-bot Telegram application composed of:
 - For API changes, manually verify `/api/health`, `/api/ai/providers`, and
   any new endpoints.
 
-## Historical Notes
-### Mini App Link Issue (2026-01-13)
-Problem:
-"Bot application not found" when clicking stock list links in Telegram.
+## Deployment & Environment
 
-Root Cause:
-`get_chart_url()` in `app/core/stock_links.py` uses a cached bot username from
-`get_bot_username("crawler-bot")`. If the username is not cached yet, it falls
-back to `WEBFRONT_URL`, and then to EastMoney if `WEBFRONT_URL` is missing.
+### GitHub Actions CI/CD
+Deployment is automated via `.github/workflows/deploy.yml`:
 
-BotFather Configuration:
-- Bot username: `q_tty_crawler_bot`
-- Mini App short name: `chart`
-- Mini App URL: `https://cweb.278141394.xyz/miniapp/chart/`
-- Direct link format: `https://t.me/q_tty_crawler_bot/chart?startapp={code}`
+#### Workflow Triggers
+- **Push to any branch**: Auto-deploys to configured VPS environments
+- **Manual dispatch**: Select branch, force full setup, or force rebuild
 
-Solution:
-Since the bot username is known and static, add it as a configuration option
-or hardcode the fallback to ensure Mini App links work correctly.
+#### Multi-Environment Matrix
+Deploys to multiple VPS environments in parallel (e.g., CC, DMIT). Each
+environment has its own secrets configured in GitHub repository settings.
 
-Files Modified:
-- `app/core/stock_links.py` - Fixed Mini App link generation
+#### Deployment Process
+1. **Check enabled**: Skip if `DEPLOY_ENABLED` secret is not `true`
+2. **Incremental detection**: Check `/opt/qubot/.deployed` marker
+3. **First-time setup** (if needed):
+   - Install Docker, Docker Compose, Git
+   - Configure UFW firewall (80, 443, SSH)
+   - Install Nginx and Certbot
+   - Obtain SSL certificates via Let's Encrypt
+   - Configure Nginx reverse proxy for webhook and web frontend
+4. **Code deployment**:
+   - Clone/pull to `/opt/qubot`
+   - Checkout target branch
+   - Export secrets as environment variables (not written to disk)
+   - Write non-sensitive config to `.env`
+   - Smart rebuild: only `--no-cache` if Dockerfile/requirements.txt changed
+   - `docker compose up -d`
+5. **Post-deploy**: Register Telegram webhooks via `scripts/setup_webhook.py`
 
-### Deployment Notes
-- The bot is deployed on a remote VPS.
-- Mini Apps require HTTPS with valid SSL certificates.
-- The `chart` Mini App short name must be registered in BotFather.
+#### Required Secrets (per environment)
+```
+# VPS Connection
+VPS_HOST, VPS_USER, VPS_SSH_KEY, DEPLOY_ENABLED
+
+# Telegram Bots
+TG_SESSIONS_JSON, RSS_BOT_TOKEN, AI_BOT_TOKEN, CRAWLER_BOT_TOKEN, ...
+
+# AI Providers
+GROQ_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, CLAUDE_API_KEY, ...
+
+# URLs & Config
+WEBHOOK_URL, WEBFRONT_URL, BOT_PORT, BOT_SECRET, API_KEYS
+```
+
+#### Key Files
+- `.github/workflows/deploy.yml` - Main deployment workflow
+- `.github/workflows/test.yml` - Test workflow
+- `docker-compose.yml` - Container orchestration
+- `Dockerfile` - Application container
+- `scripts/setup_webhook.py` - Telegram webhook registration
+
+### Server Architecture
+```
+Internet → Nginx (SSL) → Docker Container (FastAPI :BOT_PORT)
+                      ↘ /miniapp/* → Static files
+                      ↘ /web/* → Static files
+                      ↘ /api/* → REST API
+                      ↘ /webhook/* → Telegram webhooks
+```
+
+### Mini App Configuration
+- **Bot username**: `q_tty_crawler_bot`
+- **Mini App short name**: `chart` (registered in BotFather)
+- **Mini App URL**: `https://cweb.278141394.xyz/miniapp/chart/`
+- **Deep link format**: `https://t.me/q_tty_crawler_bot/chart?startapp={code}`
+- Mini Apps require HTTPS with valid SSL certificates
+
+### Stock Link Generation
+`app/core/stock_links.py` generates Mini App links. Fallback chain:
+1. Cached bot username from `get_bot_username("crawler-bot")`
+2. `WEBFRONT_URL` environment variable
+3. External link (EastMoney)
