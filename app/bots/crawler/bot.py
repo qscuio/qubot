@@ -38,6 +38,10 @@ CRAWLER_BOT_COMMANDS = [
     BotCommand(command="userdel", description="删除用户"),
     BotCommand(command="userlist", description="用户列表"),
     BotCommand(command="help", description="帮助"),
+    # History commands
+    BotCommand(command="forward_videos", description="转发历史视频"),
+    BotCommand(command="save_history", description="保存聊天记录"),
+    BotCommand(command="get_history", description="查询聊天记录"),
 ]
 
 CRAWLER_BOT = BotSpec(

@@ -401,6 +401,36 @@ async def chart_chips(code: str, date: str = None, user_id: int = Depends(verify
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@chart_router.get("/chart/search")
+async def chart_search(q: str, user_id: int = Depends(verify_webapp)):
+    """Search stocks for chart Mini App."""
+    from app.core.database import db
+    
+    if not q:
+        return {"results": []}
+    
+    try:
+        # Search by code or name
+        # Limit to 10 results
+        query = """
+            SELECT code, name FROM stock_info 
+            WHERE code LIKE $1 OR name LIKE $1 
+            LIMIT 10
+        """
+        pattern = f"%{q}%"
+        rows = await db.pool.fetch(query, pattern)
+        
+        results = [
+            {"code": r['code'], "name": r['name']}
+            for r in rows
+        ]
+        
+        return {"results": results}
+    except Exception as e:
+        chart_logger.error(f"Search failed: {e}")
+        return {"results": []}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Watchlist Endpoints (for Mini App)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -443,16 +473,52 @@ async def chart_watchlist_status(code: str, user_id: int = Depends(verify_webapp
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@chart_router.get("/chart/watchlist/list")
+async def chart_watchlist_list(user_id: int = Depends(verify_webapp)):
+    """Get full watchlist for Mini App."""
+    from app.services.watchlist import watchlist_service
+    try:
+        watchlist = await watchlist_service.get_watchlist(user_id)
+        return {"watchlist": watchlist}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @chart_router.get("/chart/navigation")
 async def get_chart_navigation(code: str, context: str, user_id: int = Depends(verify_webapp_optional)):
     """Get previous and next stock codes based on context."""
     from app.services.limit_up import limit_up_service
     from app.services.watchlist import watchlist_service
+    from app.core.database import db
     
     stocks = []
     
     try:
-        if context == "limit_up":
+        # Default navigation (by code)
+        if not context or context == 'default':
+            # Simple numeric sort for A-shares
+            # This is a simplified implementation - ideal would be to query DB for next/prev
+            return {"prev": None, "next": None}
+            
+        # Watchlist navigation
+        if context == 'watchlist' and user_id:
+            query = """
+                SELECT code FROM user_watchlist 
+                WHERE user_id = $1 
+                ORDER BY created_at DESC
+            """
+            rows = await db.pool.fetch(query, user_id)
+            codes = [r['code'] for r in rows]
+            
+            try:
+                idx = codes.index(code)
+                prev_code = codes[idx - 1] if idx > 0 else None
+                next_code = codes[idx + 1] if idx < len(codes) - 1 else None
+                return {"prev": prev_code, "next": next_code}
+            except ValueError:
+                return {"prev": None, "next": None}
+
+        elif context == "limit_up":
             # Today's sealed limit ups
             data = await limit_up_service.get_realtime_limit_ups()
             stocks = [s for s in data if s.get("is_sealed", True)]
@@ -505,7 +571,7 @@ async def get_chart_navigation(code: str, context: str, user_id: int = Depends(v
             
             # Import cache from handlers (assuming same process)
             try:
-                from app.bots.crawler.handlers import _scan_results_cache
+                from app.bots.crawler.routers.scanner import _scan_results_cache
                 user_cache = _scan_results_cache.get(user_id)
                 if user_cache:
                     stocks = user_cache.get(signal_type, [])

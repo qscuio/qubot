@@ -1,0 +1,22 @@
+{
+  "name": "chart",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint js/**/*.js",
+    "lint:fix": "eslint js/**/*.js --fix"
+  },
+  "keywords": [
+    "stock",
+    "chart",
+    "telegram",
+    "miniapp"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Pro Stock Chart Mini App - Modular Frontend",
+  "devDependencies": {
+    "eslint": "^9.39.2",
+    "globals": "^17.0.0"
+  }
+}

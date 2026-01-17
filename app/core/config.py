@@ -64,7 +64,9 @@ class Settings(BaseSettings):
     LIMITUP_TARGET_GROUP: Optional[str] = None  # Group for limit-up morning reports (9:15-10:00)
     BURST_TARGET_GROUP: Optional[str] = None  # Group for burst/异动 alerts
     STOCK_ALERT_CHANNEL: Optional[str] = None  # Channel for limit-up stock alerts (fallback)
+    STOCK_ALERT_CHANNEL: Optional[str] = None  # Channel for limit-up stock alerts (fallback)
     ALERT_CHANNEL: Optional[str] = None  # Channel for security alerts
+    FILE_TARGET_GROUP: Optional[str] = None  # Target group for forwarding files/videos
     
     # Limit-Up Tracker settings
     ENABLE_LIMIT_UP: bool = True
