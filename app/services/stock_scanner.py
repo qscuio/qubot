@@ -181,6 +181,21 @@ class StockScanner:
         if not db.pool:
             logger.error("❌ Database not connected, cannot scan")
             return {}
+
+        # Determine history limit based on active signals
+        active_signals = []
+        if enabled_signals:
+            for sig_id in enabled_signals:
+                s = SignalRegistry.get_by_id(sig_id)
+                if s: active_signals.append(s)
+        else:
+            active_signals = SignalRegistry.get_all(enabled_only=True)
+        
+        limit = 150
+        if active_signals:
+            limit = max((s.min_bars for s in active_signals), default=150)
+        
+        limit = max(limit, 150) + 20  # Ensure minimum 150 and add buffer
         
         try:
             today = china_today()
@@ -210,8 +225,8 @@ class StockScanner:
                 self._last_scan_used_cache = True
                 return self._last_signals
             
-            # 2. Check Data Cache (DB signature only)
-            data_signature = (max_date, max_date_count, total_vol) if max_date else None
+            # 2. Check Data Cache (DB signature only, including limit)
+            data_signature = (max_date, max_date_count, total_vol, limit) if max_date else None
             stocks_data = None
             stock_names = None
             
@@ -220,9 +235,9 @@ class StockScanner:
                 stocks_data, stock_names = self._cached_stocks_data
             else:
                 # Try Redis Cache first (persist across restarts)
-                # Key includes volume to invalidate on data updates
-                # v2: Use base64 encoding to avoid utf-8 decode errors
-                redis_key = f"scanner:data:v2:{max_date}:{max_date_count}:{total_vol}"
+                # Key includes volume and limit to invalidate on updates
+                # v3: Added limit to key
+                redis_key = f"scanner:data:v3:{max_date}:{max_date_count}:{total_vol}:{limit}"
                 loaded_from_redis = False
                 
                 if db.redis and not force:
@@ -240,8 +255,8 @@ class StockScanner:
 
                 if not loaded_from_redis:
                     # Load stock data from DB (slow)
-                    logger.info("📥 Loading stock data from DB...")
-                    stocks_data, stock_names = await self._load_stocks_data_for_scan(today, progress_callback)
+                    logger.info(f"📥 Loading stock data from DB (limit={limit})...")
+                    stocks_data, stock_names = await self._load_stocks_data_for_scan(today, progress_callback, limit=limit)
                     
                     # Save to Redis
                     if db.redis and stocks_data:
@@ -298,7 +313,7 @@ class StockScanner:
             logger.error(traceback.format_exc())
             return {}
 
-    async def _load_stocks_data_for_scan(self, today, progress_callback=None) -> tuple:
+    async def _load_stocks_data_for_scan(self, today, progress_callback=None, limit: int = 150) -> tuple:
         """Load stock data for scanning.
         
         Returns:
@@ -330,11 +345,11 @@ class StockScanner:
             pass
         
         # Load history data with progress
-        stocks_data = await self._get_local_history_batch(codes, progress_callback)
+        stocks_data = await self._get_local_history_batch(codes, progress_callback, limit=limit)
         
         return stocks_data, stock_names
 
-    async def _get_local_history_batch(self, codes: List[str], progress_callback=None) -> Dict[str, any]:
+    async def _get_local_history_batch(self, codes: List[str], progress_callback=None, limit: int = 150) -> Dict[str, any]:
         """Fetch recent history for multiple stocks from local database.
         
         Processes in batches of 300 codes to avoid blocking.
@@ -349,7 +364,7 @@ class StockScanner:
         
         try:
             min_rows = 21
-            max_rows = 150
+            max_rows = limit
             batch_size = 300
             
             result = {}
