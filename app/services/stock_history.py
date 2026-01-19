@@ -6,7 +6,7 @@ Background service that builds and maintains a local PostgreSQL copy of
 
 Features:
 - Fetches all A-share stock codes (~5000 stocks)
-- Backfills 5 years of OHLCV history on first run
+- Backfills 10 years of OHLCV history on first run
 - Daily updates after 3PM (15:15) to capture latest trading data
 - Rate limiting to avoid API throttling
 """
@@ -170,9 +170,58 @@ class StockHistoryService:
         
         # Cleanup abnormal data (future dates or duplicate syncs)
         await self.cleanup_abnormal_data()
+        
+        # [NEW] Check history depth coverage (Deep Backfill)
+        # Identify stocks that exist but have history starting too recently (e.g., > 4 years ago)
+        # We want at least 5 years of data.
+        await self._check_and_backfill_shallow_stocks(db_stock_count)
+
+    async def _check_and_backfill_shallow_stocks(self, total_stocks: int):
+        """Check if existing stocks have enough history depth."""
+        if total_stocks < 100:
+            return
+
+        try:
+            target_years = 10
+            cutoff_date = china_today() - timedelta(days=target_years * 365 - 100) # Allow some buffer
+            
+            # Find stocks with start_date > cutoff_date (i.e., too new)
+            # This query finds stocks where the earliest record is MORE RECENT than 4.x years ago
+            logger.info(f"Checking for stocks with history starting after {cutoff_date}...")
+            
+            rows = await db.pool.fetch("""
+                SELECT code, MIN(date) as min_date
+                FROM stock_history 
+                GROUP BY code 
+                HAVING MIN(date) > $1::date
+            """, cutoff_date)
+            
+            shallow_stocks = [r['code'] for r in rows]
+            
+            if shallow_stocks:
+                # If too many stocks need backfill (e.g. initial run with shallow db), it might take a while
+                logger.info(
+                    f"Found {len(shallow_stocks)} stocks with insufficient history (start > {cutoff_date}). "
+                    f"Starting deep backfill in background..."
+                )
+                
+                # Run in background thread
+                loop = asyncio.get_event_loop()
+                loop.run_in_executor(
+                    self._executor, 
+                    self._backfill_deep_history_sync, 
+                    shallow_stocks, 
+                    cutoff_date
+                )
+            else:
+                logger.info("✅ All stocks have sufficient history depth")
+                
+        except Exception as e:
+            logger.warn(f"Failed to check history depth: {e}")
+
     
     async def _backfill_all_stocks(self):
-        """Backfill 5 years of history for all A-share stocks."""
+        """Backfill 10 years of history for all A-share stocks."""
         codes = await self.get_all_stock_codes()
         if not codes:
             logger.error("Failed to get stock codes")
@@ -234,14 +283,14 @@ class StockHistoryService:
         )
     
     async def _backfill_stocks(self, codes: List[str]):
-        """Backfill 5 years of history for specified stock codes."""
+        """Backfill 10 years of history for specified stock codes."""
         ak, pd = self._get_libs()
         if not ak or not pd:
             return
         
-        # Calculate date range (5 years)
+        # Calculate date range (10 years)
         end_date = china_today()
-        start_date = end_date - timedelta(days=5 * 365)
+        start_date = end_date - timedelta(days=10 * 365)
         
         start_str = start_date.strftime("%Y%m%d")
         end_str = end_date.strftime("%Y%m%d")
@@ -357,7 +406,7 @@ class StockHistoryService:
             return
         
         end_date = china_today()
-        start_date = end_date - timedelta(days=5 * 365)
+        start_date = end_date - timedelta(days=10 * 365)
         start_str = start_date.strftime("%Y%m%d")
         end_str = end_date.strftime("%Y%m%d")
         
@@ -406,6 +455,81 @@ class StockHistoryService:
             loop.close()
         
         logger.info(f"✅ [BG Thread] Backfill complete: {success_count}/{len(codes)}, {error_count} errors")
+
+    def _backfill_deep_history_sync(self, codes: List[str], cutoff_date):
+        """Synchronous deep backfill for existing stocks."""
+        import time
+        import asyncpg
+        
+        ak, pd = self._get_libs()
+        if not ak or not pd:
+            return
+            
+        target_start = china_today() - timedelta(days=10 * 365 + 30) # 10 years + buffer
+        start_str = target_start.strftime("%Y%m%d")
+        
+        logger.info(f"[BG Thread] Deep backfilling {len(codes)} stocks from {target_start}...")
+        
+        success_count = 0
+        error_count = 0
+        
+        # Create sync database connection
+        try:
+            import asyncio
+            from app.core.config import settings
+            loop = asyncio.new_event_loop()
+            conn = loop.run_until_complete(asyncpg.connect(settings.DATABASE_URL))
+        except Exception as e:
+            logger.error(f"[BG Thread] Failed to connect to DB: {e}")
+            return
+            
+        try:
+            for i, code in enumerate(codes):
+                try:
+                    # Get current min date for this stock to define end range
+                    current_min = loop.run_until_complete(
+                        conn.fetchval("SELECT MIN(date) FROM stock_history WHERE code = $1", code)
+                    )
+                    
+                    if not current_min:
+                        continue
+                        
+                    # We only fetch up to the day before current min
+                    end_date = current_min - timedelta(days=1)
+                    if end_date < target_start.date():
+                        continue
+                        
+                    end_str = end_date.strftime("%Y%m%d")
+                    
+                    # Log occasionally
+                    if (i + 1) % 50 == 0:
+                         logger.info(f"[BG Thread] Deep Fill: {i+1}/{len(codes)} ({success_count} success)")
+                    
+                    df = ak.stock_zh_a_hist(
+                        symbol=code, period="daily",
+                        start_date=start_str, end_date=end_str, adjust="qfq"
+                    )
+                    
+                    if df is not None and not df.empty:
+                        records = self._prepare_records(code, df, pd)
+                        if records:
+                            loop.run_until_complete(self._save_records_sync(conn, records))
+                            success_count += 1
+                    
+                    time.sleep(0.5)
+                    if (i + 1) % 50 == 0:
+                        time.sleep(2)
+                        
+                except Exception as e:
+                    error_count += 1
+                    if error_count <= 10:
+                        logger.warn(f"[BG Thread] Failed deep backfill for {code}: {e}")
+                        
+        finally:
+            loop.run_until_complete(conn.close())
+            loop.close()
+            
+        logger.info(f"✅ [BG Thread] Deep backfill complete: {success_count}/{len(codes)} stocks enriched")
     
     def _prepare_records(self, code: str, df, pd):
         """Prepare records for database insertion."""
