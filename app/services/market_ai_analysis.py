@@ -93,16 +93,69 @@ class MarketAIAnalysisService:
     async def get_market_overview_data(self) -> Optional[MarketOverview]:
         """Fetch and aggregate market overview data"""
         try:
-            # 1. Major Indices
+            # 1. Major Indices (Keep online fetch as per plan - not in DB)
             indices_df = await self._fetch_with_retry(ak.stock_zh_index_spot_sina)
             
-            # 2. Market Stats (All A-Shares)
-            market_df = await self._fetch_with_retry(ak.stock_zh_a_spot_em)
-            
-            # 3. Sectors
+            # 2. Sectors (Keep online fetch as per plan - not in DB)
             sector_df = await self._fetch_with_retry(ak.stock_board_industry_name_em)
             
-            return self.market_analyzer.process_market_data(indices_df, market_df, sector_df)
+            # 3. Market Stats (Use Local DB)
+            today = china_today()
+            from app.services.stock_history import stock_history_service
+            market_stats = await stock_history_service.get_daily_market_stats(today)
+            
+            # Create partial market_df for MarketAnalyzer if stats available
+            # MarketAnalyzer expects a generic structure. We might need to adjust it 
+            # or manually create the MarketOverview object.
+            # Let's bypass MarketAnalyzer.process_market_data partially/completely or mock the DF?
+            # Actually, constructing a partial DataFrame from stats is hard because process_market_data calculates counts itself.
+            # Best approach: Use MarketAnalyzer for Indices/Sectors, but inject our DB stats.
+            
+            # Let's see MarketAnalyzerLogic.process_market_data signature...
+            # It takes (indices_df, market_df, sector_df).
+            # If we pass None for market_df, it returns None?
+            # We should probably modify process_market_data to accept pre-calculated stats 
+            # OR manually build MarketOverview here. Manually building is safer/cleaner here.
+            
+            # Helper to parse indices
+            indices = []
+            if indices_df is not None and not indices_df.empty:
+                # Same logic as MarketAnalyzer
+                main_indices = ['上证指数', '深证成指', '创业板指', '科创50']
+                for _, row in indices_df.iterrows():
+                    name = row['名称']
+                    if name in main_indices:
+                        indices.append(type('obj', (object,), {
+                            'name': name,
+                            'change_pct': float(row['涨跌幅'])
+                        }))
+
+            # Helper to parse sectors
+            top_sectors = []
+            bottom_sectors = []
+            if sector_df is not None and not sector_df.empty:
+                sector_df['涨跌幅'] = pd.to_numeric(sector_df['涨跌幅'], errors='coerce')
+                df_sorted = sector_df.sort_values('涨跌幅', ascending=False)
+                for _, row in df_sorted.head(5).iterrows():
+                    top_sectors.append({'name': row['板块名称'], 'change': row['涨跌幅']})
+                for _, row in df_sorted.tail(5).iterrows():
+                    bottom_sectors.append({'name': row['板块名称'], 'change': row['涨跌幅']})
+            
+            if not market_stats:
+                # If DB has no data for today (yet), maybe try fallback?
+                # User asked to replace online fetch. We return None if not ready.
+                return None
+                
+            return MarketOverview(
+                indices=indices,
+                top_sectors=top_sectors,
+                bottom_sectors=bottom_sectors,
+                up_count=market_stats['up_count'],
+                down_count=market_stats['down_count'],
+                flat_count=market_stats['flat_count'],
+                total_amount=market_stats['total_turnover'] / 100000000, # Convert to Hundred Millions
+                total_volume=market_stats['total_volume']
+            )
             
         except Exception as e:
             logger.error(f"Failed to get market overview: {e}")
@@ -113,29 +166,13 @@ class MarketAIAnalysisService:
     # ─────────────────────────────────────────────────────────────────────────
 
     async def analyze_stock_deep_dive(self, code: str, name: str) -> Optional[TrendAnalysisResult]:
-        """Perform deep technical analysis on a single stock"""
+        """Perform deep technical analysis on a single stock using Local DB"""
         try:
-            end_date = china_now().strftime("%Y%m%d")
-            start_date = (china_now() - timedelta(days=150)).strftime("%Y%m%d")
-            
-            # Fetch history
-            df = await self._fetch_with_retry(
-                ak.stock_zh_a_hist, 
-                symbol=code, 
-                period="daily", 
-                start_date=start_date, 
-                end_date=end_date, 
-                adjust="qfq"
-            )
+            from app.services.stock_history import stock_history_service
+            df = await stock_history_service.get_stock_df(code, days=200)
             
             if df is None or df.empty:
                 return None
-                
-            # Rename columns for analyzer
-            df = df.rename(columns={
-                '日期': 'date', '开盘': 'open', '收盘': 'close', 
-                '最高': 'high', '最低': 'low', '成交量': 'volume'
-            })
             
             return self.trend_analyzer.analyze(df, code)
             
@@ -147,46 +184,63 @@ class MarketAIAnalysisService:
     # Report Generation
     # ─────────────────────────────────────────────────────────────────────────
 
-    async def generate_daily_report(self) -> str:
-        """Generate the comprehensive AI report"""
+    async def generate_daily_report(self, progress_callback=None) -> str:
+        """
+        Generate the comprehensive AI report
         
-        # 1. Get Market Overview
+        Args:
+            progress_callback: Optional async function(current, total, message) used to report progress
+        """
+        async def _report(current, total, msg):
+            if progress_callback:
+                try:
+                    await progress_callback(current, total, msg)
+                except Exception:
+                    pass
+
+        # 1. Get Market Overview (now uses DB for stats)
+        await _report(10, 100, "正在采集市场概况数据 (Local DB + API)...")
         overview = await self.get_market_overview_data()
         if not overview:
-            return "❌ 无法获取市场数据，报告生成失败。"
+            # Check reasons? Maybe DB not updated?
+            return "❌ 无法获取今日市场数据。可能本地数据库尚未同步，请稍后再试 (15:30后数据同步完成)。"
             
         overview_text = self.market_analyzer.format_market_overview(overview)
         
-        # 2. Identify Top Stock (e.g. Leader of Top Sector or random Top Gainer)
-        # For robustness, let's pick the Top 1 Gainer from the market stats
+        # 2. Identify Top Stock (from DB)
+        await _report(30, 100, "正在筛选今日关注星标股...")
         top_stock = None
         trend_result = None
         
-        # We need to fetch the top gainers list separately if not in overview
-        # But for efficiency, let's use the full market_df if we cached it.
-        # Simpler: just fetch top gainers now.
-        df_realtime = await self._fetch_with_retry(ak.stock_zh_a_spot_em)
-        if df_realtime is not None and not df_realtime.empty:
-            df_realtime['涨跌幅'] = pd.to_numeric(df_realtime['涨跌幅'], errors='coerce')
-            top_gainers = df_realtime.sort_values('涨跌幅', ascending=False).head(5)
+        try:
+            from app.services.stock_history import stock_history_service
+            today = china_today()
+            top_gainers = await stock_history_service.get_top_gainers_db(today, limit=5)
             
-            # Try to analyze the #1 stock
-            if not top_gainers.empty:
-                row = top_gainers.iloc[0]
-                code = str(row['代码'])
-                name = str(row['名称'])
+            if top_gainers:
+                row = top_gainers[0]
+                code = row['code']
+                name = row['name'] or code
+                change = row['change_pct']
+                
+                await _report(50, 100, f"正在对 {name}({code}) 进行深度技术复盘...")
                 trend_result = await self.analyze_stock_deep_dive(code, name)
                 if trend_result:
-                    top_stock = {'code': code, 'name': name, 'change': row['涨跌幅']}
+                    top_stock = {'code': code, 'name': name, 'change': change}
+        except Exception as e:
+            logger.error(f"Failed to get top stock from DB: {e}")
 
         # 3. Build AI Prompt
         prompt = self._build_ai_prompt(overview, top_stock, trend_result)
         
         # 4. Generate AI Content
+        await _report(70, 100, "AI正在深度思考与撰写报告 (约需15秒)...")
         try:
             ai_content = await ai_service.analyze(prompt)
         except Exception as e:
             ai_content = f"⚠️ AI分析暂时不可用 ({e})\n\n请参考上方客观数据。"
+            
+        await _report(100, 100, "报告生成完成")
 
         # 5. Assemble Final Report
         report = [

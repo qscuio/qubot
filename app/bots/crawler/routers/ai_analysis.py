@@ -82,24 +82,52 @@ async def cmd_ai_analysis(message: types.Message):
 # Callbacks
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.callback_query(F.data == "ai_analysis:daily")
-async def cb_ai_analysis_daily(callback: types.CallbackQuery):
-    """Generate daily analysis."""
-    await safe_answer(callback, "正在生成报告...")
+async def _handle_analysis(callback: types.CallbackQuery, period: str, period_label: str):
+    """Common handler for analysis requests."""
+    await safe_answer(callback, f"开始{period_label}分析...")
     
     try:
         try:
             await callback.message.edit_text(
-                "🤖 正在生成<b>今日A股复盘报告</b>...\n\n⏳ 正在采集数据与AI分析，请稍候...",
+                f"🤖 正在准备{period_label}行情AI分析...",
                 parse_mode="HTML"
             )
         except TelegramBadRequest:
             pass
+            
+        # Progress callback with throttling and visual bar
+        import time
+        last_update_time = [0.0]
         
-        report = await market_ai_analysis_service.generate_daily_report()
+        async def on_progress(current, total, msg):
+            now = time.time()
+            # Throttle updates (max 1 per second) unless complete
+            if now - last_update_time[0] < 1.0 and current < total:
+                return
+            
+            last_update_time[0] = now
+            percent = int(current / total * 100) if total > 0 else 0
+            progress_bar = "▓" * (percent // 10) + "░" * (10 - (percent // 10))
+            
+            try:
+                await callback.message.edit_text(
+                    f"🤖 <b>AI 行情分析中...</b>\n\n"
+                    f"{msg}\n"
+                    f"⏳ 进度: {percent}% ({current}/{total})\n"
+                    f"{progress_bar}",
+                    parse_mode="HTML"
+                )
+            except TelegramBadRequest:
+                pass
+
+        if period == "daily":
+            report = await market_ai_analysis_service.generate_daily_report(progress_callback=on_progress)
+        else:
+            # Fallback for other periods if not implemented yet
+            report = await market_ai_analysis_service.generate_report(period)
         
         builder = InlineKeyboardBuilder()
-        builder.button(text="🔄 刷新", callback_data="ai_analysis:daily")
+        builder.button(text="🔄 刷新", callback_data=f"ai_analysis:{period}")
         builder.button(text="◀️ 返回菜单", callback_data="ai_analysis:main")
         builder.adjust(2)
         
@@ -114,6 +142,12 @@ async def cb_ai_analysis_daily(callback: types.CallbackQuery):
                 raise
     except Exception as e:
         try:
-            await callback.message.edit_text(f"❌ 报告生成失败: {e}")
+            await callback.message.edit_text(f"❌ {period_label}分析生成失败: {e}")
         except Exception:
             pass
+
+
+@router.callback_query(F.data == "ai_analysis:daily")
+async def cb_ai_analysis_daily(callback: types.CallbackQuery):
+    """Generate daily analysis."""
+    await _handle_analysis(callback, "daily", "今日")

@@ -1362,6 +1362,98 @@ class StockHistoryService:
         
         return dict(result) if result else {}
 
+    # ─────────────────────────────────────────────────────────────────────────────
+    # DB Access Methods for Analysis
+    # ─────────────────────────────────────────────────────────────────────────────
+
+    async def get_daily_market_stats(self, target_date: date) -> Optional[Dict]:
+        """Get market stats (up/down counts) for a specific date from DB."""
+        if not db.pool:
+            return None
+            
+        try:
+            # Check if we have data for this date
+            count = await db.pool.fetchval(
+                "SELECT COUNT(*) FROM stock_history WHERE date = $1", target_date
+            )
+            if not count or count < 1000: # Need sufficient sample
+                return None
+                
+            # Aggregate stats
+            stats = await db.pool.fetchrow("""
+                SELECT 
+                    COUNT(*) FILTER (WHERE change_pct > 0) as up_count,
+                    COUNT(*) FILTER (WHERE change_pct = 0) as flat_count,
+                    COUNT(*) FILTER (WHERE change_pct < 0) as down_count,
+                    COALESCE(SUM(volume), 0) as total_volume,
+                    COALESCE(SUM(turnover), 0) as total_turnover,
+                    COALESCE(AVG(change_pct), 0) as avg_change
+                FROM stock_history 
+                WHERE date = $1
+            """, target_date)
+            
+            return dict(stats)
+            
+        except Exception as e:
+            logger.error(f"Failed to get daily stats: {e}")
+            return None
+
+    async def get_top_gainers_db(self, target_date: date, limit: int = 5) -> List[Dict]:
+        """Get top gainers for a specific date from DB."""
+        if not db.pool:
+            return []
+            
+        try:
+            # Join with stock_info to get names
+            rows = await db.pool.fetch("""
+                SELECT h.code, i.name, h.change_pct, h.close, h.volume
+                FROM stock_history h
+                LEFT JOIN stock_info i ON h.code = i.code
+                WHERE h.date = $1
+                ORDER BY h.change_pct DESC
+                LIMIT $2
+            """, target_date, limit)
+            
+            return [dict(r) for r in rows]
+            
+        except Exception as e:
+            logger.error(f"Failed to get top gainers from DB: {e}")
+            return []
+
+    async def get_stock_df(self, code: str, days: int = 200):
+        """Get historical DataFrame for a stock from DB (Pandas)."""
+        if not db.pool:
+            return None
+        
+        # Lazy load pandas
+        _, pd = self._get_libs()
+        if not pd:
+            return None
+            
+        try:
+            rows = await db.pool.fetch("""
+                SELECT date, open, close, high, low, volume, change_pct
+                FROM stock_history
+                WHERE code = $1
+                ORDER BY date DESC
+                LIMIT $2
+            """, code, days)
+            
+            if not rows:
+                return None
+                
+            # Convert to DataFrame
+            data = [dict(r) for r in rows]
+            df = pd.DataFrame(data)
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.sort_values('date').reset_index(drop=True)
+            
+            return df
+            
+        except Exception as e:
+            logger.error(f"Failed to get stock DF from DB: {e}")
+            return None
+
 
 # Singleton
 stock_history_service = StockHistoryService()
