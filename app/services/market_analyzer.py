@@ -35,6 +35,7 @@ class MarketOverview:
     limit_up_count: int = 0
     limit_down_count: int = 0
     total_amount: float = 0.0  # In Billion (Yi)
+    total_volume: int = 0      # Total share volume
     
     top_sectors: List[Dict] = field(default_factory=list)
     bottom_sectors: List[Dict] = field(default_factory=list)
