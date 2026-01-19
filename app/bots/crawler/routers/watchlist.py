@@ -390,3 +390,33 @@ async def cb_watch_del(callback: types.CallbackQuery):
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
     except Exception:
         pass
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Export Watchlist
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("export"))
+async def cmd_export_watchlist(message: types.Message):
+    """Export watchlist for external apps."""
+    if not await is_allowed(message.from_user.id):
+        return
+
+    stocks = await watchlist_service.get_watchlist(message.from_user.id)
+    if not stocks:
+        await message.answer("📭 自选列表为空，无需导出。")
+        return
+
+    codes = [s['code'] for s in stocks]
+    
+    # Text for copy
+    text_space = " ".join(codes)
+    
+    msg = (
+        f"📤 <b>自选股导出 ({len(codes)}只)</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "复制下方代码，在券商APP（东方财富/广发/同花顺等）中选择“自选” -> “批量导入”或直接粘贴。\n\n"
+        f"<code>{text_space}</code>"
+    )
+    
+    await message.answer(msg, parse_mode="HTML")
