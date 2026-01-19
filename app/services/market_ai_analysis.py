@@ -147,6 +147,7 @@ class MarketAIAnalysisService:
                 return None
                 
             return MarketOverview(
+                date=china_today().strftime("%Y-%m-%d"),
                 indices=indices,
                 top_sectors=top_sectors,
                 bottom_sectors=bottom_sectors,
