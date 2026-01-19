@@ -25,6 +25,15 @@ export const TIPS_LIBRARY = {
     DOWNTREND_CUT_LOSS: '✂️ 扛单是爆仓的开始。错了就要认，挨打要立正。',
     DOWNTREND_NO_HOPE: '💭 别幻想反弹解套，市场不关心你的成本。',
 
+    // Position Management / Mindset Tips (New)
+    OPPORTUNITY_FILTER: '🛡️ 你现在看到的机会，90%都不是最好的那个。',
+    POSITION_CONFIRMATION: '💰 用更多钱，押“市场已经证明我对了”。',
+    MARKET_VALIDATION: '✅ “如果我是对的，市场自然会给我机会多买。”',
+    SURVIVAL_FIRST: '💀 剩余仓位只有在“你还活着”的前提下才有意义。',
+    POSITION_PURPOSE: '🎯 剩余仓位不是用来填坑，是用来扩大战果。',
+    POSITION_REWARD: '🎁 仓位是奖励“正确”，不是补救“错误”。',
+    NO_AVERAGING_DOWN: '⛔ 剩余仓位不是为“下跌加仓”准备的。',
+
     // Anti-Prediction Tips
     PREDICT_TOP: '🔮 只有神知道顶在哪里。做跟随者，不做预言家。',
     PREDICT_BOTTOM: '🕳️ 抄底是接飞刀的代名词。底部是走出来的，不是猜出来的。',
