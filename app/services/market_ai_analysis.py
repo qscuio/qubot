@@ -103,6 +103,16 @@ class MarketAIAnalysisService:
             today = china_today()
             from app.services.stock_history import stock_history_service
             market_stats = await stock_history_service.get_daily_market_stats(today)
+            display_date = today
+
+            if not market_stats:
+                # Fallback to latest available date in DB
+                logger.warning(f"No market stats for {today}, trying latest DB date...")
+                latest_date = await stock_history_service.get_latest_date()
+                if latest_date:
+                    market_stats = await stock_history_service.get_daily_market_stats(latest_date)
+                    display_date = latest_date
+                    logger.info(f"Using fallback market stats from {latest_date}")
             
             # Create partial market_df for MarketAnalyzer if stats available
             # MarketAnalyzer expects a generic structure. We might need to adjust it 
@@ -154,7 +164,7 @@ class MarketAIAnalysisService:
                 return None
                 
             return MarketOverview(
-                date=china_today().strftime("%Y-%m-%d"),
+                date=display_date.strftime("%Y-%m-%d"),
                 indices=indices,
                 top_sectors=top_sectors,
                 bottom_sectors=bottom_sectors,
