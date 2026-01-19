@@ -267,6 +267,7 @@ async def _get_watchlist_ui(
                 text="📊 缓存数据" if realtime else "📡 实时刷新",
                 callback_data="watch:list:0" if realtime else "watch:realtime:0"
             ),
+            types.InlineKeyboardButton(text="📤 导出", callback_data="watch:export"),
             types.InlineKeyboardButton(text="🗑️ 清空", callback_data="watch:clear")
         )
         builder.row(types.InlineKeyboardButton(text="◀️ 返回", callback_data="main"))
@@ -275,8 +276,9 @@ async def _get_watchlist_ui(
             builder.button(text="📊 缓存数据", callback_data="watch:list:0")
         else:
             builder.button(text="📡 实时刷新", callback_data="watch:realtime:0")
+        builder.button(text="📤 导出", callback_data="watch:export")
         builder.button(text="◀️ 返回", callback_data="main")
-        builder.adjust(2, 2, 2, 2, 2)
+        builder.adjust(2, 2, 2)
 
     return text, builder.as_markup()
 
@@ -395,6 +397,29 @@ async def cb_watch_del(callback: types.CallbackQuery):
 # ─────────────────────────────────────────────────────────────────────────────
 # Export Watchlist
 # ─────────────────────────────────────────────────────────────────────────────
+
+@router.callback_query(F.data == "watch:export")
+async def cb_watch_export_btn(callback: types.CallbackQuery):
+    """Export watchlist callback."""
+    await safe_answer(callback)
+    
+    stocks = await watchlist_service.get_watchlist(callback.from_user.id)
+    if not stocks:
+        await callback.message.answer("📭 自选列表为空，无需导出。")
+        return
+
+    codes = [s['code'] for s in stocks]
+    text_space = " ".join(codes)
+    
+    msg = (
+        f"📤 <b>自选股导出 ({len(codes)}只)</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━\n"
+        "复制下方代码，在券商APP（东方财富/广发/同花顺等）中选择“自选” -> “批量导入”或直接粘贴。\n\n"
+        f"<code>{text_space}</code>"
+    )
+    
+    await callback.message.answer(msg, parse_mode="HTML")
+
 
 @router.message(Command("export"))
 async def cmd_export_watchlist(message: types.Message):

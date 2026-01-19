@@ -19,6 +19,7 @@ CRAWLER_BOT_COMMANDS = [
     BotCommand(command="streak", description="连板榜"),
     BotCommand(command="strong", description="强势股"),
     BotCommand(command="watch", description="启动追踪"),
+    BotCommand(command="export", description="导出自选"),
     BotCommand(command="scan", description="信号扫描"),
     BotCommand(command="sync", description="同步涨停"),
     BotCommand(command="history", description="个股历史"),
