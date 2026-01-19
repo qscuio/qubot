@@ -66,6 +66,12 @@ SIGNAL_NAMES = {
     "top_gainers_weekly_no_lu": "周涨幅(非连板)",
     "top_gainers_half_month_no_lu": "半月涨幅(非连板)",
     "top_gainers_monthly_no_lu": "月涨幅(非连板)",
+    "low_weekly_2_bullish": "低位周线两连阳",
+    "weekly_3_bullish": "低位周线三连阳",
+    "weekly_4_bullish": "低位周线四连阳",
+    "low_monthly_2_bullish": "低位月线两连阳",
+    "monthly_3_bullish": "低位月线3连阳",
+    "monthly_4_bullish": "低位月线四连阳",
 }
 
 SIGNAL_ICONS = {
@@ -104,6 +110,12 @@ SIGNAL_ICONS = {
     "top_gainers_weekly_no_lu": "🗓️",
     "top_gainers_half_month_no_lu": "🌓",
     "top_gainers_monthly_no_lu": "🌕",
+    "low_weekly_2_bullish": "📊",
+    "weekly_3_bullish": "📈",
+    "weekly_4_bullish": "🚀",
+    "low_monthly_2_bullish": "📅",
+    "monthly_3_bullish": "🌙",
+    "monthly_4_bullish": "🌕",
 }
 
 
@@ -161,6 +173,12 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
     builder.button(text="🔙 30日线回踩", callback_data="scanner:scan:pullback_ma30")
     builder.button(text="📅 5周线回踩", callback_data="scanner:scan:pullback_ma5_weekly")
+    builder.button(text="📊 低位周线两连阳", callback_data="scanner:scan:low_weekly_2_bullish")
+    builder.button(text="📈 低位周线三连阳", callback_data="scanner:scan:weekly_3_bullish")
+    builder.button(text="🚀 低位周线四连阳", callback_data="scanner:scan:weekly_4_bullish")
+    builder.button(text="📅 低位月线两连阳", callback_data="scanner:scan:low_monthly_2_bullish")
+    builder.button(text="🌙 低位月线3连阳", callback_data="scanner:scan:monthly_3_bullish")
+    builder.button(text="🌕 低位月线四连阳", callback_data="scanner:scan:monthly_4_bullish")
 
     # Trend Signals (LinReg)
     builder.button(text="5️⃣ 5日趋势支撑", callback_data="scanner:scan:support_linreg_5")
@@ -185,7 +203,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="🔄 同步数据", callback_data="scanner:dbsync")
     builder.button(text="◀️ 返回", callback_data="main")
 
-    builder.adjust(3, 2, 2, 2, 3, 2, 2, 2, 2, 1, 3, 3, 3, 3, 2, 2, 1)
+    builder.adjust(3, 2, 2, 2, 3, 2, 2, 2, 2, 1, 3, 2, 2, 3, 3, 3, 2, 2, 1)
 
     try:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())

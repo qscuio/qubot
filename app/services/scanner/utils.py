@@ -289,3 +289,30 @@ def resample_to_weekly(hist: pd.DataFrame) -> pd.DataFrame:
     }).dropna().reset_index()
     
     return weekly
+
+
+def resample_to_monthly(hist: pd.DataFrame) -> pd.DataFrame:
+    """Resample daily data to monthly.
+    
+    Args:
+        hist: Daily DataFrame with 日期, 开盘, 收盘, 最高, 最低, 成交量
+        
+    Returns:
+        Monthly DataFrame
+    """
+    if len(hist) < 20:
+        return hist
+    
+    hist = hist.copy()
+    hist['日期'] = pd.to_datetime(hist['日期'])
+    hist = hist.set_index('日期')
+    
+    monthly = hist.resample('M').agg({
+        '开盘': 'first',
+        '收盘': 'last',
+        '最高': 'max',
+        '最低': 'min',
+        '成交量': 'sum'
+    }).dropna().reset_index()
+    
+    return monthly
