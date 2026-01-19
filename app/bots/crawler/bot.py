@@ -26,6 +26,7 @@ CRAWLER_BOT_COMMANDS = [
     BotCommand(command="chart", description="K线图表"),
     BotCommand(command="limitup", description="涨停报告"),
     BotCommand(command="daban", description="打板交易"),
+    BotCommand(command="ai_analysis", description="AI行情分析"),
     # Database commands
     BotCommand(command="dbcheck", description="数据库状态"),
     BotCommand(command="dbsync", description="同步历史数据"),

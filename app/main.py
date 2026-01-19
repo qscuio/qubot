@@ -312,6 +312,10 @@ async def lifespan(app: FastAPI):
     from app.services.burst_monitor import burst_monitor_service
     await burst_monitor_service.start()
 
+    # Market AI Analysis Service (AI行情分析)
+    from app.services.market_ai_analysis import market_ai_analysis_service
+    await market_ai_analysis_service.start()
+
     # AI Service doesn't need explicit start but is ready
     if ai_service.is_available():
         logger.info("✅ AI Service ready")
@@ -344,6 +348,8 @@ async def lifespan(app: FastAPI):
     await daban_simulator.stop()
     from app.services.burst_monitor import burst_monitor_service
     await burst_monitor_service.stop()
+    from app.services.market_ai_analysis import market_ai_analysis_service
+    await market_ai_analysis_service.stop()
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")

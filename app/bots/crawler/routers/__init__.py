@@ -27,6 +27,7 @@ from . import daban
 from . import portfolio
 from . import history
 from . import ping
+from . import ai_analysis
 
 # Re-export common utilities for external use
 from .common import (
@@ -60,6 +61,7 @@ router.include_router(daban.router)
 router.include_router(portfolio.router)
 router.include_router(history.router)
 router.include_router(ping.router)
+router.include_router(ai_analysis.router)
 
 # Expose individual routers for more fine-grained control if needed
 __all__ = [
@@ -80,6 +82,7 @@ __all__ = [
     "portfolio",
     "history",
     "ping",
+    "ai_analysis",
 
     # Common utilities
     "is_allowed",
