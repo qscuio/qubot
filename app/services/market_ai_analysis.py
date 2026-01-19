@@ -236,7 +236,8 @@ class MarketAIAnalysisService:
         # 4. Generate AI Content
         await _report(70, 100, "AI正在深度思考与撰写报告 (约需15秒)...")
         try:
-            ai_content = await ai_service.analyze(prompt)
+            result = await ai_service.analyze(prompt)
+            ai_content = result.get("content", "⚠️ AI未返回有效内容")
         except Exception as e:
             ai_content = f"⚠️ AI分析暂时不可用 ({e})\n\n请参考上方客观数据。"
             
