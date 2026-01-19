@@ -26,7 +26,7 @@ from app.core.bot import telegram_service
 from app.core.timezone import china_now, china_today
 from app.services.ai import ai_service
 from app.services.stock_trend_analyzer import StockTrendAnalyzer, TrendAnalysisResult
-from app.services.market_analyzer import MarketAnalyzerLogic, MarketOverview
+from app.services.market_analyzer import MarketAnalyzerLogic, MarketOverview, MarketIndex
 
 logger = logging.getLogger(__name__)
 
@@ -125,10 +125,17 @@ class MarketAIAnalysisService:
                 for _, row in indices_df.iterrows():
                     name = row['名称']
                     if name in main_indices:
-                        indices.append(type('obj', (object,), {
-                            'name': name,
-                            'change_pct': float(row['涨跌幅'])
-                        }))
+                        indices.append(MarketIndex(
+                            code=code, # market_analyzer logic doesn't use code in constructor for some reason, but let's check definition again.
+                            # MarketIndex definition: code: str, name: str, current: float...
+                            # So I should pass code.
+                            # But wait, MarketIndex is a dataclass.
+                            name=name,
+                            current=float(row['最新价']),
+                            change=float(row['涨跌额']),
+                            change_pct=float(row['涨跌幅']),
+                            amount=float(row['成交额'])
+                        ))
 
             # Helper to parse sectors
             top_sectors = []
