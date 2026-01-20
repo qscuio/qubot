@@ -310,7 +310,7 @@ class MonitorService:
             logger.error(f"Error generating reports: {e}")
     
     async def _generate_channel_report(self, channel_id: str, channel_name: str):
-        """Generate report for a single channel using compression pipeline."""
+        """Generate report for a single channel using structured extraction pipeline."""
         if not db.pool:
             return
         
@@ -351,11 +351,9 @@ class MonitorService:
                 logger.info(f"⏭️ Skipped {channel_name} ({channel_category}): {messages_count} messages cleared")
             return
         
-        # Import compression services
-        from app.services.message_compressor import message_compressor
-        from app.services.hot_words import hot_words_service
-        
+        # ═══════════════════════════════════════════════════════════════
         # Fetch cached messages
+        # ═══════════════════════════════════════════════════════════════
         messages = await db.pool.fetch("""
             SELECT sender_name, message_text, created_at
             FROM monitor_message_cache
@@ -367,106 +365,41 @@ class MonitorService:
             return
         
         original_count = len(messages)
-        logger.info(f"📝 Generating report for {channel_name} ({original_count} messages)")
+        logger.info(f"📝 Generating structured report for {channel_name} ({original_count} messages)")
         
         # ═══════════════════════════════════════════════════════════════
-        # Step 1: Compress and structure messages
-        # ═══════════════════════════════════════════════════════════════
-        compression_result = await message_compressor.compress(
-            [dict(m) for m in messages],  # Convert Record to dict
-            channel_id,
-            channel_name
-        )
-        
-        if compression_result.compressed_count == 0:
-            logger.info(f"📊 No valuable messages for {channel_name}, skipping report")
-            # Still clear cache
-            await db.pool.execute("""
-                DELETE FROM monitor_message_cache WHERE channel_id = $1
-            """, channel_id)
-            return
-        
-        # ═══════════════════════════════════════════════════════════════
-        # Step 2: Persist hot words to database
+        # Use new structured extraction pipeline
         # ═══════════════════════════════════════════════════════════════
         try:
-            await hot_words_service.persist_to_db()
-        except Exception as e:
-            logger.warn(f"Failed to persist hot words: {e}")
-        
-        # ═══════════════════════════════════════════════════════════════
-        # Step 3: Format for AI prompt
-        # ═══════════════════════════════════════════════════════════════
-        now = get_shanghai_time()
-        report_type = "早报" if now.hour < 12 else "晚报"
-        date_str = now.strftime("%Y年%m月%d日")
-        
-        # Get hot words report
-        hot_words_section = hot_words_service.format_report()
-        
-        # Format compressed messages
-        compressed_info = message_compressor.format_for_prompt(compression_result)
-        
-        # Category and sentiment stats
-        cat_stats = ", ".join([f"{k}: {v}" for k, v in compression_result.category_stats.items()])
-        sent_stats = ", ".join([f"{k}: {v}" for k, v in compression_result.sentiment_stats.items()])
-        
-        prompt = f"""你是一个专业的市场新闻分析师。请为「{channel_name}」生成{report_type}。
-
-📊 数据概览：
-- 原始消息: {compression_result.original_count} 条 → 筛选后: {compression_result.compressed_count} 条
-- 市场分类: {cat_stats}
-- 市场情绪: {sent_stats}
-
-{hot_words_section}
-
-要求：
-1. 使用专业、简洁的语言，突出市场价值信息
-2. 重点关注价格变动、重大事件、市场情绪
-3. 使用 Markdown 格式
-
-格式模板：
-# {channel_name} {report_type}
-> {date_str} | 原始 {compression_result.original_count} 条 → 精选 {compression_result.compressed_count} 条
-
-## 📰 核心要闻
-（列出 3-5 条最重要的市场信息，附带情绪标签 📈/📉）
-
-## 📊 数据亮点
-（关键数字、价格变动、涨跌幅等）
-
-## 🔥 热门话题
-（根据热词分析今日讨论焦点）
-
-## 💡 研判建议
-（基于以上信息的市场研判，1-2 句话）
-
----
-
-筛选后的消息记录：
-{compressed_info[:8000]}
-"""
-        
-        try:
-            from app.services.ai import ai_service
-            result = await ai_service.quick_chat(prompt)
-            report_content = result.get('content', '报告生成失败')
+            from app.services.chat_memory import chat_memory_service
             
-            # Check if report generation failed
-            if report_content == '报告生成失败' or not report_content.strip():
+            # Process messages through structured extraction pipeline
+            result = await chat_memory_service.process_messages(
+                channel_id=channel_id,
+                channel_name=channel_name,
+                messages=[dict(m) for m in messages],
+            )
+            
+            # Render structured report
+            report_content = chat_memory_service.render_report(result)
+            
+            if not report_content.strip():
                 logger.error(f"Failed to generate report content for {channel_name}")
                 return
             
-            # Add footer with compression stats
+            now = get_shanghai_time()
+            report_type = "早报" if now.hour < 12 else "晚报"
+            
+            # Add footer with pipeline stats
             report_markdown = f"""{report_content}
 
 ---
-*由 QuBot 自动生成 | {now.isoformat()}*
-*压缩率: {compression_result.compression_ratio:.1%} ({compression_result.original_count} → {compression_result.compressed_count})*
+*由 QuBot 结构化抽取系统生成 | {now.isoformat()}*
+*处理时间: {result.processing_time_ms:.0f}ms | 召回率: {result.hard_fact_recall:.0%} | 可追溯性: {result.traceability:.0%}*
 """
             
             # ═══════════════════════════════════════════════════════════════
-            # Step 4: Save to GitHub (Markdown + JSON)
+            # Save to GitHub (Markdown + JSON)
             # ═══════════════════════════════════════════════════════════════
             download_url = None
             json_url = None
@@ -483,46 +416,47 @@ class MonitorService:
                     )
                     logger.info(f"📎 Report saved: {download_url}")
                     
-                    # Save structured JSON data
+                    # Save structured memory as JSON
                     json_filename = f"reports/data/{now.strftime('%Y-%m-%d')}_{safe_name}.json"
-                    json_content = compression_result.to_json()
+                    json_content = result.memory.to_json()
                     json_url = github_service.save_note(
                         json_filename,
                         json_content,
-                        f"Data: {channel_name} {now.strftime('%Y-%m-%d')}"
+                        f"Memory: {channel_name} {now.strftime('%Y-%m-%d')}"
                     )
-                    logger.info(f"📦 JSON data saved: {json_url}")
+                    logger.info(f"📦 Structured memory saved: {json_url}")
             except Exception as e:
                 logger.warn(f"Failed to save report to GitHub: {e}")
             
             # ═══════════════════════════════════════════════════════════════
-            # Step 5: Send report to Telegram
+            # Send report to Telegram
             # ═══════════════════════════════════════════════════════════════
             if self.report_target_channel:
-                # Truncate for Telegram if too long
+                # Convert markdown to Telegram-friendly format
                 tg_report = report_content
                 if len(tg_report) > 4000:
                     tg_report = tg_report[:4000] + "\n\n... (内容已截断)"
                 
                 formatted = f"📊 <b>{channel_name} {report_type}</b>\n"
                 formatted += f"━━━━━━━━━━━━━━━━━━━━━\n"
-                formatted += f"📈 原始 {compression_result.original_count} → 精选 {compression_result.compressed_count}\n\n"
+                formatted += f"📈 {original_count} 条消息 | "
+                formatted += f"观点 {result.new_claims} | 决策 {result.new_decisions} | 待办 {result.new_actions}\n\n"
                 formatted += tg_report.replace("**", "").replace("##", "📌").replace("# ", "📋 ")
                 
                 if download_url:
                     formatted += f"\n\n📎 <a href='{download_url}'>完整报告</a>"
                 if json_url:
-                    formatted += f" | <a href='{json_url}'>原始数据</a>"
+                    formatted += f" | <a href='{json_url}'>结构化数据</a>"
                 
                 target = self.report_target_channel
                 if isinstance(target, str) and (target.isdigit() or target.lstrip('-').isdigit()):
                     target = int(target)
                 
                 await telegram_service.send_message(target, formatted, parse_mode='html')
-                logger.info(f"✅ Report sent for {channel_name}")
+                logger.info(f"✅ Structured report sent for {channel_name}")
             
             # ═══════════════════════════════════════════════════════════════
-            # Step 6: Clear cache
+            # Clear cache
             # ═══════════════════════════════════════════════════════════════
             await db.pool.execute("""
                 DELETE FROM monitor_message_cache WHERE channel_id = $1
@@ -530,7 +464,9 @@ class MonitorService:
             logger.info(f"🗑️ Cleared cache for {channel_name}")
             
         except Exception as e:
-            logger.error(f"Failed to generate report: {e}")
+            logger.error(f"Failed to generate structured report: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
     
     async def _cache_message(self, channel_id: str, channel_name: str, sender_name: str, message_text: str):
         """Cache a message for daily report with deduplication check."""
