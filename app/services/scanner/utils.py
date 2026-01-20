@@ -315,4 +315,142 @@ def resample_to_monthly(hist: pd.DataFrame) -> pd.DataFrame:
         '成交量': 'sum'
     }).dropna().reset_index()
     
-    return monthly
+
+def calculate_ma(series: np.ndarray, period: int) -> float:
+    """Calculate Moving Average (Simple).
+    
+    Args:
+        series: Data array
+        period: Period
+        
+    Returns:
+        Current MA value
+    """
+    if len(series) < period:
+        return 0.0
+    return np.mean(series[-period:])
+
+
+def calculate_slope(series: np.ndarray, period: int) -> float:
+    """Calculate linear regression slope.
+    
+    Args:
+        series: Data array
+        period: Lookback period
+        
+    Returns:
+        Slope value
+    """
+    if len(series) < period:
+        return 0.0
+    
+    y = series[-period:]
+    x = np.arange(period)
+    
+    try:
+        slope, _ = np.polyfit(x, y, 1)
+        return slope
+    except:
+        return 0.0
+
+
+def calculate_mfi(
+    highs: np.ndarray,
+    lows: np.ndarray,
+    closes: np.ndarray,
+    volumes: np.ndarray,
+    period: int = 14
+) -> float:
+    """Calculate Money Flow Index (MFI).
+    
+    Args:
+        highs: High prices
+        lows: Low prices
+        closes: Close prices
+        volumes: Volumes
+        period: Period (default 14)
+        
+    Returns:
+        Current MFI value (0-100)
+    """
+    if len(closes) < period + 1:
+        return 50.0
+        
+    # Typical Price
+    tp = (highs + lows + closes) / 3
+    
+    # Raw Money Flow
+    rmf = tp * volumes
+    
+    # Positive/Negative Flow
+    pos_flow = []
+    neg_flow = []
+    
+    # Calculate for the last 'period' days relative to the end of the array
+    # We need period+1 data points to calculate `period` changes.
+    # We only care about the MFI at the very end.
+    
+    target_tp = tp[-(period+1):]
+    target_rmf = rmf[-(period+1):]
+    
+    current_pos_sum = 0.0
+    current_neg_sum = 0.0
+    
+    for i in range(1, len(target_tp)):
+        if target_tp[i] > target_tp[i-1]:
+            current_pos_sum += target_rmf[i]
+        elif target_tp[i] < target_tp[i-1]:
+            current_neg_sum += target_rmf[i]
+            
+    if current_neg_sum == 0:
+        return 100.0
+        
+    mfr = current_pos_sum / current_neg_sum
+    mfi = 100 - (100 / (1 + mfr))
+    return mfi
+
+
+def calculate_cmf(
+    highs: np.ndarray,
+    lows: np.ndarray,
+    closes: np.ndarray,
+    volumes: np.ndarray,
+    period: int = 20
+) -> float:
+    """Calculate Chaikin Money Flow (CMF).
+    
+    Args:
+        highs: High prices
+        lows: Low prices
+        closes: Close prices
+        volumes: Volumes
+        period: Period (default 20)
+        
+    Returns:
+        Current CMF value
+    """
+    if len(closes) < period:
+        return 0.0
+        
+    # Slice last 'period' elements
+    h = highs[-period:]
+    l = lows[-period:]
+    c = closes[-period:]
+    v = volumes[-period:]
+    
+    vol_sum = np.sum(v)
+    
+    if vol_sum == 0:
+        return 0.0
+        
+    mf_vol_sum = 0.0
+    
+    for i in range(len(c)):
+        range_hl = h[i] - l[i]
+        if range_hl == 0:
+            continue
+            
+        mfm = ((c[i] - l[i]) - (h[i] - c[i])) / range_hl
+        mf_vol_sum += mfm * v[i]
+        
+    return mf_vol_sum / vol_sum

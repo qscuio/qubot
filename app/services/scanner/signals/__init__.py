@@ -11,3 +11,4 @@ from . import volume
 from . import trend
 from . import pattern
 from . import board
+from . import comprehensive
