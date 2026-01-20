@@ -156,6 +156,33 @@ def auth_headers():
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# WebApp Auth Fixtures (for Chart/Watchlist endpoints)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+async def webapp_client(app) -> AsyncGenerator[AsyncClient, None]:
+    """Async HTTP client with webapp auth overridden for testing."""
+    from app.api.auth import verify_webapp, verify_webapp_optional
+    
+    # Override dependencies to return mock user ID
+    async def mock_verify_webapp():
+        return 12345
+    
+    async def mock_verify_webapp_optional():
+        return 12345
+    
+    app.dependency_overrides[verify_webapp] = mock_verify_webapp
+    app.dependency_overrides[verify_webapp_optional] = mock_verify_webapp_optional
+    
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+    
+    # Cleanup
+    app.dependency_overrides.clear()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Helper Fixtures
 # ─────────────────────────────────────────────────────────────────────────────
 
