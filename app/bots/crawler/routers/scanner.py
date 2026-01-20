@@ -71,7 +71,9 @@ SIGNAL_NAMES = {
     "weekly_4_bullish": "低位周线四连阳",
     "low_monthly_2_bullish": "低位月线两连阳",
     "monthly_3_bullish": "低位月线3连阳",
+    "monthly_3_bullish": "低位月线3连阳",
     "monthly_4_bullish": "低位月线四连阳",
+    "low_accumulation_launch": "低位潜伏启动",
 }
 
 SIGNAL_ICONS = {
@@ -115,7 +117,9 @@ SIGNAL_ICONS = {
     "weekly_4_bullish": "🚀",
     "low_monthly_2_bullish": "📅",
     "monthly_3_bullish": "🌙",
+    "monthly_3_bullish": "🌙",
     "monthly_4_bullish": "🌕",
+    "low_accumulation_launch": "🚀",
 }
 
 
@@ -146,6 +150,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder = InlineKeyboardBuilder()
     # New Signals (Hot)
     builder.button(text="🚀 启动关注", callback_data="scanner:scan:startup_candidate")
+    builder.button(text="🚀 低位潜伏启动", callback_data="scanner:scan:low_accumulation_launch")
     builder.button(text="🏎️ 狂飙启动", callback_data="scanner:scan:kuangbiao")
     builder.button(text="🔥 蓄势爆发", callback_data="scanner:scan:triple_bullish_shrink_breakout")
 
@@ -203,7 +208,7 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     builder.button(text="🔄 同步数据", callback_data="scanner:dbsync")
     builder.button(text="◀️ 返回", callback_data="main")
 
-    builder.adjust(3, 2, 2, 2, 3, 2, 2, 2, 2, 1, 3, 2, 2, 3, 3, 3, 2, 2, 1)
+    builder.adjust(4, 2, 2, 2, 3, 2, 2, 2, 2, 1, 3, 2, 2, 3, 3, 3, 2, 2, 1)
 
     try:
         await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
