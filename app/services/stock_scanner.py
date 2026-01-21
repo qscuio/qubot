@@ -197,6 +197,12 @@ class StockScanner:
         
         limit = max(limit, 150) + 20  # Ensure minimum 150 and add buffer
         
+        # [CACHE OPTIMIZATION] Use bucketed limit to improve cache hit rate
+        # Round up to nearest multiple of 300 (e.g. 40->300, 272->300, 350->600)
+        # This allows different scans (with different history needs) to share the same cache
+        bucket_size = 300
+        bucketed_limit = ((limit + bucket_size - 1) // bucket_size) * bucket_size
+        
         try:
             today = china_today()
             logger.info(f"📅 Scan date: {today}")
@@ -225,26 +231,26 @@ class StockScanner:
                 self._last_scan_used_cache = True
                 return self._last_signals
             
-            # 2. Check Data Cache (DB signature only, including limit)
-            data_signature = (max_date, max_date_count, total_vol, limit) if max_date else None
+            # 2. Check Data Cache (DB signature only, including BUCKETED limit)
+            # We use bucketed_limit for the cache key so we can reuse data
+            data_signature = (max_date, max_date_count, total_vol, bucketed_limit) if max_date else None
             stocks_data = None
             stock_names = None
             
             if not force and data_signature and self._cached_stocks_data and data_signature == self._cached_data_signature:
-                logger.info("♻️ Using cached stock data (DB data unchanged)")
+                logger.info(f"♻️ Using cached stock data (DB data unchanged, limit={bucketed_limit})")
                 stocks_data, stock_names = self._cached_stocks_data
             else:
                 # Try Redis Cache first (persist across restarts)
-                # Key includes volume and limit to invalidate on updates
-                # v3: Added limit to key
-                redis_key = f"scanner:data:v3:{max_date}:{max_date_count}:{total_vol}:{limit}"
+                # Key includes volume and BUCKETED limit
+                redis_key = f"scanner:data:v3:{max_date}:{max_date_count}:{total_vol}:{bucketed_limit}"
                 loaded_from_redis = False
                 
                 if db.redis and not force:
                     try:
                         cached_blob = await db.redis.get(redis_key)
                         if cached_blob:
-                            logger.info("♻️ Using Redis cached stock data (fast load)")
+                            logger.info(f"♻️ Using Redis cached stock data (fast load, limit={bucketed_limit})")
                             import pickle
                             # Decode base64 string back to bytes, then unpickle
                             cached_bytes = base64.b64decode(cached_blob)
@@ -255,8 +261,9 @@ class StockScanner:
 
                 if not loaded_from_redis:
                     # Load stock data from DB (slow)
-                    logger.info(f"📥 Loading stock data from DB (limit={limit})...")
-                    stocks_data, stock_names = await self._load_stocks_data_for_scan(today, progress_callback, limit=limit)
+                    # Use bucketed_limit to fetch more data than needed, populating the bucket
+                    logger.info(f"📥 Loading stock data from DB (requested={limit}, bucketed={bucketed_limit})...")
+                    stocks_data, stock_names = await self._load_stocks_data_for_scan(today, progress_callback, limit=bucketed_limit)
                     
                     # Save to Redis
                     if db.redis and stocks_data:
@@ -267,7 +274,7 @@ class StockScanner:
                             blob_bytes = pickle.dumps((stocks_data, stock_names))
                             blob_str = base64.b64encode(blob_bytes).decode('utf-8')
                             await db.redis.setex(redis_key, 86400, blob_str)
-                            logger.info("💾 Saved stock data to Redis cache")
+                            logger.info(f"💾 Saved stock data to Redis cache (limit={bucketed_limit})")
                         except Exception as e:
                             logger.error(f"Failed to save to Redis: {e}")
                 
