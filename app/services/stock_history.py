@@ -496,7 +496,7 @@ class StockHistoryService:
                         
                     # We only fetch up to the day before current min
                     end_date = current_min - timedelta(days=1)
-                    if end_date < target_start.date():
+                    if end_date < target_start:
                         continue
                         
                     end_str = end_date.strftime("%Y%m%d")
