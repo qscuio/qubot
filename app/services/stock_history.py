@@ -569,28 +569,57 @@ class StockHistoryService:
             change_amt = EXCLUDED.change_amt, turnover_rate = EXCLUDED.turnover_rate
         """, records)
     
-    async def get_all_stock_codes(self) -> List[str]:
-        """Fetch all A-share stock codes."""
+    async def get_all_stock_codes(self, force_refresh: bool = False) -> List[str]:
+        """Fetch all A-share stock codes.
+        
+        Uses local database cache (stock_info table) as primary source.
+        Only calls the expensive API if cache is stale (>1 day) or too small.
+        
+        Args:
+            force_refresh: If True, always fetch from API (used during scheduled updates)
+        """
         ak, pd = self._get_libs()
         if not ak or not pd:
             return []
 
+        # === Step 1: Try local cache first (unless force_refresh) ===
+        if not force_refresh and db.pool:
+            try:
+                info_stats = await db.pool.fetchrow("""
+                    SELECT COUNT(*) as count, MAX(updated_at) as last_update 
+                    FROM stock_info
+                """)
+                
+                if info_stats and info_stats['count'] and info_stats['count'] > 4000:
+                    last_update = info_stats['last_update']
+                    today = china_today()
+                    
+                    # Cache is valid if updated today or yesterday (for weekend/holiday)
+                    if last_update and (today - last_update.date()).days <= 1:
+                        rows = await db.pool.fetch("SELECT code FROM stock_info")
+                        codes = [r['code'] for r in rows]
+                        logger.info(f"✅ Using cached stock list: {len(codes)} stocks (last update: {last_update})")
+                        return codes
+                    else:
+                        logger.info(f"Stock list cache stale (last: {last_update}), will refresh from API")
+            except Exception as e:
+                logger.warn(f"Failed to check stock_info cache: {e}")
+
+        # === Step 2: Fetch from API ===
         import time
         start_time = time.monotonic()
-        logger.info("Fetching A-share stock list via Akshare (may show progress bar)...")
+        logger.info("Fetching A-share stock list via Akshare API...")
 
         try:
-            # Get current stock list
             logger.info("Calling ak.stock_zh_a_spot_em (300s timeout)...")
             try:
-                # Add timeout to prevent hanging indefinitely
                 df = await asyncio.wait_for(
                     asyncio.to_thread(ak.stock_zh_a_spot_em),
                     timeout=300.0
                 )
             except asyncio.TimeoutError:
                 logger.error("Timeout calling ak.stock_zh_a_spot_em")
-                return []
+                raise Exception("API timeout")
             except Exception as e:
                 logger.error(f"Error calling stock_zh_a_spot_em: {e}")
                 raise e
@@ -600,7 +629,6 @@ class StockHistoryService:
                 raise Exception("Empty result from API")
             
             # Filter main board stocks (exclude ST, 退市)
-            # A-share codes: 00xxxx (SZ), 30xxxx (创业板), 60xxxx (SH), 68xxxx (科创板)
             df_filtered = df[
                 ~df['名称'].str.contains('ST|退', na=False) &
                 (df['代码'].str.match(r'^[036]'))
@@ -608,7 +636,7 @@ class StockHistoryService:
             
             codes = df_filtered['代码'].tolist()
             
-            # Best-effort: update stock name mapping for UI display
+            # Update stock_info cache
             if db.pool:
                 try:
                     records = []
@@ -625,25 +653,24 @@ class StockHistoryService:
                                 name = EXCLUDED.name,
                                 updated_at = NOW()
                         """, records)
+                        logger.info(f"📦 Updated stock_info cache with {len(records)} stocks")
                 except Exception as e:
-                    logger.debug(f"Failed to update stock_info: {e}")
+                    logger.warn(f"Failed to update stock_info cache: {e}")
             
             elapsed = time.monotonic() - start_time
-            logger.info(f"Found {len(codes)} A-share stocks (elapsed={elapsed:.1f}s)")
+            logger.info(f"✅ Fetched {len(codes)} A-share stocks from API (elapsed={elapsed:.1f}s)")
             return [str(c) for c in codes]
             
         except Exception as e:
             elapsed = time.monotonic() - start_time
             logger.error(f"Failed to get stock codes from API after {elapsed:.1f}s: {e}")
             
-            # Fallback to local database
+            # === Step 3: Fallback to local database ===
             if db.pool:
                 try:
-                    logger.info("⚠️ Attempting to load stock list from local database (fallback)...")
-                    # Try stock_info first
+                    logger.info("⚠️ Falling back to local database...")
                     rows = await db.pool.fetch("SELECT code FROM stock_info")
                     if not rows:
-                        # Try stock_history if stock_info is empty
                         rows = await db.pool.fetch("SELECT DISTINCT code FROM stock_history")
                     
                     if rows:
