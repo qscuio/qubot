@@ -26,15 +26,49 @@ from app.api import api_router
 
 logger = Logger("Main")
 
+def setup_signal_handlers():
+    """Setup signal handlers for proper process management."""
+    def reap_children(signum, frame):
+        """Automatically reap zombie child processes."""
+        while True:
+            try:
+                # Non-blocking wait for any child process
+                pid, status = os.waitpid(-1, os.WNOHANG)
+                if pid == 0:
+                    # No more zombie children
+                    break
+                logger.debug(f"Reaped zombie process PID {pid} with status {status}")
+            except ChildProcessError:
+                # No child processes
+                break
+            except Exception as e:
+                logger.warn(f"Error reaping child: {e}")
+                break
+    
+    # Install SIGCHLD handler to prevent zombie accumulation
+    signal.signal(signal.SIGCHLD, reap_children)
+    logger.info("✅ SIGCHLD handler installed for zombie reaping")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting Qubot (Python)...")
+    
+    # Setup signal handlers for process management
+    setup_signal_handlers()
+    
     await db.connect()
     
     # Initialize GitHub service in background thread (don't block startup)
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, github_service.init)
+    github_init_future = loop.run_in_executor(None, github_service.init)
+    # Don't await - let it run in background, but track for errors
+    def github_init_done(future):
+        try:
+            future.result()
+        except Exception as e:
+            logger.error(f"GitHub service initialization failed: {e}")
+    github_init_future.add_done_callback(github_init_done)
     
     # Start Userbot (Telethon) and Bots (Aiogram) in parallel
     await asyncio.gather(

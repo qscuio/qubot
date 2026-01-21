@@ -3,7 +3,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install system dependencies, uv, Node.js 20 and CLI agents
-RUN apt-get update && apt-get install -y git curl gnupg && \
+RUN apt-get update && apt-get install -y git curl gnupg strace procps && \
     # Install uv (fast Python package installer)
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
     # Install Node.js 20
