@@ -890,12 +890,12 @@ class StockHistoryService:
             return None
 
     async def sync_with_integrity_check(self, progress_callback: Optional[Callable] = None):
-        """Sync data with integrity check - fills in missing 7-day data first.
+        """Sync data with integrity check.
         
         This method:
-        1. Checks for stocks missing data in the last 7 trading days
-        2. Fills in the gaps for those stocks
-        3. Updates all stocks with today's data
+        1. Updates all stocks with latest trading date data (batch preferred)
+        2. Checks for stocks missing data in the last 7 trading days
+        3. Fills in the gaps for those stocks
         
         Args:
             progress_callback: Optional async callback(stage, current, total, message)
@@ -917,9 +917,12 @@ class StockHistoryService:
         
         # Notify start
         if progress_callback:
-            await progress_callback("开始同步", 0, 100, "🔍 正在检查数据完整性...")
+            await progress_callback("开始同步", 0, 100, "⏳ 正在同步最新数据...")
         
-        # Step 1: Find stocks with missing 7-day data
+        # Step 1: Regular daily update for latest trading day data
+        await self.update_all_stocks(progress_callback)
+
+        # Step 2: Find stocks with missing 7-day data and fix gaps
         try:
             stocks_to_fix = await self._check_recent_data_integrity(progress_callback)
             
@@ -936,13 +939,14 @@ class StockHistoryService:
         except Exception as e:
             logger.error(f"Error during integrity check: {e}")
         
-        # Step 2: Regular daily update for today's data
-        await self.update_all_stocks(progress_callback)
-        
         # Step 3: Final cleanup to ensure no future/premature data slipped in
         await self.cleanup_abnormal_data()
     
-    async def _check_recent_data_integrity(self, progress_callback: Optional[Callable] = None) -> List[Dict]:
+    async def _check_recent_data_integrity(
+        self,
+        progress_callback: Optional[Callable] = None,
+        limit: Optional[int] = None,
+    ) -> List[Dict]:
         """Check which stocks are missing data in the last 7 trading days.
         
         Returns list of dicts with 'code' and 'missing_from' date.
@@ -951,7 +955,14 @@ class StockHistoryService:
             return []
         
         today = china_today()
-        seven_days_ago = today - timedelta(days=10)  # Look back 10 days to cover weekends
+        now = china_now()
+        # Determine expected latest trading date (not simply DB max)
+        if now.time() < datetime.strptime("09:30", "%H:%M").time():
+            target_base = today - timedelta(days=1)
+        else:
+            target_base = today
+        target_date = await self.get_latest_trading_date(target_base) or target_base
+        seven_days_ago = target_date - timedelta(days=10)  # Look back 10 days to cover weekends
         
         # Get all stock codes we should have data for
         if progress_callback:
@@ -981,8 +992,8 @@ class StockHistoryService:
         for code in all_codes:
             if code in code_latest:
                 latest = code_latest[code]
-                # If latest data is not today, needs update
-                days_old = (today - latest).days
+                # If latest data is behind the current DB max date, needs update
+                days_old = (target_date - latest).days
                 if days_old >= 1:  # Missing even 1 day
                     stocks_to_fix.append({
                         'code': code, 
@@ -995,7 +1006,9 @@ class StockHistoryService:
                     'missing_from': seven_days_ago
                 })
         
-        return stocks_to_fix[:500]  # Limit to 500 stocks per run to avoid overload
+        if limit:
+            return stocks_to_fix[:limit]
+        return stocks_to_fix
     
     async def _fix_incomplete_stocks(self, stocks_to_fix: List[Dict], progress_callback: Optional[Callable] = None):
         """Fix stocks with missing recent data."""
@@ -1062,6 +1075,9 @@ class StockHistoryService:
         if progress_callback:
             await progress_callback("完整性修复", len(stocks_to_fix), len(stocks_to_fix), f"✅ 修复完成: {success_count}/{len(stocks_to_fix)} 只股票")
         
+        # Invalidate cache so freshly fixed data is visible immediately
+        await self.invalidate_stock_cache()
+
         logger.info(f"✅ Integrity fix complete: {success_count}/{len(stocks_to_fix)} stocks fixed")
     
     async def _scheduler_loop(self):
