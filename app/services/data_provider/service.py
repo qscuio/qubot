@@ -5,6 +5,7 @@ from app.core.logger import Logger
 from app.services.data_provider.base import BaseDataProvider
 from app.services.data_provider.akshare_provider import AkShareProvider
 from app.services.data_provider.baostock_provider import BaostockProvider
+from app.services.data_provider.http_crawler_provider import HttpCrawlerProvider
 
 logger = Logger("DataProvider")
 
@@ -17,9 +18,11 @@ class DataProviderService:
         self.ak_provider = AkShareProvider()
         # Secondary provider
         self.bs_provider = BaostockProvider()
+        # Fallback/Primary Crawler
+        self.crawler_provider = HttpCrawlerProvider()
         
-        # Register order logic could be dynamic, but for now hardcode priority
-        self.providers = [self.ak_provider, self.bs_provider]
+        # Register order: Crawler first (most reliable if no auth), then AkShare, then BaoStock
+        self.providers = [self.crawler_provider, self.ak_provider, self.bs_provider]
         
         # Cache for trading dates
         self._trading_dates = []
@@ -40,9 +43,16 @@ class DataProviderService:
             await p.shutdown()
 
     async def get_stock_list(self) -> List[Dict[str, str]]:
-        """Fetch stock list from primary provider (AkShare usually best for this)."""
-        # Specific logic: AkShare has best list
-        return await self.ak_provider.get_stock_list()
+        """Fetch stock list from providers with fallback."""
+        for provider in self.providers:
+            try:
+                data = await provider.get_stock_list()
+                if data:
+                    logger.info(f"Fetched {len(data)} stocks from {provider.get_name()}")
+                    return data
+            except Exception as e:
+                logger.warn(f"Failed to fetch stock list from {provider.get_name()}: {e}")
+        return []
 
     async def get_daily_bars(
         self, 
@@ -65,14 +75,15 @@ class DataProviderService:
             try:
                 data = await provider.get_daily_bars(code, start_date, end_date, adjust)
                 if data:
-                    if provider.get_name() != "akshare":
+                    # Log source if not primary
+                    if provider.get_name() != self.providers[0].get_name():
                         logger.info(f"Fetched {len(data)} records for {code} from {provider.get_name()}")
                     return data
             except Exception as e:
                 errors.append(f"{provider.get_name()}: {e}")
         
         if errors:
-            logger.warn(f"Failed to fetch data for {code} from all providers. Errors: {errors}")
+            logger.debug(f"Failed to fetch data for {code} from all providers. Errors: {errors}")
             
         return []
 
@@ -89,18 +100,13 @@ class DataProviderService:
         except Exception:
             pass
 
-        # If cache failed or empty, fallback to providers
-        # Prefer AkShare for better holiday handling usually, but Baostock also works
-        try:
-            dates = await self.ak_provider.get_trading_dates(start_date, end_date)
-            if dates: return dates
-            
-            # Fallback
-            dates = await self.bs_provider.get_trading_dates(start_date, end_date)
-            if dates: return dates
-            
-        except Exception as e:
-            logger.error(f"DataProvider trading dates error: {e}")
+        # Fallback to providers
+        for provider in self.providers:
+            try:
+                dates = await provider.get_trading_dates(start_date, end_date)
+                if dates: return dates
+            except Exception as e:
+                logger.warn(f"Failed to get trading dates from {provider.get_name()}: {e}")
             
         return []
 
