@@ -22,6 +22,9 @@ from app.services.sector import sector_service
 from app.services.market_report import market_report_service
 from app.services.watchlist import watchlist_service
 from app.services.trading_simulator import trading_simulator
+from app.services.watchlist import watchlist_service
+from app.services.trading_simulator import trading_simulator
+from app.services.watchdog import watchdog_service
 from app.api import api_router
 
 logger = Logger("Main")
@@ -58,6 +61,9 @@ async def lifespan(app: FastAPI):
     setup_signal_handlers()
     
     await db.connect()
+    
+    # Start Watchdog Service immediately
+    await watchdog_service.start()
     
     # Initialize GitHub service in background thread (don't block startup)
     loop = asyncio.get_event_loop()
@@ -385,6 +391,7 @@ async def lifespan(app: FastAPI):
     await burst_monitor_service.stop()
     from app.services.market_ai_analysis import market_ai_analysis_service
     await market_ai_analysis_service.stop()
+    await watchdog_service.stop()
     await db.disconnect()
 
 app = FastAPI(lifespan=lifespan, title="QuBot API", version="1.0.0")
