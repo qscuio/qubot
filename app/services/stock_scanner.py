@@ -20,6 +20,10 @@ from app.core.timezone import china_now, china_today
 
 logger = Logger("StockScanner")
 
+# Stream scan when the stock universe is large to avoid OOM on low-memory hosts.
+STREAMING_SCAN_THRESHOLD = 1200
+STREAMING_BATCH_SIZE = 300
+
 # Module-level persistent executor to avoid spawn overhead and blocking issues
 _scan_executor = None
 
@@ -202,8 +206,8 @@ class StockScanner:
             self.is_scanning = False
 
     async def _scan_impl(self, force: bool = False, progress_callback=None, enabled_signals: List[str] = None) -> Dict[str, List[Dict]]:
-        """Internal scan implementation using modular scanner with ProcessPoolExecutor."""
-        from app.services.scanner import run_scan, SignalRegistry
+        """Internal scan implementation with batch scanning to reduce memory usage."""
+        from app.services.scanner import SignalRegistry
         import functools
         
         _, pd = self._get_libs()
@@ -257,127 +261,181 @@ class StockScanner:
                 self._last_scan_used_cache = True
                 return self._last_signals
             
-            # 2. Check/Load Data
+            # 2. Load stock universe and decide streaming strategy
             data_signature = (max_date, max_date_count, total_vol, bucketed_limit) if max_date else None
-            stocks_data = None
-            stock_names = None
-            
-            if not force and data_signature and self._cached_stocks_data and data_signature == self._cached_data_signature:
-                logger.info(f"♻️ Using cached stock data (limit={bucketed_limit})")
-                stocks_data, stock_names = self._cached_stocks_data
-            else:
-                # Try Redis
-                redis_key = f"scanner:data:v3:{max_date}:{max_date_count}:{total_vol}:{bucketed_limit}"
-                loaded_from_redis = False
-                if db.redis and not force:
-                    try:
-                        cached_blob = await db.redis.get(redis_key)
-                        if cached_blob:
-                            logger.info("♻️ Using Redis cached stock data")
-                            import pickle
-                            cached_bytes = base64.b64decode(cached_blob)
-                            stocks_data, stock_names = pickle.loads(cached_bytes)
-                            loaded_from_redis = True
-                    except Exception as e:
-                        logger.error(f"Redis cache error: {e}")
-
-                if not loaded_from_redis:
-                    logger.info(f"📥 Loading stock data from DB (requested={limit})...")
-                    stocks_data, stock_names = await self._load_stocks_data_for_scan(today, progress_callback, limit=bucketed_limit)
-                    if db.redis and stocks_data:
-                        try:
-                            import pickle
-                            blob_bytes = pickle.dumps((stocks_data, stock_names))
-                            blob_str = base64.b64encode(blob_bytes).decode('utf-8')
-                            await db.redis.setex(redis_key, 86400, blob_str)
-                        except Exception as e:
-                            logger.error(f"Failed to save to Redis: {e}")
-                
-                if stocks_data and data_signature:
-                    self._cached_stocks_data = (stocks_data, stock_names)
-                    self._cached_data_signature = data_signature
-            
-            if not stocks_data:
-                logger.warn("⚠️ No stock data available for scanning")
+            codes, stock_names = await self._get_scan_codes(today)
+            if not codes:
+                logger.warn("⚠️ No stock codes available for scanning")
                 return {}
-            
+
+            total_stocks = len(codes)
+            use_streaming = total_stocks >= STREAMING_SCAN_THRESHOLD
+
             sig_count = len(enabled_signals) if enabled_signals else SignalRegistry.count()
-            total_stocks = len(stocks_data)
             logger.info(f"📊 Running scanner on {total_stocks} stocks with {sig_count} signal(s)")
-            
-            # --- START MULTIPROCESSING SCAN ---
-            # Run scan in a separate process to avoid blocking the asyncio loop
-            # We process in batches to provide progress updates and avoid huge IPC payloads
-            
-            final_results = defaultdict(list)
-            stock_codes = list(stocks_data.keys())
-            batch_size = 300
-            
+
             # Get the running event loop
             loop = asyncio.get_running_loop()
-            
-            # Use module-level persistent executor to avoid spawn overhead
             executor = _get_scan_executor()
-            
-            processed_count = 0
-            failed_batches = 0
-            
-            # Report initial progress
-            if progress_callback:
-                await progress_callback(0, total_stocks, phase="scanning")
-            
-            for i in range(0, total_stocks, batch_size):
-                batch_codes = stock_codes[i : i + batch_size]
-                batch_data = {code: stocks_data[code] for code in batch_codes}
-                batch_names = {code: stock_names.get(code, code) for code in batch_codes}
-                
-                # Submit task to executor
-                # Note: We must NOT pass callbacks to the subprocess
-                task = functools.partial(
-                    run_scan_sync_wrapper,
-                    batch_data,
-                    batch_names,
-                    enabled_signals
-                )
-                
-                try:
-                    # Run in executor with timeout (5 minutes per batch)
-                    # This ensures the main event loop stays responsive
-                    batch_results = await asyncio.wait_for(
-                        loop.run_in_executor(executor, task),
-                        timeout=300.0  # 5 minutes per batch
-                    )
-                    
-                    # Merge results
-                    for sig, items in batch_results.items():
-                        final_results[sig].extend(items)
-                        
-                except asyncio.TimeoutError:
-                    logger.warn(f"⚠️ Batch {i//batch_size + 1} timed out after 5 min, skipping...")
-                    failed_batches += 1
-                except Exception as e:
-                    logger.error(f"❌ Batch {i//batch_size + 1} error: {e}")
-                    failed_batches += 1
-                
-                processed_count += len(batch_codes)
-                
-                # Update progress
+
+            if use_streaming:
+                logger.info("🧠 Streaming scan enabled to reduce memory usage")
+                if self._cached_stocks_data:
+                    self._cached_stocks_data = None
+                    self._cached_data_signature = None
+
+                final_results = defaultdict(list)
+                failed_batches = 0
+                loaded_count = 0
+                scanned_count = 0
+                temp_5d = []
+                temp_10d = []
+                temp_20d = []
+
                 if progress_callback:
-                    await progress_callback(processed_count, total_stocks, phase="scanning")
-                
-                # Yield to event loop to ensure other tasks can run (like health checks)
-                await asyncio.sleep(0)
-            
-            if failed_batches > 0:
-                logger.warn(f"⚠️ {failed_batches} batches failed during scan")
-            
-            # --- END MULTIPROCESSING SCAN ---
-            
-            logger.info(f"✅ Signal scan complete, calculating top gainers...")
-            
-            # Top gainers are light enough to run here or could be moved too
-            top_gainers = await self._calculate_top_gainers(stocks_data, stock_names)
-            final_results.update(top_gainers)
+                    await progress_callback(0, total_stocks, phase="loading")
+
+                for i in range(0, total_stocks, STREAMING_BATCH_SIZE):
+                    batch_codes = codes[i : i + STREAMING_BATCH_SIZE]
+                    batch_names = {code: stock_names.get(code, code) for code in batch_codes}
+
+                    batch_data = await self._get_local_history_batch(
+                        batch_codes,
+                        progress_callback=None,
+                        limit=bucketed_limit
+                    )
+
+                    loaded_count += len(batch_codes)
+                    if progress_callback:
+                        await progress_callback(loaded_count, total_stocks, phase="loading")
+
+                    for code, hist in batch_data.items():
+                        name = batch_names.get(code, code)
+                        self._append_top_gainers(hist, code, name, temp_5d, temp_10d, temp_20d)
+
+                    if batch_data:
+                        task = functools.partial(
+                            run_scan_sync_wrapper,
+                            batch_data,
+                            batch_names,
+                            enabled_signals
+                        )
+
+                        try:
+                            batch_results = await asyncio.wait_for(
+                                loop.run_in_executor(executor, task),
+                                timeout=300.0
+                            )
+                            for sig, items in batch_results.items():
+                                final_results[sig].extend(items)
+                        except asyncio.TimeoutError:
+                            logger.warn(f"⚠️ Batch {i//STREAMING_BATCH_SIZE + 1} timed out after 5 min, skipping...")
+                            failed_batches += 1
+                        except Exception as e:
+                            logger.error(f"❌ Batch {i//STREAMING_BATCH_SIZE + 1} error: {e}")
+                            failed_batches += 1
+
+                    scanned_count += len(batch_codes)
+                    if progress_callback:
+                        await progress_callback(scanned_count, total_stocks, phase="scanning")
+
+                    await asyncio.sleep(0)
+
+                if failed_batches > 0:
+                    logger.warn(f"⚠️ {failed_batches} batches failed during scan")
+
+                logger.info("✅ Signal scan complete, calculating top gainers...")
+                final_results.update(self._build_top_gainers(temp_5d, temp_10d, temp_20d))
+            else:
+                stocks_data = None
+
+                if not force and data_signature and self._cached_stocks_data and data_signature == self._cached_data_signature:
+                    logger.info(f"♻️ Using cached stock data (limit={bucketed_limit})")
+                    stocks_data, stock_names = self._cached_stocks_data
+                else:
+                    # Try Redis
+                    redis_key = f"scanner:data:v3:{max_date}:{max_date_count}:{total_vol}:{bucketed_limit}"
+                    loaded_from_redis = False
+                    if db.redis and not force:
+                        try:
+                            cached_blob = await db.redis.get(redis_key)
+                            if cached_blob:
+                                logger.info("♻️ Using Redis cached stock data")
+                                import pickle
+                                cached_bytes = base64.b64decode(cached_blob)
+                                stocks_data, stock_names = pickle.loads(cached_bytes)
+                                loaded_from_redis = True
+                        except Exception as e:
+                            logger.error(f"Redis cache error: {e}")
+
+                    if not loaded_from_redis:
+                        logger.info(f"📥 Loading stock data from DB (requested={limit})...")
+                        stocks_data = await self._get_local_history_batch(codes, progress_callback, limit=bucketed_limit)
+                        if db.redis and stocks_data:
+                            try:
+                                import pickle
+                                blob_bytes = pickle.dumps((stocks_data, stock_names))
+                                blob_str = base64.b64encode(blob_bytes).decode('utf-8')
+                                await db.redis.setex(redis_key, 86400, blob_str)
+                            except Exception as e:
+                                logger.error(f"Failed to save to Redis: {e}")
+
+                    if stocks_data and data_signature:
+                        self._cached_stocks_data = (stocks_data, stock_names)
+                        self._cached_data_signature = data_signature
+
+                if not stocks_data:
+                    logger.warn("⚠️ No stock data available for scanning")
+                    return {}
+
+                total_stocks = len(stocks_data)
+                final_results = defaultdict(list)
+                stock_codes = list(stocks_data.keys())
+                batch_size = 300
+                processed_count = 0
+                failed_batches = 0
+
+                if progress_callback:
+                    await progress_callback(0, total_stocks, phase="scanning")
+
+                for i in range(0, total_stocks, batch_size):
+                    batch_codes = stock_codes[i : i + batch_size]
+                    batch_data = {code: stocks_data[code] for code in batch_codes}
+                    batch_names = {code: stock_names.get(code, code) for code in batch_codes}
+
+                    task = functools.partial(
+                        run_scan_sync_wrapper,
+                        batch_data,
+                        batch_names,
+                        enabled_signals
+                    )
+
+                    try:
+                        batch_results = await asyncio.wait_for(
+                            loop.run_in_executor(executor, task),
+                            timeout=300.0
+                        )
+                        for sig, items in batch_results.items():
+                            final_results[sig].extend(items)
+                    except asyncio.TimeoutError:
+                        logger.warn(f"⚠️ Batch {i//batch_size + 1} timed out after 5 min, skipping...")
+                        failed_batches += 1
+                    except Exception as e:
+                        logger.error(f"❌ Batch {i//batch_size + 1} error: {e}")
+                        failed_batches += 1
+
+                    processed_count += len(batch_codes)
+                    if progress_callback:
+                        await progress_callback(processed_count, total_stocks, phase="scanning")
+
+                    await asyncio.sleep(0)
+
+                if failed_batches > 0:
+                    logger.warn(f"⚠️ {failed_batches} batches failed during scan")
+
+                logger.info("✅ Signal scan complete, calculating top gainers...")
+                top_gainers = await self._calculate_top_gainers(stocks_data, stock_names)
+                final_results.update(top_gainers)
             
             if signature:
                 self._last_scan_signature = signature
@@ -397,26 +455,20 @@ class StockScanner:
 
 
 
-    async def _load_stocks_data_for_scan(self, today, progress_callback=None, limit: int = 150) -> tuple:
-        """Load stock data for scanning.
-        
-        Returns:
-            (stocks_data, stock_names) tuple
-        """
-        # Get stock codes with recent data
+    async def _get_scan_codes(self, today) -> tuple:
+        """Fetch stock codes and names for scanning."""
         rows = await db.pool.fetch("""
             SELECT DISTINCT code
             FROM stock_history 
             WHERE date >= $1::date - INTERVAL '7 days'
               AND code ~ '^[036]'
         """, today)
-        
+
         if not rows:
-            return {}, {}
-        
+            return [], {}
+
         codes = [r['code'] for r in rows]
-        
-        # Get stock names
+
         stock_names = {code: code for code in codes}
         try:
             name_rows = await db.pool.fetch("""
@@ -427,10 +479,20 @@ class StockScanner:
                     stock_names[row['code']] = row['name']
         except Exception:
             pass
+
+        return codes, stock_names
+
+    async def _load_stocks_data_for_scan(self, today, progress_callback=None, limit: int = 150) -> tuple:
+        """Load stock data for scanning.
         
-        # Load history data with progress
+        Returns:
+            (stocks_data, stock_names) tuple
+        """
+        codes, stock_names = await self._get_scan_codes(today)
+        if not codes:
+            return {}, {}
+
         stocks_data = await self._get_local_history_batch(codes, progress_callback, limit=limit)
-        
         return stocks_data, stock_names
 
     async def _get_local_history_batch(self, codes: List[str], progress_callback=None, limit: int = 150) -> Dict[str, any]:
@@ -516,11 +578,39 @@ class StockScanner:
             logger.warn(traceback.format_exc())
             return {}
 
-    async def _calculate_top_gainers(self, stocks_data: dict, stock_names: dict) -> dict:
-        """Calculate top gainers for various time periods.
-        
-        Returns dict with top_gainers_* keys.
-        """
+    def _append_top_gainers(self, hist, code: str, name: str, temp_5d: list, temp_10d: list, temp_20d: list) -> None:
+        """Append gainers info for a single stock into temp lists."""
+        try:
+            closes = hist['收盘'].values
+
+            if len(closes) >= 6:
+                gain_5d = (closes[-1] - closes[-6]) / closes[-6] * 100
+                has_lu = any(
+                    (closes[i] - closes[i-1]) / closes[i-1] > 0.095
+                    for i in range(-5, 0) if i > -len(closes)
+                )
+                temp_5d.append({"code": code, "name": name, "gain": gain_5d, "has_lu": has_lu})
+
+            if len(closes) >= 11:
+                gain_10d = (closes[-1] - closes[-11]) / closes[-11] * 100
+                has_lu = any(
+                    (closes[i] - closes[i-1]) / closes[i-1] > 0.095
+                    for i in range(-10, 0) if i > -len(closes)
+                )
+                temp_10d.append({"code": code, "name": name, "gain": gain_10d, "has_lu": has_lu})
+
+            if len(closes) >= 21:
+                gain_20d = (closes[-1] - closes[-21]) / closes[-21] * 100
+                has_lu = any(
+                    (closes[i] - closes[i-1]) / closes[i-1] > 0.095
+                    for i in range(-20, 0) if i > -len(closes)
+                )
+                temp_20d.append({"code": code, "name": name, "gain": gain_20d, "has_lu": has_lu})
+        except Exception:
+            return
+
+    def _build_top_gainers(self, temp_5d: list, temp_10d: list, temp_20d: list) -> dict:
+        """Build top gainers result dict from temp lists."""
         signals = {
             "top_gainers_weekly": [],
             "top_gainers_half_month": [],
@@ -529,60 +619,35 @@ class StockScanner:
             "top_gainers_half_month_no_lu": [],
             "top_gainers_monthly_no_lu": [],
         }
-        
-        temp_5d = []
-        temp_10d = []
-        temp_20d = []
-        
-        for code, hist in stocks_data.items():
-            try:
-                closes = hist['收盘'].values
-                name = stock_names.get(code, code)
-                
-                # 5 Days (Weekly)
-                if len(closes) >= 6:
-                    gain_5d = (closes[-1] - closes[-6]) / closes[-6] * 100
-                    has_lu = any(
-                        (closes[i] - closes[i-1]) / closes[i-1] > 0.095
-                        for i in range(-5, 0) if i > -len(closes)
-                    )
-                    temp_5d.append({"code": code, "name": name, "gain": gain_5d, "has_lu": has_lu})
-                
-                # 10 Days (Half-Month)
-                if len(closes) >= 11:
-                    gain_10d = (closes[-1] - closes[-11]) / closes[-11] * 100
-                    has_lu = any(
-                        (closes[i] - closes[i-1]) / closes[i-1] > 0.095
-                        for i in range(-10, 0) if i > -len(closes)
-                    )
-                    temp_10d.append({"code": code, "name": name, "gain": gain_10d, "has_lu": has_lu})
-                
-                # 20 Days (Monthly)
-                if len(closes) >= 21:
-                    gain_20d = (closes[-1] - closes[-21]) / closes[-21] * 100
-                    has_lu = any(
-                        (closes[i] - closes[i-1]) / closes[i-1] > 0.095
-                        for i in range(-20, 0) if i > -len(closes)
-                    )
-                    temp_20d.append({"code": code, "name": name, "gain": gain_20d, "has_lu": has_lu})
-                    
-            except Exception:
-                continue
-        
-        # Sort and take top 40
+
         temp_5d.sort(key=lambda x: x["gain"], reverse=True)
         signals["top_gainers_weekly"] = temp_5d[:40]
         signals["top_gainers_weekly_no_lu"] = [s for s in temp_5d if not s["has_lu"]][:40]
-        
+
         temp_10d.sort(key=lambda x: x["gain"], reverse=True)
         signals["top_gainers_half_month"] = temp_10d[:40]
         signals["top_gainers_half_month_no_lu"] = [s for s in temp_10d if not s["has_lu"]][:40]
-        
+
         temp_20d.sort(key=lambda x: x["gain"], reverse=True)
         signals["top_gainers_monthly"] = temp_20d[:40]
         signals["top_gainers_monthly_no_lu"] = [s for s in temp_20d if not s["has_lu"]][:40]
-        
+
         return signals
+
+    async def _calculate_top_gainers(self, stocks_data: dict, stock_names: dict) -> dict:
+        """Calculate top gainers for various time periods.
+        
+        Returns dict with top_gainers_* keys.
+        """
+        temp_5d = []
+        temp_10d = []
+        temp_20d = []
+
+        for code, hist in stocks_data.items():
+            name = stock_names.get(code, code)
+            self._append_top_gainers(hist, code, name, temp_5d, temp_10d, temp_20d)
+
+        return self._build_top_gainers(temp_5d, temp_10d, temp_20d)
 
 
 # Singleton
