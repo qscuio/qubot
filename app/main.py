@@ -22,8 +22,6 @@ from app.services.sector import sector_service
 from app.services.market_report import market_report_service
 from app.services.watchlist import watchlist_service
 from app.services.trading_simulator import trading_simulator
-from app.services.watchlist import watchlist_service
-from app.services.trading_simulator import trading_simulator
 from app.services.watchdog import watchdog_service
 from app.services.data_provider.service import data_provider
 from app.api import api_router
@@ -39,22 +37,23 @@ def setup_signal_handlers():
                 # Non-blocking wait for any child process
                 pid, status = os.waitpid(-1, os.WNOHANG)
                 if pid == 0:
-                    # No more zombie children
+                    # No more zombie children to reap right now (some children exist but not dead)
                     break
-                logger.debug(f"Reaped zombie process PID {pid} with status {status}")
+                logger.info(f"👻 Reaped zombie process PID {pid} with status {status}")
             except ChildProcessError:
-                # No child processes
+                # No child processes at all
                 break
             except Exception as e:
-                logger.warn(f"Error reaping child: {e}")
+                logger.error(f"Error reaping child: {e}")
                 break
     
     # Install SIGCHLD handler to prevent zombie accumulation
+    # We want this to fail loudly if it can't be installed
     try:
         signal.signal(signal.SIGCHLD, reap_children)
         logger.info("✅ SIGCHLD handler installed for zombie reaping")
     except Exception as e:
-        logger.warn(f"Failed to install SIGCHLD handler: {e}")
+        logger.error(f"❌ Failed to install SIGCHLD handler: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
