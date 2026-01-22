@@ -154,6 +154,7 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
     from app.core.database import db
     from app.core.timezone import china_now, china_today
     
+    import math
     data = []
     name = code  # Default to code if name not found
     sector_info = {}
@@ -226,17 +227,19 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
                     history = history[-days:]
 
                 for h in history:
-                    data.append({
-                        "time": h['date'], # Already string from get_stock_history
-                        "open": float(h['open']),
-                        "high": float(h['high']),
-                        "low": float(h['low']),
-                        "close": float(h['close']),
-                        "volume": int(h['volume']),
-                        "amplitude": float(h.get('amplitude', 0) or 0),
-                        "turnover_rate": float(h.get('turnover_rate', 0) or 0),
-                        "volume_ratio": h.get('volume_ratio'),
-                    })
+                    bar = _build_bar(
+                        h['date'],
+                        h.get('open'),
+                        h.get('high'),
+                        h.get('low'),
+                        h.get('close'),
+                        h.get('volume'),
+                        h.get('amplitude'),
+                        h.get('turnover_rate'),
+                        h.get('volume_ratio'),
+                    )
+                    if bar:
+                        data.append(bar)
     except Exception:
         pass
 
@@ -284,17 +287,17 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
             except:
                 pass
 
-            return {
-                "time": row_date,
-                "open": float(row.get('开盘', 0)),
-                "high": float(row.get('最高', 0)),
-                "low": float(row.get('最低', 0)),
-                "close": float(row.get('收盘', 0)),
-                "volume": int(row.get('成交量', 0)),
-                "amplitude": float(row.get('振幅', 0)),
-                "turnover_rate": float(row.get('换手率', 0)),
-                "volume_ratio": vol_ratio
-            }
+            return _build_bar(
+                row_date,
+                row.get('开盘', 0),
+                row.get('最高', 0),
+                row.get('最低', 0),
+                row.get('收盘', 0),
+                row.get('成交量', 0),
+                row.get('振幅', 0),
+                row.get('换手率', 0),
+                vol_ratio,
+            )
         except Exception:
             return None
 
@@ -349,17 +352,16 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
                     name = str(df['名称'].iloc[0]) if not df['名称'].isna().all() else code
                 
                 for _, row in df.tail(days).iterrows():
-                    try:
-                        data.append({
-                            "time": str(row['日期'])[:10],
-                            "open": float(row.get('开盘', 0)),
-                            "high": float(row.get('最高', 0)),
-                            "low": float(row.get('最低', 0)),
-                            "close": float(row.get('收盘', 0)),
-                            "volume": int(row.get('成交量', 0)),
-                        })
-                    except Exception:
-                        continue
+                    bar = _build_bar(
+                        str(row['日期'])[:10],
+                        row.get('开盘', 0),
+                        row.get('最高', 0),
+                        row.get('最低', 0),
+                        row.get('收盘', 0),
+                        row.get('成交量', 0),
+                    )
+                    if bar:
+                        data.append(bar)
         except Exception as e:
             chart_logger.warn(f"chart_data akshare failed: code={code} period={period} error={e}")
     
@@ -600,3 +602,45 @@ async def get_chart_navigation(code: str, context: str, user_id: int = Depends(v
     next_code = codes[idx + 1] if idx < len(codes) - 1 else None
     
     return {"prev": prev_code, "next": next_code}
+    def _safe_float(value, default=None):
+        try:
+            if value is None:
+                return default
+            f = float(value)
+        except Exception:
+            return default
+        return f if math.isfinite(f) else default
+
+    def _safe_int(value, default=0):
+        try:
+            if value is None:
+                return default
+            i = int(value)
+        except Exception:
+            f = _safe_float(value, default=None)
+            if f is None:
+                return default
+            try:
+                i = int(f)
+            except Exception:
+                return default
+        return i
+
+    def _build_bar(time_value, open_v, high_v, low_v, close_v, volume_v, amplitude_v=None, turnover_v=None, volume_ratio_v=None):
+        open_f = _safe_float(open_v, default=None)
+        high_f = _safe_float(high_v, default=None)
+        low_f = _safe_float(low_v, default=None)
+        close_f = _safe_float(close_v, default=None)
+        if open_f is None or high_f is None or low_f is None or close_f is None:
+            return None
+        return {
+            "time": time_value,
+            "open": open_f,
+            "high": high_f,
+            "low": low_f,
+            "close": close_f,
+            "volume": _safe_int(volume_v, default=0),
+            "amplitude": _safe_float(amplitude_v, default=0.0),
+            "turnover_rate": _safe_float(turnover_v, default=0.0),
+            "volume_ratio": _safe_float(volume_ratio_v, default=None),
+        }
