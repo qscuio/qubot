@@ -32,7 +32,17 @@ class StockHistoryService:
         self.is_running = False
         self._scheduler_task = None
         self._scheduler_task = None
-        # Executor no longer needed as we use async DataProvider logic
+    # Executor no longer needed as we use async DataProvider logic
+
+    def _get_libs(self):
+        """Lazy load dependencies."""
+        try:
+            import akshare as ak
+            import pandas as pd
+            return ak, pd
+        except ImportError:
+            logger.error("Missing libs. Run: pip install akshare pandas")
+            return None, None
     
 
     

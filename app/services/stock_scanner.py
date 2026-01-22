@@ -341,27 +341,7 @@ class StockScanner:
             logger.error(traceback.format_exc())
             return {}
 
-def run_scan_sync_wrapper(stocks_data, stock_names, enabled_signals):
-    """Sync wrapper to run scanner in a separate process.
-    
-    This function must be top-level to be picklable.
-    """
-    import asyncio
-    from app.services.scanner import run_scan
-    
-    # Create a new event loop for the subprocess if needed, 
-    # but run_scan is async, so we need to run it synchronously here.
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        results = loop.run_until_complete(
-            run_scan(stocks_data, stock_names, progress_callback=None, enabled_signals=enabled_signals)
-        )
-        loop.close()
-        return results
-    except Exception as e:
-        print(f"Subprocess scan error: {e}")
-        return {}
+
 
 
     async def _load_stocks_data_for_scan(self, today, progress_callback=None, limit: int = 150) -> tuple:
@@ -554,3 +534,25 @@ def run_scan_sync_wrapper(stocks_data, stock_names, enabled_signals):
 
 # Singleton
 stock_scanner = StockScanner()
+
+def run_scan_sync_wrapper(stocks_data, stock_names, enabled_signals):
+    """Sync wrapper to run scanner in a separate process.
+    
+    This function must be top-level to be picklable.
+    """
+    import asyncio
+    from app.services.scanner import run_scan
+    
+    # Create a new event loop for the subprocess if needed, 
+    # but run_scan is async, so we need to run it synchronously here.
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        results = loop.run_until_complete(
+            run_scan(stocks_data, stock_names, progress_callback=None, enabled_signals=enabled_signals)
+        )
+        loop.close()
+        return results
+    except Exception as e:
+        print(f"Subprocess scan error: {e}")
+        return {}
