@@ -7,6 +7,7 @@ import { state, updateState } from './state.js';
 import { processData } from '../chart/chart-main.js';
 import { updateStockHeader } from '../ui/header.js';
 import { renderSidePanelChips } from '../analysis/chips.js';
+import { updateSectorBanner } from '../ui/sector.js';
 
 /**
  * Make an authenticated fetch request with Telegram initData
@@ -68,6 +69,7 @@ export async function loadData(isUpdate = false) {
 
         updateState({ rawData });
         updateStockHeader(json);
+        updateSectorBanner(json.sector_info);
         processData();
 
         // Only reset zoom on first load

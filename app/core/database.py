@@ -447,8 +447,20 @@ class Database:
                 CREATE TABLE IF NOT EXISTS stock_info (
                     code TEXT PRIMARY KEY,
                     name TEXT,
+                    industry TEXT,
+                    concepts TEXT,
                     updated_at TIMESTAMP DEFAULT NOW()
                 );
+            """)
+
+            # Add industry/concepts columns if not exists (migration)
+            await conn.execute("""
+                ALTER TABLE stock_info 
+                ADD COLUMN IF NOT EXISTS industry TEXT;
+            """)
+            await conn.execute("""
+                ALTER TABLE stock_info 
+                ADD COLUMN IF NOT EXISTS concepts TEXT;
             """)
             
             # Indexes for stock history queries

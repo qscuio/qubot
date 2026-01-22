@@ -532,3 +532,75 @@
         transform: translateY(0) scale(1);
     }
 }
+
+/* --- Sector Banner --- */
+.sector-banner {
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+    padding: 6px 12px;
+    overflow: hidden;
+    height: 32px;
+}
+
+.sector-scroll-container {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    height: 100%;
+    align-items: center;
+    scrollbar-width: none;
+    /* Firefox */
+}
+
+.sector-scroll-container::-webkit-scrollbar {
+    display: none;
+    /* Chrome/Safari */
+}
+
+.sector-tag {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    white-space: nowrap;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.sector-tag:hover {
+    background: var(--bg-hover);
+}
+
+.sector-tag.industry {
+    border-left: 2px solid var(--primary-color);
+}
+
+.sector-tag.concept {
+    border-left: 2px solid var(--text-muted);
+}
+
+.sector-name {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.sector-val {
+    font-weight: 600;
+}
+
+.sector-val.up {
+    color: var(--up-color);
+}
+
+.sector-val.down {
+    color: var(--down-color);
+}
+
+.sector-val.flat {
+    color: var(--text-muted);
+}

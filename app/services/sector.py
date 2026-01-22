@@ -690,6 +690,212 @@ class SectorService:
             # Check every 30 seconds
             await asyncio.sleep(30)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Stock Sector Info (Individual Stock)
+    # ─────────────────────────────────────────────────────────────────────────
 
+    async def get_stock_sector_info(self, code: str) -> Dict:
+        """Get industry and concept info for a stock, including performance.
+        
+        Returns:
+            {
+                "industry": {
+                    "name": "银行",
+                    "performance": {
+                        "day": 1.2, "week": 3.4, "month": 5.6
+                    }
+                },
+                "concepts": [
+                    {
+                        "name": "互联金融",
+                        "performance": {...}
+                    },
+                    ...
+                ]
+            }
+        """
+        if not db.pool:
+            return {}
+            
+        # 1. Try to get from stock_info cache first
+        row = await db.pool.fetchrow("""
+            SELECT industry, concepts, updated_at 
+            FROM stock_info WHERE code = $1
+        """, code)
+        
+        industry = None
+        concepts = []
+        
+        # Check if cache is valid (e.g., < 7 days old for static info)
+        # But for new columns, they might be NULL even if row exists
+        need_fetch = True
+        if row and row['industry']:
+            # We have data. Check if it's too old? Sector info changes rarely.
+            # Let's refresh if older than 30 days or if empty
+            updated_at = row['updated_at']
+            if updated_at and (datetime.now() - updated_at).days < 30:
+                need_fetch = False
+                industry = row['industry']
+                if row['concepts']:
+                    concepts = row['concepts'].split(',')
+
+        if need_fetch:
+            s_data = await self._fetch_stock_sectors_akshare(code)
+            if s_data:
+                industry = s_data.get('industry')
+                concepts = s_data.get('concepts', [])
+                
+                # Update cache
+                concepts_str = ",".join(concepts) if concepts else ""
+                try:
+                    await db.pool.execute("""
+                        INSERT INTO stock_info (code, industry, concepts, updated_at)
+                        VALUES ($1, $2, $3, NOW())
+                        ON CONFLICT (code) DO UPDATE SET
+                            industry = EXCLUDED.industry,
+                            concepts = EXCLUDED.concepts,
+                            updated_at = NOW()
+                    """, code, industry, concepts_str)
+                except Exception as e:
+                    logger.warn(f"Failed to cache stock sectors for {code}: {e}")
+        
+        # 2. Get performance for industry and concepts
+        result = {
+            "industry": None,
+            "concepts": []
+        }
+        
+        if industry:
+            perf = await self._get_sectors_performance([industry], 'industry')
+            result["industry"] = {
+                "name": industry,
+                "performance": perf.get(industry, {})
+            }
+            
+        if concepts:
+            # Limit to top 20 concepts to avoid huge queries if many
+            perf = await self._get_sectors_performance(concepts[:20], 'concept')
+            for c in concepts:
+                if c in perf:
+                    result["concepts"].append({
+                        "name": c,
+                        "performance": perf[c]
+                    })
+        
+        return result
+
+    async def _fetch_stock_sectors_akshare(self, code: str) -> Optional[Dict]:
+        """Fetch stock sector info from AkShare."""
+        ak = self._get_akshare()
+        if not ak:
+            return None
+            
+        try:
+            # Use stock_individual_info_em
+            df = await asyncio.to_thread(ak.stock_individual_info_em, symbol=code)
+            if df is None or df.empty:
+                return None
+                
+            info = {}
+            # DF columns: item, value
+            # Example rows: 
+            # item='所属行业', value='专用设备'
+            # item='所属概念', value='融资融券,深股通...'
+            
+            for _, row in df.iterrows():
+                key = str(row.get('item', ''))
+                val = str(row.get('value', ''))
+                
+                # AkShare output keys can vary (e.g. '行业' vs '所属行业')
+                if key in ['所属行业', '行业']:
+                    info['industry'] = val
+                elif key in ['所属概念', '概念', '核心概念']:
+                     # Split by comma or similar
+                    info['concepts'] = [c.strip() for c in val.split(',') if c.strip()]
+            
+            return info
+            
+        except Exception as e:
+            logger.warn(f"Failed to fetch sectors for {code}: {e}")
+            return None
+
+    async def _get_sectors_performance(self, names: List[str], sector_type: str) -> Dict[str, Dict]:
+        """Get performance stats for a list of sectors.
+        
+        Returns:
+            {
+                "SectorName": {
+                    "day": 1.2,
+                    "week": 5.0,
+                    "month": 10.0
+                }
+            }
+        """
+        if not names or not db.pool:
+            return {}
+            
+        # 1. Get today's change (Daily) from sector_daily
+        # 2. To get Weekly (5d) and Monthly (20d), we need valid trading days.
+        #    Simplified: Sum change_pct for last N records in sector_daily?
+        #    Or (Latest - Oldest) / Oldest?
+        #    Let's use (Close - Close_Prev) / Close_Prev logic if we can.
+        #    But for sectors we only store daily Change%, Close, etc.
+        #    Calculating cumulative return: Product(1 + pct/100) - 1
+        
+        # Pull last 30 days of data for these sectors
+        days_needed = 30
+        
+        query = """
+            SELECT name, date, change_pct 
+            FROM sector_daily 
+            WHERE name = ANY($1) 
+              AND type = $2
+              AND date >= CURRENT_DATE - INTERVAL '45 days'
+            ORDER BY date DESC
+        """
+        
+        rows = await db.pool.fetch(query, names, sector_type)
+        
+        by_sector = {}
+        for r in rows:
+            name = r['name']
+            if name not in by_sector:
+                by_sector[name] = []
+            by_sector[name].append(r)
+            
+        results = {}
+        for name in names:
+            data = by_sector.get(name, [])
+            if not data:
+                continue
+                
+            # Limit to recent 20 trading days roughly
+            # data is sorted date DESC
+            
+            # Daily: first item (if today) or yesterday?
+            # Ideally assume data includes latest available.
+            day_val = float(data[0]['change_pct']) if data else 0
+            
+            # Helper for cumulative return
+            def calc_return(items):
+                res = 1.0
+                for item in items:
+                    pct = float(item['change_pct'])
+                    res *= (1 + pct / 100)
+                return (res - 1) * 100
+            
+            # Week: last 5 records
+            week_val = calc_return(data[:5]) if len(data) >= 1 else 0
+            
+            # Month: last 20 records
+            month_val = calc_return(data[:20]) if len(data) >= 1 else 0
+            
+            results[name] = {
+                "day": round(day_val, 2),
+                "week": round(week_val, 2),
+                "month": round(month_val, 2)
+            }
+            
+        return results
 # Singleton
 sector_service = SectorService()

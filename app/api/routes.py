@@ -150,11 +150,13 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
     import asyncio
     from datetime import time as time_type
     from app.services.stock_history import stock_history_service
+    from app.services.sector import sector_service
     from app.core.database import db
     from app.core.timezone import china_now, china_today
     
     data = []
     name = code  # Default to code if name not found
+    sector_info = {}
     
     # Validate period
     if period not in ("daily", "weekly", "monthly"):
@@ -364,11 +366,11 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
     if not data:
         raise HTTPException(status_code=404, detail=f"No data for {code}")
     
-    return {
         "code": code,
         "name": name,
         "period": period,
         "data": data,
+        "sector_info": await sector_service.get_stock_sector_info(code),
     }
 
 
