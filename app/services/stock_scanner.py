@@ -170,8 +170,10 @@ class StockScanner:
             self.is_scanning = False
 
     async def _scan_impl(self, force: bool = False, progress_callback=None, enabled_signals: List[str] = None) -> Dict[str, List[Dict]]:
-        """Internal scan implementation using modular scanner."""
+        """Internal scan implementation using modular scanner with ProcessPoolExecutor."""
         from app.services.scanner import run_scan, SignalRegistry
+        import concurrent.futures
+        import functools
         
         _, pd = self._get_libs()
         if not pd:
@@ -195,11 +197,7 @@ class StockScanner:
         if active_signals:
             limit = max((s.min_bars for s in active_signals), default=150)
         
-        limit = max(limit, 150) + 20  # Ensure minimum 150 and add buffer
-        
-        # [CACHE OPTIMIZATION] Use bucketed limit to improve cache hit rate
-        # Round up to nearest multiple of 300 (e.g. 40->300, 272->300, 350->600)
-        # This allows different scans (with different history needs) to share the same cache
+        limit = max(limit, 150) + 20
         bucket_size = 300
         bucketed_limit = ((limit + bucket_size - 1) // bucket_size) * bucket_size
         
@@ -209,7 +207,6 @@ class StockScanner:
             
             # Check cache signature
             logger.info("📋 Checking cache signature...")
-            # Include SUM(volume) to detect intraday updates where date/count don't change
             count_row = await db.pool.fetchrow("""
                 SELECT MAX(date) as max_date, 
                        COUNT(DISTINCT code) as stock_count,
@@ -222,37 +219,31 @@ class StockScanner:
             max_date_count = count_row['stock_count'] if count_row else 0
             total_vol = count_row['total_vol'] or 0
             
-            logger.info(f"📋 DB has {max_date_count} stocks, max_date={max_date}, vol={total_vol}")
-            
-            # 1. Check Result Cache (Full signature including signals)
+            # 1. Check Result Cache
             signature = (max_date, max_date_count, total_vol, str(enabled_signals)) if max_date else None
             if not force and signature and self._last_signals is not None and signature == self._last_scan_signature:
-                logger.info("♻️ Using cached scan results (DB data unchanged & same signals)")
+                logger.info("♻️ Using cached scan results")
                 self._last_scan_used_cache = True
                 return self._last_signals
             
-            # 2. Check Data Cache (DB signature only, including BUCKETED limit)
-            # We use bucketed_limit for the cache key so we can reuse data
+            # 2. Check/Load Data
             data_signature = (max_date, max_date_count, total_vol, bucketed_limit) if max_date else None
             stocks_data = None
             stock_names = None
             
             if not force and data_signature and self._cached_stocks_data and data_signature == self._cached_data_signature:
-                logger.info(f"♻️ Using cached stock data (DB data unchanged, limit={bucketed_limit})")
+                logger.info(f"♻️ Using cached stock data (limit={bucketed_limit})")
                 stocks_data, stock_names = self._cached_stocks_data
             else:
-                # Try Redis Cache first (persist across restarts)
-                # Key includes volume and BUCKETED limit
+                # Try Redis
                 redis_key = f"scanner:data:v3:{max_date}:{max_date_count}:{total_vol}:{bucketed_limit}"
                 loaded_from_redis = False
-                
                 if db.redis and not force:
                     try:
                         cached_blob = await db.redis.get(redis_key)
                         if cached_blob:
-                            logger.info(f"♻️ Using Redis cached stock data (fast load, limit={bucketed_limit})")
+                            logger.info("♻️ Using Redis cached stock data")
                             import pickle
-                            # Decode base64 string back to bytes, then unpickle
                             cached_bytes = base64.b64decode(cached_blob)
                             stocks_data, stock_names = pickle.loads(cached_bytes)
                             loaded_from_redis = True
@@ -260,25 +251,17 @@ class StockScanner:
                         logger.error(f"Redis cache error: {e}")
 
                 if not loaded_from_redis:
-                    # Load stock data from DB (slow)
-                    # Use bucketed_limit to fetch more data than needed, populating the bucket
-                    logger.info(f"📥 Loading stock data from DB (requested={limit}, bucketed={bucketed_limit})...")
+                    logger.info(f"📥 Loading stock data from DB (requested={limit})...")
                     stocks_data, stock_names = await self._load_stocks_data_for_scan(today, progress_callback, limit=bucketed_limit)
-                    
-                    # Save to Redis
                     if db.redis and stocks_data:
                         try:
                             import pickle
-                            # Cache for 24 hours
-                            # Pickle -> Bytes -> Base64 Bytes -> UTF-8 String
                             blob_bytes = pickle.dumps((stocks_data, stock_names))
                             blob_str = base64.b64encode(blob_bytes).decode('utf-8')
                             await db.redis.setex(redis_key, 86400, blob_str)
-                            logger.info(f"💾 Saved stock data to Redis cache (limit={bucketed_limit})")
                         except Exception as e:
                             logger.error(f"Failed to save to Redis: {e}")
                 
-                # Update Memory Cache
                 if stocks_data and data_signature:
                     self._cached_stocks_data = (stocks_data, stock_names)
                     self._cached_data_signature = data_signature
@@ -288,37 +271,98 @@ class StockScanner:
                 return {}
             
             sig_count = len(enabled_signals) if enabled_signals else SignalRegistry.count()
-            logger.info(f"📊 Running scanner on {len(stocks_data)} stocks with {sig_count} signal(s)")
+            total_stocks = len(stocks_data)
+            logger.info(f"📊 Running scanner on {total_stocks} stocks with {sig_count} signal(s)")
             
-            # Run modular scan
-            signals = await run_scan(
-                stocks_data,
-                stock_names,
-                progress_callback,
-                enabled_signals=enabled_signals
-            )
+            # --- START MULTIPROCESSING SCAN ---
+            # Run scan in a separate process to avoid blocking the asyncio loop
+            # We process in batches to provide progress updates and avoid huge IPC payloads
+            
+            final_results = defaultdict(list)
+            stock_codes = list(stocks_data.keys())
+            batch_size = 300
+            
+            # Use ProcessPoolExecutor
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
+                processed_count = 0
+                
+                # Report initial progress
+                if progress_callback:
+                    await progress_callback(0, total_stocks, phase="scanning")
+                
+                for i in range(0, total_stocks, batch_size):
+                    batch_codes = stock_codes[i : i + batch_size]
+                    batch_data = {code: stocks_data[code] for code in batch_codes}
+                    batch_names = {code: stock_names.get(code, code) for code in batch_codes}
+                    
+                    # Submit task to executor
+                    # Note: We must NOT pass callbacks to the subprocess
+                    task = functools.partial(
+                        run_scan_sync_wrapper,
+                        batch_data,
+                        batch_names,
+                        enabled_signals
+                    )
+                    
+                    # Run in executor
+                    batch_results = await loop.run_in_executor(executor, task)
+                    
+                    # Merge results
+                    for sig, items in batch_results.items():
+                        final_results[sig].extend(items)
+                    
+                    processed_count += len(batch_codes)
+                    
+                    # Update progress
+                    if progress_callback:
+                        await progress_callback(processed_count, total_stocks, phase="scanning")
+            
+            # --- END MULTIPROCESSING SCAN ---
             
             logger.info(f"✅ Signal scan complete, calculating top gainers...")
             
-            # Add top gainers (special calculation not handled by signals)
+            # Top gainers are light enough to run here or could be moved too
             top_gainers = await self._calculate_top_gainers(stocks_data, stock_names)
-            signals.update(top_gainers)
+            final_results.update(top_gainers)
             
-            # Cache results
             if signature:
                 self._last_scan_signature = signature
-                self._last_signals = signals
+                self._last_signals = final_results
             
-            total_signals = sum(len(v) for v in signals.values())
+            total_signals = sum(len(v) for v in final_results.values())
             logger.info(f"✅ Scan complete: {total_signals} signals found")
             
-            return signals
+            return final_results
             
         except Exception as e:
             logger.error(f"❌ Scan error: {e}")
             import traceback
             logger.error(traceback.format_exc())
             return {}
+
+def run_scan_sync_wrapper(stocks_data, stock_names, enabled_signals):
+    """Sync wrapper to run scanner in a separate process.
+    
+    This function must be top-level to be picklable.
+    """
+    import asyncio
+    from app.services.scanner import run_scan
+    
+    # Create a new event loop for the subprocess if needed, 
+    # but run_scan is async, so we need to run it synchronously here.
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        results = loop.run_until_complete(
+            run_scan(stocks_data, stock_names, progress_callback=None, enabled_signals=enabled_signals)
+        )
+        loop.close()
+        return results
+    except Exception as e:
+        print(f"Subprocess scan error: {e}")
+        return {}
+
 
     async def _load_stocks_data_for_scan(self, today, progress_callback=None, limit: int = 150) -> tuple:
         """Load stock data for scanning.
