@@ -366,6 +366,7 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
     if not data:
         raise HTTPException(status_code=404, detail=f"No data for {code}")
     
+    return {
         "code": code,
         "name": name,
         "period": period,
