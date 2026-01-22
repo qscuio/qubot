@@ -23,18 +23,21 @@ logger = Logger("StockScanner")
 # Module-level persistent executor to avoid spawn overhead and blocking issues
 _scan_executor = None
 
-def _get_scan_executor() -> concurrent.futures.ProcessPoolExecutor:
-    """Get or create a persistent ProcessPoolExecutor for scanning.
+def _get_scan_executor() -> concurrent.futures.ThreadPoolExecutor:
+    """Get or create a persistent ThreadPoolExecutor for scanning.
     
-    Using a persistent executor:
-    1. Avoids creation/shutdown overhead on each scan
-    2. Prevents blocking when 'with' context manager waits for shutdown
-    3. Worker processes stay warm and ready
+    Using ThreadPoolExecutor instead of ProcessPoolExecutor because:
+    1. No pickle/serialization needed - threads share memory
+    2. Avoids doubling memory usage (critical on low-RAM systems like 1GB)
+    3. Still allows concurrent batch processing
+    
+    Trade-off: GIL limits true parallelism, but signal detection is mostly
+    pandas/numpy operations which release the GIL anyway.
     """
     global _scan_executor
     if _scan_executor is None:
-        logger.info("🔧 Creating persistent ProcessPoolExecutor for scanning...")
-        _scan_executor = concurrent.futures.ProcessPoolExecutor(max_workers=2)
+        logger.info("🔧 Creating persistent ThreadPoolExecutor for scanning...")
+        _scan_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="scanner")
         # Register cleanup on process exit
         atexit.register(_shutdown_scan_executor)
     return _scan_executor
@@ -586,15 +589,14 @@ class StockScanner:
 stock_scanner = StockScanner()
 
 def run_scan_sync_wrapper(stocks_data, stock_names, enabled_signals):
-    """Sync wrapper to run scanner in a separate process.
+    """Sync wrapper to run scanner in a thread.
     
-    This function must be top-level to be picklable.
+    Creates a new event loop for the thread since run_scan is async.
+    With ThreadPoolExecutor, data is shared (not pickled), saving memory.
     """
     import asyncio
     from app.services.scanner import run_scan
     
-    # Create a new event loop for the subprocess if needed, 
-    # but run_scan is async, so we need to run it synchronously here.
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -604,5 +606,7 @@ def run_scan_sync_wrapper(stocks_data, stock_names, enabled_signals):
         loop.close()
         return results
     except Exception as e:
-        print(f"Subprocess scan error: {e}")
+        logger.error(f"Thread scan error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return {}
