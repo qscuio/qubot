@@ -7,6 +7,8 @@ Signal implementations are in app/services/scanner/signals/.
 
 import asyncio
 import base64
+import concurrent.futures
+import atexit
 from typing import List, Dict
 from collections import defaultdict
 
@@ -18,6 +20,32 @@ from app.core.timezone import china_now, china_today
 
 logger = Logger("StockScanner")
 
+# Module-level persistent executor to avoid spawn overhead and blocking issues
+_scan_executor = None
+
+def _get_scan_executor() -> concurrent.futures.ProcessPoolExecutor:
+    """Get or create a persistent ProcessPoolExecutor for scanning.
+    
+    Using a persistent executor:
+    1. Avoids creation/shutdown overhead on each scan
+    2. Prevents blocking when 'with' context manager waits for shutdown
+    3. Worker processes stay warm and ready
+    """
+    global _scan_executor
+    if _scan_executor is None:
+        logger.info("🔧 Creating persistent ProcessPoolExecutor for scanning...")
+        _scan_executor = concurrent.futures.ProcessPoolExecutor(max_workers=2)
+        # Register cleanup on process exit
+        atexit.register(_shutdown_scan_executor)
+    return _scan_executor
+
+def _shutdown_scan_executor():
+    """Shutdown the scan executor on process exit."""
+    global _scan_executor
+    if _scan_executor is not None:
+        logger.info("🔧 Shutting down scan executor...")
+        _scan_executor.shutdown(wait=False, cancel_futures=True)
+        _scan_executor = None
 
 class StockScanner:
     """Service for scanning stocks with modular signal detection."""
@@ -173,7 +201,6 @@ class StockScanner:
     async def _scan_impl(self, force: bool = False, progress_callback=None, enabled_signals: List[str] = None) -> Dict[str, List[Dict]]:
         """Internal scan implementation using modular scanner with ProcessPoolExecutor."""
         from app.services.scanner import run_scan, SignalRegistry
-        import concurrent.futures
         import functools
         
         _, pd = self._get_libs()
@@ -283,41 +310,63 @@ class StockScanner:
             stock_codes = list(stocks_data.keys())
             batch_size = 300
             
-            # Use ProcessPoolExecutor
-            loop = asyncio.get_event_loop()
-            with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
-                processed_count = 0
+            # Get the running event loop
+            loop = asyncio.get_running_loop()
+            
+            # Use module-level persistent executor to avoid spawn overhead
+            executor = _get_scan_executor()
+            
+            processed_count = 0
+            failed_batches = 0
+            
+            # Report initial progress
+            if progress_callback:
+                await progress_callback(0, total_stocks, phase="scanning")
+            
+            for i in range(0, total_stocks, batch_size):
+                batch_codes = stock_codes[i : i + batch_size]
+                batch_data = {code: stocks_data[code] for code in batch_codes}
+                batch_names = {code: stock_names.get(code, code) for code in batch_codes}
                 
-                # Report initial progress
-                if progress_callback:
-                    await progress_callback(0, total_stocks, phase="scanning")
+                # Submit task to executor
+                # Note: We must NOT pass callbacks to the subprocess
+                task = functools.partial(
+                    run_scan_sync_wrapper,
+                    batch_data,
+                    batch_names,
+                    enabled_signals
+                )
                 
-                for i in range(0, total_stocks, batch_size):
-                    batch_codes = stock_codes[i : i + batch_size]
-                    batch_data = {code: stocks_data[code] for code in batch_codes}
-                    batch_names = {code: stock_names.get(code, code) for code in batch_codes}
-                    
-                    # Submit task to executor
-                    # Note: We must NOT pass callbacks to the subprocess
-                    task = functools.partial(
-                        run_scan_sync_wrapper,
-                        batch_data,
-                        batch_names,
-                        enabled_signals
+                try:
+                    # Run in executor with timeout (5 minutes per batch)
+                    # This ensures the main event loop stays responsive
+                    batch_results = await asyncio.wait_for(
+                        loop.run_in_executor(executor, task),
+                        timeout=300.0  # 5 minutes per batch
                     )
-                    
-                    # Run in executor
-                    batch_results = await loop.run_in_executor(executor, task)
                     
                     # Merge results
                     for sig, items in batch_results.items():
                         final_results[sig].extend(items)
-                    
-                    processed_count += len(batch_codes)
-                    
-                    # Update progress
-                    if progress_callback:
-                        await progress_callback(processed_count, total_stocks, phase="scanning")
+                        
+                except asyncio.TimeoutError:
+                    logger.warn(f"⚠️ Batch {i//batch_size + 1} timed out after 5 min, skipping...")
+                    failed_batches += 1
+                except Exception as e:
+                    logger.error(f"❌ Batch {i//batch_size + 1} error: {e}")
+                    failed_batches += 1
+                
+                processed_count += len(batch_codes)
+                
+                # Update progress
+                if progress_callback:
+                    await progress_callback(processed_count, total_stocks, phase="scanning")
+                
+                # Yield to event loop to ensure other tasks can run (like health checks)
+                await asyncio.sleep(0)
+            
+            if failed_batches > 0:
+                logger.warn(f"⚠️ {failed_batches} batches failed during scan")
             
             # --- END MULTIPROCESSING SCAN ---
             
