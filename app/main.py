@@ -25,6 +25,7 @@ from app.services.trading_simulator import trading_simulator
 from app.services.watchlist import watchlist_service
 from app.services.trading_simulator import trading_simulator
 from app.services.watchdog import watchdog_service
+from app.services.data_provider.service import data_provider
 from app.api import api_router
 
 logger = Logger("Main")
@@ -114,6 +115,9 @@ async def lifespan(app: FastAPI):
         await sector_service.start()
         # Run initialization in background (with delay in service)
         asyncio.create_task(sector_service.initialize())
+
+    # Initialize Data Providers
+    await data_provider.initialize()
 
     # Market Report Service (市场分析报告)
     if settings.ENABLE_MARKET_REPORT:
@@ -391,6 +395,7 @@ async def lifespan(app: FastAPI):
     await burst_monitor_service.stop()
     from app.services.market_ai_analysis import market_ai_analysis_service
     await market_ai_analysis_service.stop()
+    await data_provider.shutdown()
     await watchdog_service.stop()
     await db.disconnect()
 

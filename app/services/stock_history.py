@@ -31,25 +31,10 @@ class StockHistoryService:
     def __init__(self):
         self.is_running = False
         self._scheduler_task = None
-        self._ak = None  # AkShare module (lazy load)
-        self._pd = None  # Pandas module (lazy load)
-        # Use single-worker thread pool for background operations
-        # This ensures backfill doesn't block the event loop
-        from concurrent.futures import ThreadPoolExecutor
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="stock_history")
+        self._scheduler_task = None
+        # Executor no longer needed as we use async DataProvider logic
     
-    def _get_libs(self):
-        """Lazy load akshare and pandas modules."""
-        if self._ak is None:
-            try:
-                import akshare as ak
-                import pandas as pd
-                self._ak = ak
-                self._pd = pd
-            except ImportError:
-                logger.error("Missing libs. Run: pip install akshare pandas")
-                return None, None
-        return self._ak, self._pd
+
     
     async def start(self):
         """Start the stock history service scheduler."""
@@ -149,9 +134,8 @@ class StockHistoryService:
             
             if stale_stocks:
                 logger.info(f"Found {len(stale_stocks)} stocks with stale data (>7 days old)")
-                # Run in background thread to avoid blocking event loop
-                loop = asyncio.get_event_loop()
-                loop.run_in_executor(self._executor, self._update_stale_stocks_sync, stale_stocks)
+                # Run in background task
+                asyncio.create_task(self._update_stale_background_task(stale_stocks))
         
         # Handle missing stocks
         if coverage < 0.9:
@@ -160,9 +144,8 @@ class StockHistoryService:
                     f"Stock coverage: {coverage:.1%} ({db_stock_count}/{len(all_codes)}), "
                     f"resuming backfill for {len(missing_codes)} missing stocks..."
                 )
-                # Run in background thread to avoid blocking event loop
-                loop = asyncio.get_event_loop()
-                loop.run_in_executor(self._executor, self._backfill_stocks_sync, missing_codes)
+                # Run in background task
+                asyncio.create_task(self._backfill_background_task(missing_codes))
             else:
                 logger.info("All stocks have history data")
         else:
@@ -205,14 +188,8 @@ class StockHistoryService:
                     f"Starting deep backfill in background..."
                 )
                 
-                # Run in background thread
-                loop = asyncio.get_event_loop()
-                loop.run_in_executor(
-                    self._executor, 
-                    self._backfill_deep_history_sync, 
-                    shallow_stocks, 
-                    cutoff_date
-                )
+                # Run in background task
+                asyncio.create_task(self._deep_backfill_background_task(shallow_stocks, cutoff_date))
             else:
                 logger.info("✅ All stocks have sufficient history depth")
                 
@@ -328,259 +305,122 @@ class StockHistoryService:
             f"{error_count} errors"
         )
     
-    def _update_stale_stocks_sync(self, codes: List[str]):
-        """Synchronous version that runs entirely in background thread."""
-        import time
-        import asyncpg
-        
-        ak, pd = self._get_libs()
-        if not ak or not pd:
-            return
-        
+    async def _update_stale_background_task(self, codes: List[str]):
+        """Async background task to update stale stocks."""
         today = china_today()
-        logger.info(f"[BG Thread] Updating {len(codes)} stocks with stale data...")
+        logger.info(f"[BG Task] Updating {len(codes)} stocks with stale data...")
         
         success_count = 0
         error_count = 0
         
-        # Create sync database connection using DATABASE_URL from settings
-        try:
-            import asyncio
-            from app.core.config import settings
-            loop = asyncio.new_event_loop()
-            conn = loop.run_until_complete(
-                asyncpg.connect(settings.DATABASE_URL)
-            )
-        except Exception as e:
-            logger.error(f"[BG Thread] Failed to connect to DB: {e}")
-            return
+        for i, code in enumerate(codes):
+            try:
+                latest = await db.pool.fetchval(
+                    "SELECT MAX(date) FROM stock_history WHERE code = $1", code
+                )
+                
+                if not latest:
+                    continue
+                
+                start_date = latest + timedelta(days=1)
+                start_str = start_date.strftime("%Y%m%d")
+                end_str = today.strftime("%Y%m%d")
+                
+                records = await self._fetch_and_save_history(code, start_str, end_str)
+                if records > 0:
+                    success_count += 1
+                
+                if (i + 1) % 100 == 0:
+                    logger.info(f"[BG Task] Update: {i+1}/{len(codes)} ({success_count} success)")
+                
+                # Yield to event loop
+                await asyncio.sleep(0.2)
+                
+            except Exception as e:
+                error_count += 1
+                if error_count <= 10:
+                    logger.warn(f"[BG Task] Failed to update {code}: {e}")
         
-        try:
-            for i, code in enumerate(codes):
-                try:
-                    latest = loop.run_until_complete(
-                        conn.fetchval("SELECT MAX(date) FROM stock_history WHERE code = $1", code)
-                    )
-                    
-                    if not latest:
-                        continue
-                    
-                    start_date = latest + timedelta(days=1)
-                    start_str = start_date.strftime("%Y%m%d")
-                    end_str = today.strftime("%Y%m%d")
-                    
-                    # Fetch data
-                    df = ak.stock_zh_a_hist(
-                        symbol=code, period="daily",
-                        start_date=start_str, end_date=end_str, adjust="qfq"
-                    )
-                    
-                    if df is not None and not df.empty:
-                        records = self._prepare_records(code, df, pd)
-                        if records:
-                            loop.run_until_complete(self._save_records_sync(conn, records))
-                            success_count += 1
-                    
-                    if (i + 1) % 100 == 0:
-                        logger.info(f"[BG Thread] Update: {i+1}/{len(codes)} ({success_count} success)")
-                    
-                    time.sleep(0.5)
-                    
-                except Exception as e:
-                    error_count += 1
-                    if error_count <= 10:
-                        logger.warn(f"[BG Thread] Failed to update {code}: {e}")
-        finally:
-            loop.run_until_complete(conn.close())
-            loop.close()
-        
-        logger.info(f"✅ [BG Thread] Update complete: {success_count}/{len(codes)}, {error_count} errors")
-    
-    def _backfill_stocks_sync(self, codes: List[str]):
-        """Synchronous version that runs entirely in background thread."""
-        import time
-        import asyncpg
-        
-        ak, pd = self._get_libs()
-        if not ak or not pd:
-            return
-        
+        logger.info(f"✅ [BG Task] Update complete: {success_count}/{len(codes)}, {error_count} errors")
+
+    async def _backfill_background_task(self, codes: List[str]):
+        """Async background task to backfill stocks."""
         end_date = china_today()
         start_date = end_date - timedelta(days=10 * 365)
         start_str = start_date.strftime("%Y%m%d")
         end_str = end_date.strftime("%Y%m%d")
         
-        logger.info(f"[BG Thread] Backfilling {len(codes)} stocks from {start_date} to {end_date}")
+        logger.info(f"[BG Task] Backfilling {len(codes)} stocks from {start_date} to {end_date}")
         
         success_count = 0
         error_count = 0
         
-        # Create sync database connection using DATABASE_URL from settings
-        try:
-            import asyncio
-            from app.core.config import settings
-            loop = asyncio.new_event_loop()
-            conn = loop.run_until_complete(
-                asyncpg.connect(settings.DATABASE_URL)
-            )
-        except Exception as e:
-            logger.error(f"[BG Thread] Failed to connect to DB: {e}")
-            return
-        
-        try:
-            for i, code in enumerate(codes):
-                try:
-                    df = ak.stock_zh_a_hist(
-                        symbol=code, period="daily",
-                        start_date=start_str, end_date=end_str, adjust="qfq"
-                    )
+        for i, code in enumerate(codes):
+            try:
+                records = await self._fetch_and_save_history(code, start_str, end_str)
+                if records > 0:
+                    success_count += 1
+                
+                if (i + 1) % 100 == 0:
+                    logger.info(f"[BG Task] Backfill: {i+1}/{len(codes)} ({success_count} success)")
+                
+                await asyncio.sleep(0.5) # Gentler pacing for heavy backfill
+                
+            except Exception as e:
+                error_count += 1
+                if error_count <= 10:
+                    logger.warn(f"[BG Task] Failed to backfill {code}: {e}")
                     
-                    if df is not None and not df.empty:
-                        records = self._prepare_records(code, df, pd)
-                        if records:
-                            loop.run_until_complete(self._save_records_sync(conn, records))
-                            success_count += 1
-                    
-                    if (i + 1) % 100 == 0:
-                        logger.info(f"[BG Thread] Backfill: {i+1}/{len(codes)} ({success_count} success)")
-                    
-                    time.sleep(0.5)
-                    
-                except Exception as e:
-                    error_count += 1
-                    if error_count <= 10:
-                        logger.warn(f"[BG Thread] Failed to backfill {code}: {e}")
-        finally:
-            loop.run_until_complete(conn.close())
-            loop.close()
-        
-        logger.info(f"✅ [BG Thread] Backfill complete: {success_count}/{len(codes)}, {error_count} errors")
+        logger.info(f"✅ [BG Task] Backfill complete: {success_count}/{len(codes)}, {error_count} errors")
 
-    def _backfill_deep_history_sync(self, codes: List[str], cutoff_date):
-        """Synchronous deep backfill for existing stocks."""
-        import time
-        import asyncpg
-        
-        ak, pd = self._get_libs()
-        if not ak or not pd:
-            return
-            
-        target_start = china_today() - timedelta(days=10 * 365 + 30) # 10 years + buffer
+    async def _deep_backfill_background_task(self, codes: List[str], cutoff_date):
+        """Async background task for deep backfill."""
+        target_start = china_today() - timedelta(days=10 * 365 + 30)
         start_str = target_start.strftime("%Y%m%d")
         
-        logger.info(f"[BG Thread] Deep backfilling {len(codes)} stocks from {target_start}...")
+        logger.info(f"[BG Task] Deep backfilling {len(codes)} stocks from {target_start}...")
         
         success_count = 0
         error_count = 0
         
-        # Create sync database connection
-        try:
-            import asyncio
-            from app.core.config import settings
-            loop = asyncio.new_event_loop()
-            conn = loop.run_until_complete(asyncpg.connect(settings.DATABASE_URL))
-        except Exception as e:
-            logger.error(f"[BG Thread] Failed to connect to DB: {e}")
-            return
-            
-        try:
-            for i, code in enumerate(codes):
-                try:
-                    # Get current min date for this stock to define end range
-                    current_min = loop.run_until_complete(
-                        conn.fetchval("SELECT MIN(date) FROM stock_history WHERE code = $1", code)
-                    )
-                    
-                    if not current_min:
-                        continue
-                        
-                    # We only fetch up to the day before current min
-                    end_date = current_min - timedelta(days=1)
-                    if end_date < target_start:
-                        continue
-                        
-                    end_str = end_date.strftime("%Y%m%d")
-                    
-                    # Log occasionally
-                    if (i + 1) % 50 == 0:
-                         logger.info(f"[BG Thread] Deep Fill: {i+1}/{len(codes)} ({success_count} success)")
-                    
-                    df = ak.stock_zh_a_hist(
-                        symbol=code, period="daily",
-                        start_date=start_str, end_date=end_str, adjust="qfq"
-                    )
-                    
-                    if df is not None and not df.empty:
-                        records = self._prepare_records(code, df, pd)
-                        if records:
-                            loop.run_until_complete(self._save_records_sync(conn, records))
-                            success_count += 1
-                    
-                    time.sleep(0.5)
-                    if (i + 1) % 50 == 0:
-                        time.sleep(2)
-                        
-                except Exception as e:
-                    error_count += 1
-                    if error_count <= 10:
-                        logger.warn(f"[BG Thread] Failed deep backfill for {code}: {e}")
-                        
-        finally:
-            loop.run_until_complete(conn.close())
-            loop.close()
-            
-        logger.info(f"✅ [BG Thread] Deep backfill complete: {success_count}/{len(codes)} stocks enriched")
-    
-    def _prepare_records(self, code: str, df, pd):
-        """Prepare records for database insertion."""
-        records = []
-        for _, row in df.iterrows():
+        for i, code in enumerate(codes):
             try:
-                record = (
-                    code,
-                    pd.to_datetime(row['日期']).date(),
-                    float(row.get('开盘', 0)),
-                    float(row.get('最高', 0)),
-                    float(row.get('最低', 0)),
-                    float(row.get('收盘', 0)),
-                    int(row.get('成交量', 0)),
-                    float(row.get('成交额', 0)),
-                    float(row.get('振幅', 0)),
-                    float(row.get('涨跌幅', 0)),
-                    float(row.get('涨跌额', 0)),
-                    float(row.get('换手率', 0)),
-                )
-                records.append(record)
-            except:
-                continue
-        return records
+                # Re-check min date
+                current_min = await db.pool.fetchval("SELECT MIN(date) FROM stock_history WHERE code = $1", code)
+                
+                if not current_min:
+                    continue
+                    
+                end_date = current_min - timedelta(days=1)
+                if end_date < target_start:
+                    continue
+                    
+                end_str = end_date.strftime("%Y%m%d")
+                
+                records = await self._fetch_and_save_history(code, start_str, end_str)
+                if records > 0:
+                    success_count += 1
+                
+                if (i + 1) % 50 == 0:
+                    logger.info(f"[BG Task] Deep Fill: {i+1}/{len(codes)} ({success_count} success)")
+                    
+                await asyncio.sleep(0.5)
+                
+            except Exception as e:
+                error_count += 1
+                if error_count <= 10:
+                    logger.warn(f"[BG Task] Failed deep backfill for {code}: {e}")
+                    
+        logger.info(f"✅ [BG Task] Deep backfill complete: {success_count}/{len(codes)} stocks enriched")
     
-    async def _save_records_sync(self, conn, records):
-        """Save records using provided connection."""
-        await conn.executemany("""
-            INSERT INTO stock_history 
-            (code, date, open, high, low, close, volume, turnover, 
-             amplitude, change_pct, change_amt, turnover_rate)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-            ON CONFLICT (code, date) DO UPDATE SET
-            open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
-            close = EXCLUDED.close, volume = EXCLUDED.volume, turnover = EXCLUDED.turnover,
-            amplitude = EXCLUDED.amplitude, change_pct = EXCLUDED.change_pct,
-            change_amt = EXCLUDED.change_amt, turnover_rate = EXCLUDED.turnover_rate
-        """, records)
+
     
     async def get_all_stock_codes(self, force_refresh: bool = False) -> List[str]:
-        """Fetch all A-share stock codes.
-        
-        Uses local database cache (stock_info table) as primary source.
-        Only calls the expensive API if cache is stale (>1 day) or too small.
-        
-        Args:
-            force_refresh: If True, always fetch from API (used during scheduled updates)
-        """
-        ak, pd = self._get_libs()
-        if not ak or not pd:
+        """Fetch all A-share stock codes using DataProvider."""
+        if not db.pool:
             return []
+            
+        from app.services.data_provider.service import data_provider
 
         # === Step 1: Try local cache first (unless force_refresh) ===
         if not force_refresh and db.pool:
@@ -605,46 +445,26 @@ class StockHistoryService:
             except Exception as e:
                 logger.warn(f"Failed to check stock_info cache: {e}")
 
-        # === Step 2: Fetch from API ===
-        import time
-        start_time = time.monotonic()
-        logger.info("Fetching A-share stock list via Akshare API...")
-
+        # === Step 2: Fetch from DataProvider ===
         try:
-            logger.info("Calling ak.stock_zh_a_spot_em (300s timeout)...")
-            try:
-                df = await asyncio.wait_for(
-                    asyncio.to_thread(ak.stock_zh_a_spot_em),
-                    timeout=300.0
-                )
-            except asyncio.TimeoutError:
-                logger.error("Timeout calling ak.stock_zh_a_spot_em")
-                raise Exception("API timeout")
-            except Exception as e:
-                logger.error(f"Error calling stock_zh_a_spot_em: {e}")
-                raise e
+            logger.info("Fetching stock list from DataProvider...")
+            stock_list = await data_provider.get_stock_list()
             
-            if df is None or df.empty:
-                logger.error("Failed to fetch stock list: stock_zh_a_spot_em returned None or empty")
-                raise Exception("Empty result from API")
+            if not stock_list:
+                logger.error("DataProvider returned empty stock list")
+                raise Exception("Empty result from DataProvider")
             
-            # Filter main board stocks (exclude ST, 退市)
-            df_filtered = df[
-                ~df['名称'].str.contains('ST|退', na=False) &
-                (df['代码'].str.match(r'^[036]'))
-            ][['代码', '名称']]
-            
-            codes = df_filtered['代码'].tolist()
+            codes = [item['code'] for item in stock_list]
             
             # Update stock_info cache
             if db.pool:
                 try:
                     records = []
-                    for _, row in df_filtered.iterrows():
-                        code_val = row.get('代码')
-                        name_val = row.get('名称')
-                        if pd.notna(code_val) and pd.notna(name_val):
-                            records.append((str(code_val), str(name_val)))
+                    for item in stock_list:
+                        codes_val = item['code']
+                        name_val = item['name']
+                        if codes_val and name_val:
+                            records.append((str(codes_val), str(name_val)))
                     if records:
                         await db.pool.executemany("""
                             INSERT INTO stock_info (code, name, updated_at)
@@ -657,13 +477,10 @@ class StockHistoryService:
                 except Exception as e:
                     logger.warn(f"Failed to update stock_info cache: {e}")
             
-            elapsed = time.monotonic() - start_time
-            logger.info(f"✅ Fetched {len(codes)} A-share stocks from API (elapsed={elapsed:.1f}s)")
-            return [str(c) for c in codes]
+            return codes
             
         except Exception as e:
-            elapsed = time.monotonic() - start_time
-            logger.error(f"Failed to get stock codes from API after {elapsed:.1f}s: {e}")
+            logger.error(f"Failed to get stock codes: {e}")
             
             # === Step 3: Fallback to local database ===
             if db.pool:
@@ -688,36 +505,29 @@ class StockHistoryService:
         start_date: str, 
         end_date: str
     ) -> int:
-        """Fetch history for a single stock and save to database."""
-        ak, pd = self._get_libs()
-        if not ak or not pd or not db.pool:
+        """Fetch history for a single stock and save to database using DataProvider."""
+        if not db.pool:
             return 0
         
         try:
-            # Fetch historical data with forward-adjusted prices
-            df = await asyncio.to_thread(
-                ak.stock_zh_a_hist,
-                symbol=code,
-                period="daily",
-                start_date=start_date,
-                end_date=end_date,
-                adjust="qfq"  # 前复权
-            )
+            from app.services.data_provider.service import data_provider
+            from app.core.timezone import china_today, china_now
             
-            if df is None or df.empty:
+            # DataProvider expects YYYYMMDD
+            # start_date and end_date passed in are already YYYYMMDD string format from callers
+            
+            data_list = await data_provider.get_daily_bars(code, start_date, end_date)
+            
+            if not data_list:
                 return 0
             
-            # Column mapping from akshare
-            # 日期, 开盘, 收盘, 最高, 最低, 成交量, 成交额, 振幅, 涨跌幅, 涨跌额, 换手率
-            
-            from app.core.timezone import china_today, china_now
             today = china_today()
             now = china_now()
             is_pre_market = now.time() < datetime.strptime("09:30", "%H:%M").time()
             
             records = []
-            for _, row in df.iterrows():
-                date_val = pd.to_datetime(row['日期']).date()
+            for item in data_list:
+                date_val = item['date']
                 
                 # Validation: Skip future dates
                 if date_val > today:
@@ -730,16 +540,16 @@ class StockHistoryService:
                 record = (
                     code,
                     date_val,
-                    float(row.get('开盘', 0)),
-                    float(row.get('最高', 0)),
-                    float(row.get('最低', 0)),
-                    float(row.get('收盘', 0)),
-                    int(row.get('成交量', 0)),
-                    float(row.get('成交额', 0)),
-                    float(row.get('振幅', 0)),
-                    float(row.get('涨跌幅', 0)),
-                    float(row.get('涨跌额', 0)),
-                    float(row.get('换手率', 0)),
+                    item['open'],
+                    item['high'],
+                    item['low'],
+                    item['close'],
+                    item['volume'],
+                    item['turnover'],  # turnover (amount)
+                    item.get('amplitude', 0.0),
+                    item.get('change_pct', 0.0),
+                    item.get('change_amt', 0.0),
+                    item.get('turnover_rate', 0.0),
                 )
                 records.append(record)
             
@@ -766,7 +576,8 @@ class StockHistoryService:
             return len(records)
             
         except Exception as e:
-            raise e
+            logger.warn(f"History fetch failed for {code}: {e}")
+            return 0
     
     async def _update_all_stocks_concurrent(self, progress_callback: Optional[Callable] = None):
         """Fallback: Concurrent update - fetch today's data for all stocks individually.
@@ -1036,23 +847,21 @@ class StockHistoryService:
             logger.error(f"Failed to cleanup abnormal data: {e}")
 
     async def get_latest_trading_date(self, target_date: date) -> Optional[date]:
-        """Get the latest trading date <= target_date."""
-        ak, pd = self._get_libs()
-        if not ak or not pd:
-            return None
-            
+        """Get the latest trading date <= target_date using DataProvider."""
         try:
-            # Fetch trading dates (cached if possible? akshare might cache)
-            df = await asyncio.to_thread(ak.tool_trade_date_hist_sina)
-            if df is None or df.empty:
-                return None
-                
-            dates = pd.to_datetime(df['trade_date']).dt.date.tolist()
-            valid_dates = [d for d in dates if d <= target_date]
+            from app.services.data_provider.service import data_provider
             
-            if valid_dates:
-                return valid_dates[-1]
+            # Fetch generic range around target date (e.g. last 30 days)
+            start_date = (target_date - timedelta(days=30)).strftime("%Y%m%d")
+            end_date = target_date.strftime("%Y%m%d")
+            
+            dates = await data_provider.get_trading_dates(start_date, end_date)
+            
+            if dates:
+                # Latest date is the last one in the sorted list
+                return dates[-1]
             return None
+            
         except Exception as e:
             logger.error(f"Failed to get trading date: {e}")
             return None
