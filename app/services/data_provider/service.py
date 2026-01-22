@@ -180,4 +180,22 @@ class DataProviderService:
             
         return {}
 
+    async def get_all_spot_data(self):
+        """Fetch full market spot data with fallback (provider optional)."""
+        errors = []
+        for provider in self.providers:
+            getter = getattr(provider, "get_all_spot_data", None)
+            if not callable(getter):
+                continue
+            try:
+                data = await getter()
+                if data is not None:
+                    return data
+            except Exception as e:
+                errors.append(f"{provider.get_name()}: {e}")
+
+        if errors:
+            logger.warn(f"Failed to get all spot data from all providers: {errors}")
+        return None
+
 data_provider = DataProviderService()
