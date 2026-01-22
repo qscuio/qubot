@@ -50,8 +50,11 @@ def setup_signal_handlers():
                 break
     
     # Install SIGCHLD handler to prevent zombie accumulation
-    signal.signal(signal.SIGCHLD, reap_children)
-    logger.info("✅ SIGCHLD handler installed for zombie reaping")
+    try:
+        signal.signal(signal.SIGCHLD, reap_children)
+        logger.info("✅ SIGCHLD handler installed for zombie reaping")
+    except Exception as e:
+        logger.warn(f"Failed to install SIGCHLD handler: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
