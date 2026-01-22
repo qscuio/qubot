@@ -97,6 +97,34 @@ class AkShareProvider(BaseDataProvider):
             logger.error(f"Failed to get stock list: {e}")
             return []
 
+    async def get_all_spot_data(self) -> Optional['pandas.DataFrame']:
+        """Get full spot data for batch updates."""
+        if not self._ak:
+            if not await self.initialize(): return None
+        
+        if not self.is_available():
+            logger.warn("Circuit breaker open, skipping batch update")
+            return None
+            
+        try:
+            await self._rate_limit()
+            # 10m timeout for large request
+            df = await asyncio.wait_for(
+                asyncio.to_thread(self._ak.stock_zh_a_spot_em),
+                timeout=600.0
+            )
+            
+            if df is None or df.empty:
+                return None
+                
+            self._record_success()
+            return df
+            
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to get all spot data: {e}")
+            return None
+
     async def get_daily_bars(
         self, 
         code: str, 

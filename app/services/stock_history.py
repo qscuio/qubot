@@ -615,9 +615,19 @@ class StockHistoryService:
         processed_count = 0
         last_progress_time = time.time()
         
+        
+        # Abort flag
+        aborted = False
+        
         async def update_one(code):
-            nonlocal success_count, error_count, processed_count, last_progress_time
+            nonlocal success_count, error_count, processed_count, last_progress_time, aborted
+            
+            if aborted:
+                return
+
             async with sem:
+                if aborted: return
+                
                 # Random sleep to prevent IP blocking
                 await asyncio.sleep(random.uniform(0.5, 1.5))
                 try:
@@ -631,9 +641,13 @@ class StockHistoryService:
                 finally:
                     processed_count += 1
                     
-                    # Progress logging (every 200)
                     if processed_count % 200 == 0:
                         logger.info(f"Daily update progress: {processed_count}/{len(codes)} stocks")
+                    
+                    # Abort if too many errors (likely blocked)
+                    if not aborted and error_count > 50:
+                        logger.error(f"❌ Too many errors ({error_count}), aborting daily update to prevent IP ban persistence.")
+                        aborted = True
                     
                     # Progress callback (every 2 seconds or 100 items)
                     if progress_callback and (time.time() - last_progress_time >= 2 or processed_count % 100 == 0):
@@ -728,15 +742,14 @@ class StockHistoryService:
             await progress_callback("数据同步", 0, 100, f"⏳ 正在批量获取实时数据 ({date_str})...")
             
         try:
-            # Fetch all spot data with timeout
-            logger.info("Calling ak.stock_zh_a_spot_em()...")
-            df = await asyncio.wait_for(
-                asyncio.to_thread(ak.stock_zh_a_spot_em),
-                timeout=600.0  # 10 minute timeout
-            )
+            # Fetch all spot data using data provider (respects rate limits/circuit breaker)
+            from app.services.data_provider.service import data_provider
+            
+            logger.info("Calling data_provider.get_all_spot_data()...")
+            df = await data_provider.get_all_spot_data()
             
             if df is None or df.empty:
-                logger.error("Batch update failed: API returned empty data")
+                logger.error("Batch update failed: API returned empty data or circuit open")
                 return False
                 
             # Filter valid A-share stocks
