@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import time
 from typing import List, Dict, Any, Optional
 from app.core.logger import Logger
 from app.services.data_provider.base import BaseDataProvider
@@ -12,11 +13,23 @@ class AkShareProvider(BaseDataProvider):
         self._pd = None
         # Rate Limiting
         self._last_request_time = 0
-        self._request_interval = 1.0  # Seconds between requests
+        self._request_interval = 3.0  # 3 seconds between requests
         self._lock = asyncio.Lock()
+        
+        # Circuit Breaker
+        self._consecutive_failures = 0
+        self._circuit_open_until = 0  # Timestamp when circuit closes
+        self._failure_threshold = 5   # Open circuit after N failures
+        self._circuit_timeout = 60    # Keep circuit open for N seconds
         
     def get_name(self) -> str:
         return "akshare"
+    
+    def is_available(self) -> bool:
+        """Check if provider is available (circuit closed)."""
+        if self._circuit_open_until > time.time():
+            return False
+        return True
         
     async def _rate_limit(self):
         """Ensure minimum interval between requests."""
@@ -26,6 +39,18 @@ class AkShareProvider(BaseDataProvider):
             if elapsed < self._request_interval:
                 await asyncio.sleep(self._request_interval - elapsed)
             self._last_request_time = asyncio.get_event_loop().time()
+    
+    def _record_success(self):
+        """Record successful request, reset circuit breaker."""
+        self._consecutive_failures = 0
+        
+    def _record_failure(self):
+        """Record failed request, possibly open circuit."""
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self._failure_threshold:
+            self._circuit_open_until = time.time() + self._circuit_timeout
+            logger.warn(f"Circuit breaker OPEN: Too many failures ({self._consecutive_failures}). Disabled for {self._circuit_timeout}s")
+            self._consecutive_failures = 0  # Reset counter
 
     async def initialize(self) -> bool:
         """Lazy load libraries."""
@@ -45,12 +70,17 @@ class AkShareProvider(BaseDataProvider):
     async def get_stock_list(self) -> List[Dict[str, str]]:
         if not self._ak:
             if not await self.initialize(): return []
+        
+        if not self.is_available():
+            return []
             
         try:
             await self._rate_limit()
             df = await asyncio.to_thread(self._ak.stock_zh_a_spot_em)
             if df is None or df.empty:
                 return []
+            
+            self._record_success()
                 
             # Filter main board
             # Columns: 代码, 名称 ...
@@ -63,6 +93,7 @@ class AkShareProvider(BaseDataProvider):
                     results.append({"code": code, "name": name})
             return results
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to get stock list: {e}")
             return []
 
@@ -75,6 +106,9 @@ class AkShareProvider(BaseDataProvider):
     ) -> List[Dict[str, Any]]:
         if not self._ak:
             if not await self.initialize(): return []
+        
+        if not self.is_available():
+            return []
 
         try:
             await self._rate_limit()
@@ -90,6 +124,8 @@ class AkShareProvider(BaseDataProvider):
             
             if df is None or df.empty:
                 return []
+            
+            self._record_success()
 
             results = []
             for _, row in df.iterrows():
@@ -116,12 +152,16 @@ class AkShareProvider(BaseDataProvider):
             return results
             
         except Exception as e:
+            self._record_failure()
             logger.warn(f"AkShare fetch error for {code}: {e}")
             return []
 
     async def get_trading_dates(self, start_date: str, end_date: str) -> List[datetime.date]:
         if not self._ak:
             if not await self.initialize(): return []
+        
+        if not self.is_available():
+            return []
             
         try:
             await self._rate_limit()
@@ -129,6 +169,8 @@ class AkShareProvider(BaseDataProvider):
             df = await asyncio.to_thread(self._ak.tool_trade_date_hist_sina)
             if df is None or df.empty:
                 return []
+            
+            self._record_success()
                 
             dates = self._pd.to_datetime(df['trade_date']).dt.date.tolist()
             
@@ -140,5 +182,6 @@ class AkShareProvider(BaseDataProvider):
             valid_dates.sort()
             return valid_dates
         except Exception as e:
+            self._record_failure()
             logger.error(f"Failed to get trading dates (AkShare): {e}")
             return []
