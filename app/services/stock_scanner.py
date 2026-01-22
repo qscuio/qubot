@@ -141,13 +141,14 @@ class StockScanner:
         self._last_scan_used_cache = False
         self.is_scanning = False
     
-    async def scan_all_stocks(self, force: bool = False, progress_callback=None, enabled_signals: List[str] = None) -> Dict[str, List[Dict]]:
+    async def scan_all_stocks(self, force: bool = False, progress_callback=None, enabled_signals: List[str] = None, limit: int = None) -> Dict[str, List[Dict]]:
         """Scan all stocks for signals.
         
         Args:
             force: Force rescan even if cache is valid
             progress_callback: Async callback for progress updates  
             enabled_signals: List of signal IDs to scan (None = all signals)
+            limit: (Deprecated) argument for backward compatibility, ignored in new logic
         """
         if self.is_scanning:
             logger.warn("⚠️ Scan already in progress, rejecting duplicate request")
