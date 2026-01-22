@@ -105,8 +105,9 @@ async def lifespan(app: FastAPI):
 
     # Sector Tracker (板块分析追踪)
     if settings.ENABLE_SECTOR:
-        await sector_service.initialize()
         await sector_service.start()
+        # Run initialization in background (with delay in service)
+        asyncio.create_task(sector_service.initialize())
 
     # Market Report Service (市场分析报告)
     if settings.ENABLE_MARKET_REPORT:

@@ -63,6 +63,9 @@ class SectorService:
     
     async def initialize(self):
         """Initialize service - backfill recent history if needed."""
+        # Delay initialization to allow other services to start and avoid OOM during deployment
+        await asyncio.sleep(60)
+        
         if not db.pool:
             return
         
