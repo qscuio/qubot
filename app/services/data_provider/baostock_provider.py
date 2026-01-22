@@ -163,3 +163,7 @@ class BaostockProvider(BaseDataProvider):
         except Exception as e:
             logger.error(f"Failed to get trading dates (Baostock): {e}")
             return []
+
+    async def get_quotes(self, codes: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Baostock does not support real-time quotes."""
+        return {}

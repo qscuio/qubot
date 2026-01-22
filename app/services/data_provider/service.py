@@ -158,4 +158,20 @@ class DataProviderService:
         except Exception:
             return False
 
+    async def get_quotes(self, codes: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Fetch real-time quotes with fallback."""
+        errors = []
+        for provider in self.providers:
+            try:
+                quotes = await provider.get_quotes(codes)
+                if quotes:
+                    return quotes
+            except Exception as e:
+                errors.append(f"{provider.get_name()}: {e}")
+                
+        if errors:
+            logger.warn(f"Failed to get quotes from all providers: {errors}")
+            
+        return {}
+
 data_provider = DataProviderService()

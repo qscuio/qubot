@@ -185,3 +185,56 @@ class AkShareProvider(BaseDataProvider):
             self._record_failure()
             logger.error(f"Failed to get trading dates (AkShare): {e}")
             return []
+
+    async def get_quotes(self, codes: List[str]) -> Dict[str, Dict[str, Any]]:
+        if not self._ak:
+            if not await self.initialize(): return {}
+        
+        if not self.is_available():
+            return {}
+            
+        try:
+            await self._rate_limit()
+            # Fetch all spot data (one request)
+            df = await asyncio.to_thread(self._ak.stock_zh_a_spot_em)
+            if df is None or df.empty:
+                return {}
+            
+            self._record_success()
+            
+            # Map results
+            result = {}
+            # effective codes set for faster lookup
+            target_codes = set(codes) if codes else None
+            
+            for _, row in df.iterrows():
+                code = str(row['代码'])
+                
+                # If codes provided, filter
+                if target_codes and code not in target_codes:
+                    continue
+                    
+                try:
+                    price = float(row.get('最新价', 0) or 0)
+                    change = float(row.get('涨跌幅', 0) or 0)
+                    volume = float(row.get('成交量', 0) or 0)
+                    turnover = float(row.get('成交额', 0) or 0)
+                    name = str(row.get('名称', ''))
+                    
+                    result[code] = {
+                        'name': name,
+                        'price': price,
+                        'change_pct': change,
+                        'volume': volume,
+                        'turnover': turnover,
+                        'time': datetime.datetime.now().strftime("%H:%M:%S") # Spot API doesn't always have time
+                    }
+                except:
+                    continue
+                    
+            return result
+            
+        except Exception as e:
+            self._record_failure()
+            logger.error(f"Failed to get quotes (AkShare): {e}")
+            return {}

@@ -25,18 +25,7 @@ class WatchlistService:
     def __init__(self):
         self.is_running = False
         self._scheduler_task = None
-        self._ak = None
-    
-    def _get_akshare(self):
-        """Lazy load akshare module."""
-        if self._ak is None:
-            try:
-                import akshare as ak
-                self._ak = ak
-            except ImportError:
-                logger.error("AkShare not installed")
-                return None
-        return self._ak
+        self._scheduler_task = None
     
     async def start(self):
         """Start the watchlist scheduler."""
@@ -67,48 +56,32 @@ class WatchlistService:
         if not db.pool:
             raise ValueError("Database not connected")
         
-        ak = self._get_akshare()
+        from app.services.data_provider.service import data_provider
         
-        # Get current price
-        add_price = None
-        stock_name = name
-        
-        if ak:
+        # Helper to get price info
+        async def fetch_info():
             try:
-                # Optimized: Get single stock info instead of fetching all 5000+ stocks
-                # stock_individual_info_em returns a dataframe with 'item' and 'value' columns
-                df = await asyncio.to_thread(ak.stock_individual_info_em, symbol=code)
-                
-                if df is not None and not df.empty:
-                    # Convert to dict for easier access
-                    # items: 股票代码, 股票简称, 最新价, ...
-                    # Use zip to avoid needing 'import pandas as pd'
-                    info = dict(zip(df['item'], df['value']))
-                    
-                    price_val = info.get('最新价')
-                    if price_val:
-                        try:
-                            add_price = float(price_val)
-                        except:
-                            add_price = 0
-                            
-                    stock_name = stock_name or info.get('股票简称', '')
-                    
-            except Exception as e:
-                logger.warn(f"Failed to get stock price (optimized): {e}")
-                
-            # Fallback if name is still missing
-            if not stock_name and not add_price:
-                 try:
-                    df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
-                    if df is not None and not df.empty:
-                        stock_row = df[df['代码'] == code]
-                        if not stock_row.empty:
-                            row = stock_row.iloc[0]
-                            add_price = float(row.get('最新价', 0) or 0)
-                            stock_name = stock_name or str(row.get('名称', ''))
-                 except Exception as e:
-                    logger.warn(f"Failed to get stock price (fallback): {e}")
+                 quotes = await data_provider.get_quotes([code])
+                 if quotes and code in quotes:
+                     q = quotes[code]
+                     return float(q['price']), q['name']
+            except:
+                pass
+            return None, None
+
+        add_price, stock_name = await fetch_info()
+        
+        # If name provided by user, use it
+        if name:
+            stock_name = name
+        
+        # Default price if missing
+        if add_price is None:
+            add_price = 0
+            
+        # Default name if missing
+        if not stock_name:
+            stock_name = code
         
         try:
             await db.pool.execute("""
@@ -246,38 +219,26 @@ class WatchlistService:
         if not watchlist:
             return []
         
-        ak = self._get_akshare()
-        if not ak:
-            # Fallback to local DB prices
-            return await self.get_watchlist_with_prices(user_id)
+        from app.services.data_provider.service import data_provider
         
-        result = []
+        # Codes to fetch
+        codes = [item['code'] for item in watchlist]
         
-        # Fetch all A-share real-time data once (more efficient than individual calls)
-        # This is acceptable because it's only called on explicit refresh
         try:
-            df = await asyncio.to_thread(ak.stock_zh_a_spot_em)
+            # Use DataProvider
+            quotes = await data_provider.get_quotes(codes)
             
-            if df is None or df.empty:
+            if not quotes:
+                # Fallback to local DB prices
                 return await self.get_watchlist_with_prices(user_id)
-            
-            # Build lookup map
-            price_map = {}
-            for _, row in df.iterrows():
-                code = str(row.get('代码', ''))
-                price_map[code] = {
-                    'current_price': float(row.get('最新价', 0) or 0),
-                    'today_change': float(row.get('涨跌幅', 0) or 0),
-                    'name': str(row.get('名称', '')),
-                }
             
             for stock in watchlist:
                 code = stock['code']
                 add_price = float(stock.get('add_price') or 0)
                 
-                info = price_map.get(code, {})
-                current_price = info.get('current_price', 0)
-                today_change = info.get('today_change', 0)
+                info = quotes.get(code, {})
+                current_price = info.get('price', 0)
+                today_change = info.get('change_pct', 0)
                 stock_name = info.get('name') or stock.get('name') or code
                 
                 # Calculate performance since added
@@ -294,7 +255,7 @@ class WatchlistService:
                     'current_price': current_price,
                     'today_change': today_change,
                     'total_change': total_change,
-                    'realtime': True,  # Flag to indicate real-time data
+                    'realtime': True,
                 })
             
             return result

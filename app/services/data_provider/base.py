@@ -41,10 +41,7 @@ class BaseDataProvider(ABC):
         
         Args:
             code: Stock code (e.g. '600519')
-            start_date: 'YYYYMMDD' or 'YYYY-MM-DD' depending on provider needs, 
-                        but let's standardize input as 'YYYYMMDD' for internal consistency?
-                        Actually, 'YYYYMMDD' is standard for AkShare, YYYY-MM-DD for Baostock.
-                        Let's standardize on 'YYYYMMDD' as input and implementation handles conversion.
+            start_date: 'YYYYMMDD' 
             end_date: 'YYYYMMDD'
             adjust: 'qfq' (default), 'hfq', or 'none'
             
@@ -70,5 +67,21 @@ class BaseDataProvider(ABC):
             
         Returns:
             List of datetime.date objects, sorted.
+        """
+        pass
+
+    @abstractmethod
+    async def get_quotes(self, codes: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Get real-time quotes for list of codes.
+        
+        Returns:
+            Dict[code, {
+                'name': str,
+                'price': float,
+                'change_pct': float,
+                'volume': float,
+                'turnover': float,
+                'time': str
+            }]
         """
         pass
