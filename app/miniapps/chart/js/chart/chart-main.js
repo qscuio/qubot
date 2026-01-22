@@ -84,6 +84,7 @@ export function initMainChart() {
         charts.sub.timeScale().setVisibleLogicalRange(r);
         requestAnimationFrame(() => renderSidePanelChips(state.lastChipIdx));
         updateDynamicAnalysis();
+        updateDateRangeDisplay(r);
     });
 
     charts.sub.timeScale().subscribeVisibleLogicalRangeChange(r => {
@@ -231,4 +232,32 @@ export function processData() {
 export function resizeCharts() {
     charts.main?.resize(0, 0);
     charts.sub?.resize(0, 0);
+}
+
+/**
+ * Update the date range display based on visible logical range
+ * @param {Object} range - {from, to}
+ */
+function updateDateRangeDisplay(range) {
+    if (!range || !state.rawData || state.rawData.length === 0) return;
+
+    const len = state.rawData.length;
+    let fromIdx = Math.round(range.from);
+    let toIdx = Math.round(range.to);
+
+    // Clamp indices
+    if (fromIdx < 0) fromIdx = 0;
+    if (toIdx >= len) toIdx = len - 1;
+
+    // Safety check if range is completely out of bounds or invalid
+    if (fromIdx > toIdx) return;
+    if (fromIdx >= len || toIdx < 0) return;
+
+    const start = state.rawData[fromIdx];
+    const end = state.rawData[toIdx];
+
+    const el = document.getElementById('date-range');
+    if (el && start && end) {
+        el.textContent = `${start.time} ~ ${end.time}`;
+    }
 }
