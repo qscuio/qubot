@@ -10,9 +10,22 @@ class AkShareProvider(BaseDataProvider):
     def __init__(self):
         self._ak = None
         self._pd = None
+        # Rate Limiting
+        self._last_request_time = 0
+        self._request_interval = 1.0  # Seconds between requests
+        self._lock = asyncio.Lock()
         
     def get_name(self) -> str:
         return "akshare"
+        
+    async def _rate_limit(self):
+        """Ensure minimum interval between requests."""
+        async with self._lock:
+            now = asyncio.get_event_loop().time()
+            elapsed = now - self._last_request_time
+            if elapsed < self._request_interval:
+                await asyncio.sleep(self._request_interval - elapsed)
+            self._last_request_time = asyncio.get_event_loop().time()
 
     async def initialize(self) -> bool:
         """Lazy load libraries."""
@@ -34,6 +47,7 @@ class AkShareProvider(BaseDataProvider):
             if not await self.initialize(): return []
             
         try:
+            await self._rate_limit()
             df = await asyncio.to_thread(self._ak.stock_zh_a_spot_em)
             if df is None or df.empty:
                 return []
@@ -63,6 +77,7 @@ class AkShareProvider(BaseDataProvider):
             if not await self.initialize(): return []
 
         try:
+            await self._rate_limit()
             # start_date/end_date should be YYYYMMDD
             df = await asyncio.to_thread(
                 self._ak.stock_zh_a_hist,
@@ -109,6 +124,7 @@ class AkShareProvider(BaseDataProvider):
             if not await self.initialize(): return []
             
         try:
+            await self._rate_limit()
             # Use tool_trade_date_hist_sina
             df = await asyncio.to_thread(self._ak.tool_trade_date_hist_sina)
             if df is None or df.empty:
