@@ -15,6 +15,7 @@ from app.core.logger import Logger
 from app.core.database import db
 from app.core.config import settings
 from app.core.timezone import CHINA_TZ, china_now, china_today
+from app.core.telegram_utils import chunk_message
 
 logger = Logger("WatchlistService")
 
@@ -26,6 +27,23 @@ class WatchlistService:
         self.is_running = False
         self._scheduler_task = None
         self._scheduler_task = None
+        self._unreachable_users = set()
+
+    async def _send_chunked_message(self, bot, user_id: int, text: str, **kwargs):
+        """Send long messages in chunks to avoid Telegram length limits."""
+        chunks = chunk_message(text, max_length=3800)
+        for chunk in chunks:
+            await bot.send_message(user_id, chunk, **kwargs)
+
+    def _is_unreachable_error(self, err: Exception) -> bool:
+        msg = str(err).lower()
+        return (
+            "chat not found" in msg
+            or "bot was blocked" in msg
+            or "blocked by the user" in msg
+            or "user is deactivated" in msg
+            or "forbidden" in msg
+        )
     
     async def start(self):
         """Start the watchlist scheduler."""
@@ -212,8 +230,6 @@ class WatchlistService:
         
         Only fetches prices for the specific stocks in user's watchlist.
         """
-        import asyncio
-        
         watchlist = await self.get_watchlist(user_id)
         
         if not watchlist:
@@ -231,7 +247,8 @@ class WatchlistService:
             if not quotes:
                 # Fallback to local DB prices
                 return await self.get_watchlist_with_prices(user_id)
-            
+           
+            result = []
             for stock in watchlist:
                 code = stock['code']
                 add_price = float(stock.get('add_price') or 0)
@@ -327,6 +344,8 @@ class WatchlistService:
         
         for row in users:
             user_id = row['user_id']
+            if user_id in self._unreachable_users:
+                continue
             try:
                 report = await self.generate_watchlist_report(user_id)
                 
@@ -335,10 +354,12 @@ class WatchlistService:
                 from app.bots.registry import get_bot
                 bot = get_bot("crawler")
                 if bot:
-                    await bot.send_message(user_id, report, parse_mode="HTML")
+                    await self._send_chunked_message(bot, user_id, report, parse_mode="HTML")
                     logger.info(f"Sent watchlist report to user {user_id}")
                     
             except Exception as e:
+                if self._is_unreachable_error(e):
+                    self._unreachable_users.add(user_id)
                 logger.warn(f"Failed to send report to {user_id}: {e}")
             
             # Small delay between users
@@ -361,6 +382,8 @@ class WatchlistService:
         
         for row in users:
             user_id = row['user_id']
+            if user_id in self._unreachable_users:
+                continue
             try:
                 stocks = await self.get_watchlist_performance(user_id)
                 if not stocks:
@@ -394,9 +417,17 @@ class WatchlistService:
                 
                 bot = get_bot("crawler")
                 if bot:
-                    await bot.send_message(user_id, report, parse_mode="HTML", disable_web_page_preview=True)
+                    await self._send_chunked_message(
+                        bot,
+                        user_id,
+                        report,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
                     
             except Exception as e:
+                if self._is_unreachable_error(e):
+                    self._unreachable_users.add(user_id)
                 logger.warn(f"Failed to send intraday report to {user_id}: {e}")
             
             await asyncio.sleep(0.5)
@@ -413,6 +444,8 @@ class WatchlistService:
         
         for row in users:
             user_id = row['user_id']
+            if user_id in self._unreachable_users:
+                continue
             try:
                 stocks = await self.get_watchlist_performance(user_id)
                 if not stocks:
@@ -446,9 +479,17 @@ class WatchlistService:
                 
                 bot = get_bot("crawler")
                 if bot:
-                    await bot.send_message(user_id, report, parse_mode="HTML", disable_web_page_preview=True)
+                    await self._send_chunked_message(
+                        bot,
+                        user_id,
+                        report,
+                        parse_mode="HTML",
+                        disable_web_page_preview=True,
+                    )
                     
             except Exception as e:
+                if self._is_unreachable_error(e):
+                    self._unreachable_users.add(user_id)
                 logger.warn(f"Failed to send closing report to {user_id}: {e}")
             
             await asyncio.sleep(0.5)

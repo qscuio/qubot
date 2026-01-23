@@ -90,20 +90,32 @@ class BurstMonitorService:
     
     async def _poll_realtime_data(self) -> Dict[str, Dict]:
         """Fetch real-time stock data."""
-        ak = self._get_akshare()
-        if not ak:
-            return {}
-        
         try:
-            # Add timeout to avoid hanging the loop
+            from app.services.data_provider.service import data_provider
+
+            # Prefer data provider (has crawler fallback) to avoid AkShare blocks
             try:
-                df = await asyncio.wait_for(
-                    asyncio.to_thread(ak.stock_zh_a_spot_em),
-                    timeout=300.0
-                )
+                df = await asyncio.wait_for(data_provider.get_all_spot_data(), timeout=300.0)
             except asyncio.TimeoutError:
-                logger.warn("Timeout while polling realtime data")
-                return {}
+                logger.warn("Timeout while polling realtime data (provider)")
+                df = None
+            except Exception as e:
+                logger.warn(f"Realtime data provider error: {e}")
+                df = None
+
+            # Final fallback to AkShare direct if provider returned nothing
+            if df is None or getattr(df, "empty", False):
+                ak = self._get_akshare()
+                if not ak:
+                    return {}
+                try:
+                    df = await asyncio.wait_for(
+                        asyncio.to_thread(ak.stock_zh_a_spot_em),
+                        timeout=300.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.warn("Timeout while polling realtime data (akshare)")
+                    return {}
             
             if df is None or df.empty:
                 return {}
