@@ -515,7 +515,30 @@ class TradingSimulator:
         except Exception as e:
             logger.error(f"Scan failed: {e}")
             return 0
-        
+
+        # scan_all_stocks now returns a dict[signal_id] -> list[stock]
+        if isinstance(signals, dict):
+            aggregated = {}
+            for sig_id, stocks in signals.items():
+                if not isinstance(stocks, list):
+                    continue
+                for s in stocks:
+                    if not isinstance(s, dict):
+                        continue
+                    code = s.get('code')
+                    if not code:
+                        continue
+                    entry = aggregated.setdefault(code, {
+                        'code': code,
+                        'name': s.get('name', code),
+                        'signals': []
+                    })
+                    if sig_id not in entry['signals']:
+                        entry['signals'].append(sig_id)
+                    if not entry.get('name'):
+                        entry['name'] = s.get('name', code)
+            signals = list(aggregated.values())
+
         if not signals:
             return 0
         
@@ -523,6 +546,8 @@ class TradingSimulator:
         high_confidence = []
         
         for s in signals:
+            if not isinstance(s, dict):
+                continue
             signal_types = s.get('signals', [])
             if 'volume_price_startup' in signal_types or len(signal_types) >= 2:
                 high_confidence.append(s)

@@ -33,6 +33,7 @@ SIGNAL_NAMES = {
     "breakout": "突破信号",
     "kuangbiao": "狂飙启动",
     "startup_candidate": "启动关注",
+    "strong_pullback": "强势股回踩",
     "triple_bullish_shrink_breakout": "蓄势爆发",
     "volume": "放量信号",
     "ma_bullish": "多头排列",
@@ -80,6 +81,7 @@ SIGNAL_ICONS = {
     "breakout": "🚀",
     "kuangbiao": "🏎️",
     "startup_candidate": "🛫",
+    "strong_pullback": "🧲",
     "triple_bullish_shrink_breakout": "📈",
     "volume": "📊",
     "ma_bullish": "📈",
@@ -127,19 +129,15 @@ SIGNAL_ICONS = {
 # Scanner Main Menu
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.callback_query(F.data == "scanner:main")
-async def cb_scanner_main(callback: types.CallbackQuery):
-    """Show signal scanner main menu."""
-    await safe_answer(callback)
-
+async def _build_scanner_header(title: str) -> str:
     from app.services.stock_history import stock_history_service
-    stats = await stock_history_service.get_stats()
 
+    stats = await stock_history_service.get_stats()
     stock_count = stats.get('stock_count', 0) if stats else 0
     max_date = stats.get('max_date', 'N/A') if stats else 'N/A'
 
-    text = (
-        "🔍 <b>信号扫描</b>\n"
+    return (
+        f"🔍 <b>信号扫描 - {title}</b>\n"
         "━━━━━━━━━━━━━━━━━━━━━\n"
         f"📊 本地数据: <b>{stock_count}</b> 只股票\n"
         f"📅 数据日期: <b>{max_date}</b>\n"
@@ -147,75 +145,128 @@ async def cb_scanner_main(callback: types.CallbackQuery):
         "<i>基于本地历史K线数据扫描技术信号</i>\n"
     )
 
+
+@router.callback_query(F.data == "scanner:main")
+async def cb_scanner_main(callback: types.CallbackQuery):
+    """Show signal scanner main menu."""
+    await safe_answer(callback)
+
+    text = await _build_scanner_header("分类菜单")
+
     builder = InlineKeyboardBuilder()
-    # New Signals (Hot)
-    builder.button(text="🚀 启动关注", callback_data="scanner:scan:startup_candidate")
-    builder.button(text="🚀 低位潜伏启动", callback_data="scanner:scan:low_accumulation_launch")
-    builder.button(text="⚡ 底部快启动", callback_data="scanner:scan:bottom_quick_start")
-    builder.button(text="🧭 长周期刚逆转", callback_data="scanner:scan:long_cycle_reversal")
-    builder.button(text="🏎️ 狂飙启动", callback_data="scanner:scan:kuangbiao")
-    builder.button(text="🔥 蓄势爆发", callback_data="scanner:scan:triple_bullish_shrink_breakout")
-
-    # 2 columns for signals
-    builder.button(text="🔺 突破信号", callback_data="scanner:scan:breakout")
-    builder.button(text="📊 放量信号", callback_data="scanner:scan:volume")
-    builder.button(text="📈 多头排列", callback_data="scanner:scan:ma_bullish")
-    builder.button(text="🌅 底部5连阳", callback_data="scanner:scan:small_bullish_5")
-    builder.button(text="🚀 量价启动", callback_data="scanner:scan:volume_price")
-    builder.button(text="⭐ 多信号共振", callback_data="scanner:scan:multi_signal")
-    builder.button(text="🔥 底部四连阳", callback_data="scanner:scan:small_bullish_4")
-    builder.button(text="📉 四阳一阴", callback_data="scanner:scan:small_bullish_4_1_bearish")
-    builder.button(text="📉 五阳一阴", callback_data="scanner:scan:small_bullish_5_1_bearish")
-    builder.button(text="📈 三阳一阴一阳", callback_data="scanner:scan:small_bullish_3_1_bearish_1_bullish")
-    builder.button(text="🌤️ 七天五阳", callback_data="scanner:scan:small_bullish_5_in_7")
-    builder.button(text="🌤️ 7天六阳", callback_data="scanner:scan:small_bullish_6_in_7")
-    builder.button(text="🐂 7天慢牛", callback_data="scanner:scan:slow_bull_7")
-    builder.button(text="🐂 5天慢牛", callback_data="scanner:scan:slow_bull_5")
-    builder.button(text="🟢 强势股首阴", callback_data="scanner:scan:strong_first_negative")
-    builder.button(text="↩️ 强势股反包", callback_data="scanner:scan:strong_fanbao")
-    builder.button(text="🏚️ 昨日断板", callback_data="scanner:scan:yesterday_broken_board")
-    builder.button(text="🏚️ 前日断板", callback_data="scanner:scan:day_before_yesterday_broken_board")
-    builder.button(text="💔 连板断板", callback_data="scanner:scan:broken_limit_up_streak")
-    builder.button(text="↩️ 5日线回踩", callback_data="scanner:scan:pullback_ma5")
-    builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
-    builder.button(text="🔙 30日线回踩", callback_data="scanner:scan:pullback_ma30")
-    builder.button(text="📅 5周线回踩", callback_data="scanner:scan:pullback_ma5_weekly")
-    builder.button(text="📊 低位周线两连阳", callback_data="scanner:scan:low_weekly_2_bullish")
-    builder.button(text="📈 低位周线三连阳", callback_data="scanner:scan:weekly_3_bullish")
-    builder.button(text="🚀 低位周线四连阳", callback_data="scanner:scan:weekly_4_bullish")
-    builder.button(text="📅 低位月线两连阳", callback_data="scanner:scan:low_monthly_2_bullish")
-    builder.button(text="🌙 低位月线3连阳", callback_data="scanner:scan:monthly_3_bullish")
-    builder.button(text="🌕 低位月线四连阳", callback_data="scanner:scan:monthly_4_bullish")
-
-    # Trend Signals (LinReg)
-    builder.button(text="5️⃣ 5日趋势支撑", callback_data="scanner:scan:support_linreg_5")
-    builder.button(text="🔟 10日趋势支撑", callback_data="scanner:scan:support_linreg_10")
-    builder.button(text="2️⃣ 20日趋势支撑", callback_data="scanner:scan:support_linreg_20")
-    builder.button(text="⬆️ 突破5日趋势", callback_data="scanner:scan:breakout_linreg_5")
-    builder.button(text="⬆️ 突破10日趋势", callback_data="scanner:scan:breakout_linreg_10")
-    builder.button(text="⬆️ 突破20日趋势", callback_data="scanner:scan:breakout_linreg_20")
-
-    # Top Gainers
-    builder.button(text="🔥 每周涨幅", callback_data="scanner:scan:top_gainers_weekly")
-    builder.button(text="🔥 半月涨幅", callback_data="scanner:scan:top_gainers_half_month")
-    builder.button(text="🔥 每月涨幅", callback_data="scanner:scan:top_gainers_monthly")
-    builder.button(text="🛡️ 每周(无板)", callback_data="scanner:scan:top_gainers_weekly_no_lu")
-    builder.button(text="🛡️ 半月(无板)", callback_data="scanner:scan:top_gainers_half_month_no_lu")
-    builder.button(text="🛡️ 月度(无板)", callback_data="scanner:scan:top_gainers_monthly_no_lu")
-
-    # Control buttons
-    builder.button(text="🔍 全部扫描", callback_data="scanner:scan:all")
-    builder.button(text="⚡ 强制扫描", callback_data="scanner:scan:force")
-    builder.button(text="📊 数据库状态", callback_data="scanner:dbcheck")
-    builder.button(text="🔄 同步数据", callback_data="scanner:dbsync")
+    builder.button(text="🚀 启动/量价", callback_data="scanner:menu:hot")
+    builder.button(text="📈 趋势/回踩", callback_data="scanner:menu:trend")
+    builder.button(text="🧩 形态/连阳", callback_data="scanner:menu:pattern")
+    builder.button(text="🧱 断板/连板", callback_data="scanner:menu:board")
+    builder.button(text="🗓 周/月&涨幅", callback_data="scanner:menu:period")
+    builder.button(text="⚙️ 工具/控制", callback_data="scanner:menu:tools")
     builder.button(text="◀️ 返回", callback_data="main")
 
-    builder.adjust(4, 2, 2, 2, 3, 2, 2, 2, 2, 1, 3, 2, 2, 3, 3, 3, 2, 2, 1)
+    builder.adjust(2, 2, 2, 1)
 
     try:
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=builder.as_markup())
+        await safe_edit_text(callback.message, text, reply_markup=builder.as_markup())
     except Exception:
         pass
+
+
+@router.callback_query(F.data.startswith("scanner:menu:"))
+async def cb_scanner_menu(callback: types.CallbackQuery):
+    """Show scanner category submenus."""
+    await safe_answer(callback)
+
+    menu = callback.data.split("scanner:menu:", 1)[-1]
+    builder = InlineKeyboardBuilder()
+
+    if menu == "hot":
+        text = await _build_scanner_header("启动/量价")
+        builder.button(text="🚀 启动关注", callback_data="scanner:scan:startup_candidate")
+        builder.button(text="🚀 低位潜伏启动", callback_data="scanner:scan:low_accumulation_launch")
+        builder.button(text="⚡ 底部快启动", callback_data="scanner:scan:bottom_quick_start")
+        builder.button(text="🧭 长周期刚逆转", callback_data="scanner:scan:long_cycle_reversal")
+        builder.button(text="🏎️ 狂飙启动", callback_data="scanner:scan:kuangbiao")
+        builder.button(text="🔥 蓄势爆发", callback_data="scanner:scan:triple_bullish_shrink_breakout")
+        builder.button(text="🚀 量价启动", callback_data="scanner:scan:volume_price")
+        builder.button(text="🔺 突破信号", callback_data="scanner:scan:breakout")
+        builder.button(text="📊 放量信号", callback_data="scanner:scan:volume")
+        builder.button(text="⭐ 多信号共振", callback_data="scanner:scan:multi_signal")
+        builder.button(text="◀️ 返回", callback_data="scanner:main")
+        builder.adjust(2, 2, 2, 2, 2, 1)
+
+    elif menu == "trend":
+        text = await _build_scanner_header("趋势/回踩")
+        builder.button(text="🧲 强势股回踩", callback_data="scanner:scan:strong_pullback")
+        builder.button(text="📈 多头排列", callback_data="scanner:scan:ma_bullish")
+        builder.button(text="↩️ 5日线回踩", callback_data="scanner:scan:pullback_ma5")
+        builder.button(text="🔄 20日线回踩", callback_data="scanner:scan:pullback_ma20")
+        builder.button(text="🔙 30日线回踩", callback_data="scanner:scan:pullback_ma30")
+        builder.button(text="📅 5周线回踩", callback_data="scanner:scan:pullback_ma5_weekly")
+        builder.button(text="5️⃣ 5日趋势支撑", callback_data="scanner:scan:support_linreg_5")
+        builder.button(text="🔟 10日趋势支撑", callback_data="scanner:scan:support_linreg_10")
+        builder.button(text="2️⃣ 20日趋势支撑", callback_data="scanner:scan:support_linreg_20")
+        builder.button(text="⬆️ 突破5日趋势", callback_data="scanner:scan:breakout_linreg_5")
+        builder.button(text="⬆️ 突破10日趋势", callback_data="scanner:scan:breakout_linreg_10")
+        builder.button(text="⬆️ 突破20日趋势", callback_data="scanner:scan:breakout_linreg_20")
+        builder.button(text="◀️ 返回", callback_data="scanner:main")
+        builder.adjust(2, 2, 2, 2, 2, 2, 1)
+
+    elif menu == "pattern":
+        text = await _build_scanner_header("形态/连阳")
+        builder.button(text="🌅 底部5连阳", callback_data="scanner:scan:small_bullish_5")
+        builder.button(text="🔥 底部四连阳", callback_data="scanner:scan:small_bullish_4")
+        builder.button(text="📉 四阳一阴", callback_data="scanner:scan:small_bullish_4_1_bearish")
+        builder.button(text="📉 五阳一阴", callback_data="scanner:scan:small_bullish_5_1_bearish")
+        builder.button(text="📈 三阳一阴一阳", callback_data="scanner:scan:small_bullish_3_1_bearish_1_bullish")
+        builder.button(text="🌤️ 七天五阳", callback_data="scanner:scan:small_bullish_5_in_7")
+        builder.button(text="🌤️ 7天六阳", callback_data="scanner:scan:small_bullish_6_in_7")
+        builder.button(text="🐂 7天慢牛", callback_data="scanner:scan:slow_bull_7")
+        builder.button(text="🐂 5天慢牛", callback_data="scanner:scan:slow_bull_5")
+        builder.button(text="🟢 强势股首阴", callback_data="scanner:scan:strong_first_negative")
+        builder.button(text="↩️ 强势股反包", callback_data="scanner:scan:strong_fanbao")
+        builder.button(text="◀️ 返回", callback_data="scanner:main")
+        builder.adjust(2, 2, 2, 2, 2, 1, 1)
+
+    elif menu == "board":
+        text = await _build_scanner_header("断板/连板")
+        builder.button(text="🏚️ 昨日断板", callback_data="scanner:scan:yesterday_broken_board")
+        builder.button(text="🏚️ 前日断板", callback_data="scanner:scan:day_before_yesterday_broken_board")
+        builder.button(text="💔 连板断板", callback_data="scanner:scan:broken_limit_up_streak")
+        builder.button(text="◀️ 返回", callback_data="scanner:main")
+        builder.adjust(2, 1, 1)
+
+    elif menu == "period":
+        text = await _build_scanner_header("周/月&涨幅")
+        builder.button(text="📊 低位周线两连阳", callback_data="scanner:scan:low_weekly_2_bullish")
+        builder.button(text="📈 低位周线三连阳", callback_data="scanner:scan:weekly_3_bullish")
+        builder.button(text="🚀 低位周线四连阳", callback_data="scanner:scan:weekly_4_bullish")
+        builder.button(text="📅 低位月线两连阳", callback_data="scanner:scan:low_monthly_2_bullish")
+        builder.button(text="🌙 低位月线3连阳", callback_data="scanner:scan:monthly_3_bullish")
+        builder.button(text="🌕 低位月线四连阳", callback_data="scanner:scan:monthly_4_bullish")
+        builder.button(text="🔥 每周涨幅", callback_data="scanner:scan:top_gainers_weekly")
+        builder.button(text="🔥 半月涨幅", callback_data="scanner:scan:top_gainers_half_month")
+        builder.button(text="🔥 每月涨幅", callback_data="scanner:scan:top_gainers_monthly")
+        builder.button(text="🛡️ 每周(无板)", callback_data="scanner:scan:top_gainers_weekly_no_lu")
+        builder.button(text="🛡️ 半月(无板)", callback_data="scanner:scan:top_gainers_half_month_no_lu")
+        builder.button(text="🛡️ 月度(无板)", callback_data="scanner:scan:top_gainers_monthly_no_lu")
+        builder.button(text="◀️ 返回", callback_data="scanner:main")
+        builder.adjust(2, 2, 2, 2, 2, 2, 1)
+
+    elif menu == "tools":
+        text = await _build_scanner_header("工具/控制")
+        builder.button(text="🔍 全部扫描", callback_data="scanner:scan:all")
+        builder.button(text="⚡ 强制扫描", callback_data="scanner:scan:force")
+        builder.button(text="📊 数据库状态", callback_data="scanner:dbcheck")
+        builder.button(text="🔄 同步数据", callback_data="scanner:dbsync")
+        builder.button(text="◀️ 返回", callback_data="scanner:main")
+        builder.adjust(2, 2, 1)
+
+    else:
+        text = await _build_scanner_header("分类菜单")
+        builder.button(text="◀️ 返回", callback_data="scanner:main")
+        await safe_edit_text(callback.message, text, reply_markup=builder.as_markup())
+        return
+
+    await safe_edit_text(callback.message, text, reply_markup=builder.as_markup())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
