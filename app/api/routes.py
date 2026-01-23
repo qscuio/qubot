@@ -434,6 +434,45 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
         except Exception:
             pass
 
+    # Fallback: use DataProvider (crawler/ak/baostock) daily bars, then resample if needed
+    if not data:
+        try:
+            from datetime import datetime, timedelta
+            from app.services.data_provider.service import data_provider
+
+            extra_days = 30 if period == "daily" else (days * 7 if period == "weekly" else days * 31)
+            end_date = datetime.now().strftime("%Y%m%d")
+            start_date = (datetime.now() - timedelta(days=days + extra_days)).strftime("%Y%m%d")
+
+            chart_logger.info(
+                f"chart_data fallback to data_provider: code={code} period={period} "
+                f"days={days} start={start_date} end={end_date}"
+            )
+            daily_rows = await data_provider.get_daily_bars(code, start_date, end_date, adjust="qfq")
+            if daily_rows:
+                daily_rows.sort(key=lambda x: x.get("date"))
+                if period == "daily":
+                    for row in daily_rows[-days:]:
+                        bar = _build_bar(
+                            str(row.get("date"))[:10],
+                            row.get("open"),
+                            row.get("high"),
+                            row.get("low"),
+                            row.get("close"),
+                            row.get("volume"),
+                            row.get("amplitude"),
+                            row.get("turnover_rate"),
+                            row.get("volume_ratio"),
+                        )
+                        if bar:
+                            data.append(bar)
+                else:
+                    data = _resample_bars(daily_rows, period)
+                    if len(data) > days:
+                        data = data[-days:]
+        except Exception as e:
+            chart_logger.warn(f"chart_data data_provider failed: code={code} period={period} error={e}")
+
     # Fallback or weekly/monthly: fetch from AkShare
     if not data:
         try:
