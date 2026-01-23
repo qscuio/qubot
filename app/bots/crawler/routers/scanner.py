@@ -740,22 +740,34 @@ async def cb_scanner_dbsync(callback: types.CallbackQuery, bot: Bot):
 
     chat_id = callback.message.chat.id
 
-    def make_progress_callback():
+    def make_progress_callback(msg_obj):
         last_time = [0.0]
-        async def progress_cb(stage: str, current: int, total: int, message: str):
+        async def progress_cb(stage: str, current: int, total: int, msg: str):
             now = time.time()
-            if now - last_time[0] < 10 and current < total:
+            if now - last_time[0] < 2 and current < total:
                 return
             last_time[0] = now
+
+            percent = int(current / total * 100) if total > 0 else 0
+            progress_bar = "▓" * (percent // 10) + "░" * (10 - (percent // 10))
+
+            formatted_msg = (
+                f"{msg}\n"
+                f"⏳ 进度: {percent}% ({current}/{total})\n"
+                f"{progress_bar}"
+            )
+
             try:
-                await bot.send_message(chat_id, message, parse_mode="HTML")
-            except Exception:
-                pass
+                if formatted_msg != msg_obj.text:
+                    await msg_obj.edit_text(formatted_msg, parse_mode="HTML")
+            except Exception as e:
+                if "message is not modified" not in str(e).lower():
+                    logger.error(f"Failed to update progress message: {e}")
         return progress_cb
 
     try:
-        await callback.message.answer("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时推送进度通知")
-        asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback()))
+        status_msg = await callback.message.answer("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时更新进度")
+        asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback(status_msg)))
 
     except Exception as e:
         await callback.message.answer(f"❌ 同步失败: {e}")
