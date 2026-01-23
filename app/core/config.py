@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     CRAWLER_BOT_USERNAME: Optional[str] = None  # Bot username for Mini App links (e.g., "q_tty_crawler_bot")
     
     # Crawler settings
-    CRAWLER_INTERVAL_MS: int = 3600000  # 1 hour default
+    CRAWLER_INTERVAL_MS: int = 7200000  # 2 hours default
     ENABLE_CRAWLER: bool = True
     
     # Webhook

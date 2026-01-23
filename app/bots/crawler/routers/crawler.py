@@ -38,8 +38,9 @@ async def cb_crawler_main(callback: types.CallbackQuery):
     builder.button(text="📁 网站列表", callback_data="crawler:list")
     builder.button(text="📄 最新内容", callback_data="crawler:recent")
     builder.button(text="🔄 立即爬取", callback_data="crawler:crawl")
+    builder.button(text="📰 发送热点快报", callback_data="crawler:report")
     builder.button(text="◀️ 返回", callback_data="main")
-    builder.adjust(2, 2)
+    builder.adjust(2, 2, 1)
 
     await safe_edit_text(callback.message, text, reply_markup=builder.as_markup())
 
@@ -223,6 +224,36 @@ async def cb_crawl(callback: types.CallbackQuery):
         )
     except Exception as e:
         await callback.message.edit_text(f"❌ 错误: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Hot Report (Manual Trigger)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("hotreport"))
+async def cmd_hot_report(message: types.Message):
+    """Manually trigger hot report."""
+    if not await is_allowed(message.from_user.id):
+        return
+
+    status = await message.answer("⏳ 正在生成热点快报并发送到报告频道...")
+    try:
+        await crawler_service.send_hot_report("手动", hours=12)
+        await status.edit_text("✅ 已发送热点快报")
+    except Exception as e:
+        await status.edit_text(f"❌ 发送失败: {e}")
+
+
+@router.callback_query(F.data == "crawler:report")
+async def cb_hot_report(callback: types.CallbackQuery):
+    """Trigger hot report via callback."""
+    await safe_answer(callback)
+    try:
+        await callback.message.edit_text("⏳ 正在生成热点快报并发送到报告频道...")
+        await crawler_service.send_hot_report("手动", hours=12)
+        await callback.message.edit_text("✅ 已发送热点快报")
+    except Exception as e:
+        await callback.message.edit_text(f"❌ 发送失败: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
