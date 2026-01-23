@@ -167,3 +167,16 @@ class BaostockProvider(BaseDataProvider):
     async def get_quotes(self, codes: List[str]) -> Dict[str, Dict[str, Any]]:
         """Baostock does not support real-time quotes."""
         return {}
+
+    async def get_sector_list(self, sector_type: str = "industry") -> List[Dict[str, Any]]:
+        """Baostock does not support sector lists."""
+        return []
+
+    async def get_sector_constituents(
+        self,
+        sector_code: str,
+        sector_name: Optional[str],
+        sector_type: str = "industry"
+    ) -> List[Dict[str, Any]]:
+        """Baostock does not support sector constituents."""
+        return []

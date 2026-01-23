@@ -14,6 +14,7 @@ from app.core.database import db
 from app.core.config import settings
 from app.core.stock_links import get_sector_url
 from app.core.timezone import CHINA_TZ, china_now, china_today
+from app.services.data_provider.service import data_provider
 
 logger = Logger("SectorService")
 
@@ -119,83 +120,33 @@ class SectorService:
     # ─────────────────────────────────────────────────────────────────────────
     
     async def collect_industry_sectors(self, target_date: date = None) -> List[Dict]:
-        """Collect industry sector data from AkShare.
-        
-        Uses: ak.stock_board_industry_name_em()
-        """
-        ak = self._get_akshare()
-        if not ak:
-            return []
-        
+        """Collect industry sector data from providers with fallback."""
         target_date = target_date or china_today()
-        
+        _ = target_date  # reserved for future provider support
+
         try:
-            df = await asyncio.to_thread(ak.stock_board_industry_name_em)
-            
-            if df is None or df.empty:
+            sectors = await data_provider.get_sector_list("industry")
+            if not sectors:
                 logger.info("No industry sector data available")
                 return []
-            
-            sectors = []
-            for _, row in df.iterrows():
-                sector = {
-                    "code": str(row.get("板块代码", "")),
-                    "name": str(row.get("板块名称", "")),
-                    "type": "industry",
-                    "change_pct": float(row.get("涨跌幅", 0) or 0),
-                    "close_price": float(row.get("最新价", 0) or 0),
-                    "turnover": float(row.get("成交额", 0) or 0) / 100000000,  # Convert to 亿
-                    "leading_stock": str(row.get("领涨股票", "") or ""),
-                    "leading_stock_pct": float(row.get("领涨股票-涨跌幅", 0) or 0),
-                    "up_count": int(row.get("上涨家数", 0) or 0),
-                    "down_count": int(row.get("下跌家数", 0) or 0),
-                }
-                sectors.append(sector)
-            
             logger.info(f"Found {len(sectors)} industry sectors")
             return sectors
-            
         except Exception as e:
             logger.error(f"Failed to collect industry sectors: {e}")
             return []
     
     async def collect_concept_sectors(self, target_date: date = None) -> List[Dict]:
-        """Collect concept sector data from AkShare.
-        
-        Uses: ak.stock_board_concept_name_em()
-        """
-        ak = self._get_akshare()
-        if not ak:
-            return []
-        
+        """Collect concept sector data from providers with fallback."""
         target_date = target_date or china_today()
-        
+        _ = target_date  # reserved for future provider support
+
         try:
-            df = await asyncio.to_thread(ak.stock_board_concept_name_em)
-            
-            if df is None or df.empty:
+            sectors = await data_provider.get_sector_list("concept")
+            if not sectors:
                 logger.info("No concept sector data available")
                 return []
-            
-            sectors = []
-            for _, row in df.iterrows():
-                sector = {
-                    "code": str(row.get("板块代码", "")),
-                    "name": str(row.get("板块名称", "")),
-                    "type": "concept",
-                    "change_pct": float(row.get("涨跌幅", 0) or 0),
-                    "close_price": float(row.get("最新价", 0) or 0),
-                    "turnover": float(row.get("成交额", 0) or 0) / 100000000,  # Convert to 亿
-                    "leading_stock": str(row.get("领涨股票", "") or ""),
-                    "leading_stock_pct": float(row.get("领涨股票-涨跌幅", 0) or 0),
-                    "up_count": int(row.get("上涨家数", 0) or 0),
-                    "down_count": int(row.get("下跌家数", 0) or 0),
-                }
-                sectors.append(sector)
-            
             logger.info(f"Found {len(sectors)} concept sectors")
             return sectors
-            
         except Exception as e:
             logger.error(f"Failed to collect concept sectors: {e}")
             return []
@@ -252,46 +203,26 @@ class SectorService:
     # ─────────────────────────────────────────────────────────────────────────
     
     async def get_realtime_sectors(self, sector_type: str = 'all', limit: int = 20) -> List[Dict]:
-        """Get real-time sector performance from AkShare."""
-        ak = self._get_akshare()
-        if not ak:
-            return []
-        
+        """Get real-time sector performance from providers with fallback."""
         sectors = []
-        
+        half_limit = max(1, limit // 2)
+
         try:
-            if sector_type in ('all', 'industry'):
-                df = await asyncio.to_thread(ak.stock_board_industry_name_em)
-                if df is not None and not df.empty:
-                    for _, row in df.head(limit if sector_type == 'industry' else limit // 2).iterrows():
-                        sectors.append({
-                            "code": str(row.get("板块代码", "")),
-                            "name": str(row.get("板块名称", "")),
-                            "type": "industry",
-                            "change_pct": float(row.get("涨跌幅", 0) or 0),
-                            "leading_stock": str(row.get("领涨股票", "") or ""),
-                            "up_count": int(row.get("上涨家数", 0) or 0),
-                            "down_count": int(row.get("下跌家数", 0) or 0),
-                        })
-            
-            if sector_type in ('all', 'concept'):
-                df = await asyncio.to_thread(ak.stock_board_concept_name_em)
-                if df is not None and not df.empty:
-                    for _, row in df.head(limit if sector_type == 'concept' else limit // 2).iterrows():
-                        sectors.append({
-                            "code": str(row.get("板块代码", "")),
-                            "name": str(row.get("板块名称", "")),
-                            "type": "concept",
-                            "change_pct": float(row.get("涨跌幅", 0) or 0),
-                            "leading_stock": str(row.get("领涨股票", "") or ""),
-                            "up_count": int(row.get("上涨家数", 0) or 0),
-                            "down_count": int(row.get("下跌家数", 0) or 0),
-                        })
-            
-            # Sort by change_pct descending
-            sectors.sort(key=lambda x: x["change_pct"], reverse=True)
+            if sector_type in ("all", "industry"):
+                industry = await data_provider.get_sector_list("industry")
+                if industry:
+                    sectors.extend(industry if sector_type == "industry" else industry[:half_limit])
+
+            if sector_type in ("all", "concept"):
+                concept = await data_provider.get_sector_list("concept")
+                if concept:
+                    sectors.extend(concept if sector_type == "concept" else concept[:half_limit])
+
+            if not sectors:
+                return await self.get_today_sectors(sector_type=sector_type, limit=limit)
+
+            sectors.sort(key=lambda x: x.get("change_pct", 0), reverse=True)
             return sectors[:limit]
-            
         except Exception as e:
             logger.error(f"Failed to get realtime sectors: {e}")
             return []
@@ -896,60 +827,16 @@ class SectorService:
         if not sector_name:
             return {"name": None, "type": sector_type, "stocks": []}
 
-        ak = self._get_akshare()
-        if not ak:
-            return {"name": sector_name, "type": sector_type, "stocks": []}
-
         try:
-            if sector_type == "industry":
-                df = await asyncio.to_thread(ak.stock_board_industry_cons_em, symbol=sector_name)
-            else:
-                df = await asyncio.to_thread(ak.stock_board_concept_cons_em, symbol=sector_name)
+            stocks = await data_provider.get_sector_constituents(sector_code, sector_name, sector_type)
         except Exception as e:
             logger.warn(f"Failed to fetch sector constituents for {sector_name}: {e}")
             return {"name": sector_name, "type": sector_type, "stocks": []}
 
-        if df is None or df.empty:
+        if not stocks:
             return {"name": sector_name, "type": sector_type, "stocks": []}
 
-        code_col = None
-        name_col = None
-        change_col = None
-        for c in ("代码", "股票代码", "证券代码", "成分股代码"):
-            if c in df.columns:
-                code_col = c
-                break
-        for c in ("名称", "股票名称", "证券简称", "成分股名称"):
-            if c in df.columns:
-                name_col = c
-                break
-        for c in ("涨跌幅", "涨幅", "涨跌幅(%)"):
-            if c in df.columns:
-                change_col = c
-                break
-
-        if not code_col:
-            return {"name": sector_name, "type": sector_type, "stocks": []}
-
-        stocks = []
-        codes = []
-        for _, row in df.iterrows():
-            code_raw = str(row.get(code_col, "")).strip()
-            if not code_raw:
-                continue
-            code = code_raw.zfill(6)
-            name = str(row.get(name_col, code)).strip() if name_col else code
-            change_val = row.get(change_col) if change_col else None
-            try:
-                change_pct = float(change_val) if change_val is not None else None
-            except Exception:
-                change_pct = None
-            stocks.append({
-                "code": code,
-                "name": name or code,
-                "change_pct": change_pct,
-            })
-            codes.append(code)
+        codes = [s.get("code") for s in stocks if s.get("code")]
 
         # Override change_pct from local DB (latest close)
         if codes:

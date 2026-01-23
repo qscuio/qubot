@@ -85,3 +85,47 @@ class BaseDataProvider(ABC):
             }]
         """
         pass
+
+    @abstractmethod
+    async def get_sector_list(self, sector_type: str = "industry") -> List[Dict[str, Any]]:
+        """Fetch sector/board list.
+
+        Args:
+            sector_type: "industry" or "concept"
+
+        Returns:
+            List of dicts with standardized keys:
+            - code: str
+            - name: str
+            - type: str
+            - change_pct: float
+            - close_price: float
+            - turnover: float (in 亿)
+            - leading_stock: str
+            - leading_stock_pct: float
+            - up_count: int
+            - down_count: int
+        """
+        pass
+
+    @abstractmethod
+    async def get_sector_constituents(
+        self,
+        sector_code: str,
+        sector_name: Optional[str],
+        sector_type: str = "industry"
+    ) -> List[Dict[str, Any]]:
+        """Fetch sector constituents.
+
+        Args:
+            sector_code: Board code (e.g. "BKXXXX")
+            sector_name: Board name (optional, some providers require it)
+            sector_type: "industry" or "concept"
+
+        Returns:
+            List of dicts with standardized keys:
+            - code: str
+            - name: str
+            - change_pct: float
+        """
+        pass

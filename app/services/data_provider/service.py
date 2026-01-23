@@ -257,4 +257,57 @@ class DataProviderService:
             logger.warn(f"Failed to get all spot data from all providers: {errors}")
         return None
 
+    async def get_sector_list(self, sector_type: str = "industry") -> List[Dict[str, Any]]:
+        """Fetch sector list with fallback."""
+        sector_type = (sector_type or "industry").lower()
+        if sector_type not in ("industry", "concept"):
+            return []
+
+        errors = []
+        for provider in self.providers:
+            if not self._provider_is_available(provider):
+                continue
+            try:
+                data = await provider.get_sector_list(sector_type)
+                if data:
+                    self._record_provider_success(provider)
+                    return data
+                self._record_provider_failure(provider)
+            except Exception as e:
+                self._record_provider_failure(provider)
+                errors.append(f"{provider.get_name()}: {e}")
+
+        if errors:
+            logger.warn(f"Failed to get sectors ({sector_type}) from all providers: {errors}")
+        return []
+
+    async def get_sector_constituents(
+        self,
+        sector_code: str,
+        sector_name: Optional[str],
+        sector_type: str = "industry"
+    ) -> List[Dict[str, Any]]:
+        """Fetch sector constituents with fallback."""
+        sector_type = (sector_type or "industry").lower()
+        if sector_type not in ("industry", "concept"):
+            return []
+
+        errors = []
+        for provider in self.providers:
+            if not self._provider_is_available(provider):
+                continue
+            try:
+                data = await provider.get_sector_constituents(sector_code, sector_name, sector_type)
+                if data:
+                    self._record_provider_success(provider)
+                    return data
+                self._record_provider_failure(provider)
+            except Exception as e:
+                self._record_provider_failure(provider)
+                errors.append(f"{provider.get_name()}: {e}")
+
+        if errors:
+            logger.warn(f"Failed to get sector constituents from all providers: {errors}")
+        return []
+
 data_provider = DataProviderService()

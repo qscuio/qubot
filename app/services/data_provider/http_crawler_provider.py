@@ -51,6 +51,22 @@ class HttpCrawlerProvider(BaseDataProvider):
             logger.error(f"HTTP Request failed: {e}")
             return None
 
+    def _safe_float(self, value, default=0.0) -> float:
+        try:
+            if value in (None, "-", ""):
+                return default
+            return float(value)
+        except Exception:
+            return default
+
+    def _safe_int(self, value, default=0) -> int:
+        try:
+            if value in (None, "-", ""):
+                return default
+            return int(float(value))
+        except Exception:
+            return default
+
     async def get_stock_list(self) -> List[Dict[str, str]]:
         """Fetch stock list from EastMoney."""
         
@@ -288,6 +304,154 @@ class HttpCrawlerProvider(BaseDataProvider):
                 logger.warn(f"Sina spot fetch failed for chunk: {e}")
                 
         return results
+
+    async def get_sector_list(self, sector_type: str = "industry") -> List[Dict[str, Any]]:
+        """Fetch sector list from EastMoney with best-effort fields."""
+        sector_type = (sector_type or "industry").lower()
+        if sector_type not in ("industry", "concept"):
+            return []
+
+        fs_candidates = {
+            "industry": ["m:90+t:2", "m:90+t:2+f:!50"],
+            "concept": ["m:90+t:3", "m:90+t:3+f:!50"],
+        }
+
+        url = "http://82.push2.eastmoney.com/api/qt/clist/get"
+        fields = "f12,f14,f2,f3,f6,f104,f105,f128,f140"
+
+        for fs in fs_candidates.get(sector_type, []):
+            params = {
+                "pn": "1",
+                "pz": "5000",
+                "po": "1",
+                "np": "1",
+                "ut": "bd1d9ddb04089700cf9c27f6f7426281",
+                "fltt": "2",
+                "invt": "2",
+                "fid": "f3",
+                "fs": fs,
+                "fields": fields,
+                "_": str(int(datetime.datetime.now().timestamp()))
+            }
+
+            try:
+                resp = await asyncio.to_thread(self._get_sync, url, params)
+                if not resp:
+                    continue
+                data = resp.json()
+            except Exception as e:
+                logger.warn(f"Sector list fetch failed ({sector_type}): {e}")
+                continue
+
+            diff = data.get("data", {}).get("diff", [])
+            if not diff:
+                continue
+
+            results = []
+            for item in diff:
+                code = str(item.get("f12", "")).strip()
+                name = str(item.get("f14", "")).strip()
+                if not code or not name:
+                    continue
+
+                turnover = self._safe_float(item.get("f6", 0))
+                results.append({
+                    "code": code,
+                    "name": name,
+                    "type": sector_type,
+                    "change_pct": self._safe_float(item.get("f3", 0)),
+                    "close_price": self._safe_float(item.get("f2", 0)),
+                    "turnover": turnover / 100000000 if turnover else 0.0,
+                    "leading_stock": str(item.get("f128", "") or ""),
+                    "leading_stock_pct": self._safe_float(item.get("f140", 0)),
+                    "up_count": self._safe_int(item.get("f104", 0)),
+                    "down_count": self._safe_int(item.get("f105", 0)),
+                })
+
+            if results:
+                return results
+
+        return []
+
+    async def get_sector_constituents(
+        self,
+        sector_code: str,
+        sector_name: Optional[str],
+        sector_type: str = "industry"
+    ) -> List[Dict[str, Any]]:
+        """Fetch sector constituents from EastMoney using board code."""
+        _ = sector_type  # EastMoney uses board code for both
+        if not sector_code:
+            return []
+
+        code = str(sector_code).strip()
+        if not code:
+            return []
+
+        candidates = []
+        code_upper = code.upper()
+        candidates.append(code_upper)
+        if not code_upper.startswith("BK"):
+            candidates.append(f"BK{code_upper}")
+
+        seen = set()
+        fs_candidates = []
+        for c in candidates:
+            if c in seen:
+                continue
+            seen.add(c)
+            fs_candidates.append(f"b:{c}")
+            fs_candidates.append(f"b:{c}+f:!50")
+
+        url = "http://82.push2.eastmoney.com/api/qt/clist/get"
+        fields = "f12,f14,f2,f3,f5,f6"
+
+        for fs in fs_candidates:
+            params = {
+                "pn": "1",
+                "pz": "10000",
+                "po": "1",
+                "np": "1",
+                "ut": "bd1d9ddb04089700cf9c27f6f7426281",
+                "fltt": "2",
+                "invt": "2",
+                "fid": "f3",
+                "fs": fs,
+                "fields": fields,
+                "_": str(int(datetime.datetime.now().timestamp()))
+            }
+
+            try:
+                resp = await asyncio.to_thread(self._get_sync, url, params)
+                if not resp:
+                    continue
+                data = resp.json()
+            except Exception as e:
+                logger.warn(f"Sector constituents fetch failed ({fs}): {e}")
+                continue
+
+            diff = data.get("data", {}).get("diff", [])
+            if not diff:
+                continue
+
+            results = []
+            for item in diff:
+                raw_code = str(item.get("f12", "")).strip()
+                if not raw_code:
+                    continue
+                code_val = raw_code.zfill(6)
+                name = str(item.get("f14", "")).strip() or code_val
+                change_pct = self._safe_float(item.get("f3", 0))
+                results.append({
+                    "code": code_val,
+                    "name": name,
+                    "change_pct": change_pct,
+                })
+
+            if results:
+                return results
+
+        return []
 
     async def get_all_spot_data(self) -> Optional[pd.DataFrame]:
         """Compatible with get_all_spot_data using EastMoney."""
