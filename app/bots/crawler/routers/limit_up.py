@@ -588,7 +588,7 @@ async def cmd_limitup(message: types.Message):
     args = text.split(maxsplit=1)[1] if len(text.split()) > 1 else ""
 
     if args == "morning":
-        await message.answer("⏳ 早报正在后台生成并发送到频道...")
+        await message.answer("⏳ 早报正在后台生成并发送到报告群...")
         asyncio.create_task(limit_up_service.send_morning_price_update())
 
     elif args == "afternoon":

@@ -10,9 +10,15 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.services.sector import sector_service
 
-from .common import is_allowed, safe_answer, safe_edit_text
+from .common import (
+    is_allowed, safe_answer, safe_edit_text,
+    build_stock_list_ui,
+)
 
 router = Router()
+
+# Cache sector stock lists for pagination
+_sector_stock_cache = {}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -218,6 +224,52 @@ async def cb_weak(callback: types.CallbackQuery):
     builder.adjust(2)
 
     await safe_edit_text(callback.message, text, reply_markup=builder.as_markup())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sector Stock List (Callback)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.callback_query(F.data.startswith("sector:stocks:"))
+async def cb_sector_stocks(callback: types.CallbackQuery):
+    """Show sector stock list sorted by change."""
+    await safe_answer(callback)
+
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        return
+
+    sector_type = parts[2]
+    sector_code = parts[3]
+    page = int(parts[4]) if len(parts) > 4 else 1
+
+    cache_key = f"{sector_type}:{sector_code}"
+    data = _sector_stock_cache.get(cache_key)
+    if not data:
+        data = await sector_service.get_sector_stock_list(sector_code, sector_type, limit=200)
+        _sector_stock_cache[cache_key] = data
+
+    sector_name = data.get("name") or sector_code
+    stocks = data.get("stocks", [])
+    type_icon = "🏭" if sector_type == "industry" else "💡"
+
+    def suffix_fn(stock):
+        return f" {stock.get('change_pct', 0):+.2f}%"
+
+    title = f"{type_icon} <b>{sector_name}</b> 成分股(按涨幅排序)"
+    text, markup = await build_stock_list_ui(
+        stocks,
+        title=title,
+        context=f"sector_{sector_type}_{sector_code}",
+        chat_type=callback.message.chat.type if callback.message else None,
+        page=page,
+        page_size=20,
+        callback_prefix=f"sector:stocks:{sector_type}:{sector_code}",
+        back_callback="sector:main",
+        show_suffix_fn=suffix_fn,
+    )
+
+    await safe_edit_text(callback.message, text, reply_markup=markup)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

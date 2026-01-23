@@ -423,14 +423,14 @@ class SectorService:
         
         # Get today's data
         industry = await db.pool.fetch("""
-            SELECT name, change_pct, leading_stock, up_count, down_count
+            SELECT code, name, change_pct, leading_stock, up_count, down_count
             FROM sector_daily
             WHERE date = $1 AND type = 'industry'
             ORDER BY change_pct DESC
         """, target_date)
         
         concept = await db.pool.fetch("""
-            SELECT name, change_pct, leading_stock, up_count, down_count
+            SELECT code, name, change_pct, leading_stock, up_count, down_count
             FROM sector_daily
             WHERE date = $1 AND type = 'concept'
             ORDER BY change_pct DESC
@@ -454,15 +454,13 @@ class SectorService:
             lines.append("📈 领涨:")
             for r in industry[:5]:
                 pct = f"{r['change_pct']:+.2f}%"
-                url = get_sector_url(r['name'], 'industry')
-                lines.append(f"  • <a href=\"{url}\">{r['name']}</a> {pct}")
+                lines.append(f"  • {r['name']} {pct}")
             
             # Bottom 3
             lines.append("\n📉 领跌:")
             for r in industry[-3:]:
                 pct = f"{r['change_pct']:+.2f}%"
-                url = get_sector_url(r['name'], 'industry')
-                lines.append(f"  • <a href=\"{url}\">{r['name']}</a> {pct}")
+                lines.append(f"  • {r['name']} {pct}")
         
         # Concept summary
         if concept:
@@ -475,15 +473,13 @@ class SectorService:
             for r in concept[:5]:
                 pct = f"{r['change_pct']:+.2f}%"
                 leader = f"({r['leading_stock']})" if r['leading_stock'] else ""
-                url = get_sector_url(r['name'], 'concept')
-                lines.append(f"  • <a href=\"{url}\">{r['name']}</a> {pct} {leader}")
+                lines.append(f"  • {r['name']} {pct} {leader}")
             
             # Bottom 3
             lines.append("\n📉 领跌:")
             for r in concept[-3:]:
                 pct = f"{r['change_pct']:+.2f}%"
-                url = get_sector_url(r['name'], 'concept')
-                lines.append(f"  • <a href=\"{url}\">{r['name']}</a> {pct}")
+                lines.append(f"  • {r['name']} {pct}")
         
         report = "\n".join(lines)
         
@@ -523,16 +519,14 @@ class SectorService:
                 type_icon = "🏭" if s['type'] == 'industry' else "💡"
                 pct = f"{s['total_change']:+.2f}%"
                 win_rate = f"{s['up_days']}/{s['total_days']}天上涨"
-                url = get_sector_url(s['name'], s['type'])
-                lines.append(f"{i}. {type_icon} <a href=\"{url}\">{s['name']}</a> {pct} ({win_rate})")
+                lines.append(f"{i}. {type_icon} {s['name']} {pct} ({win_rate})")
         
         if weak:
             lines.append("\n📉 <b>本周弱势板块</b>\n")
             for i, s in enumerate(weak, 1):
                 type_icon = "🏭" if s['type'] == 'industry' else "💡"
                 pct = f"{s['total_change']:+.2f}%"
-                url = get_sector_url(s['name'], s['type'])
-                lines.append(f"{i}. {type_icon} <a href=\"{url}\">{s['name']}</a> {pct}")
+                lines.append(f"{i}. {type_icon} {s['name']} {pct}")
         
         report = "\n".join(lines)
         
@@ -601,8 +595,11 @@ class SectorService:
     async def send_daily_report(self):
         """Send daily sector report to Telegram."""
         from app.core.bot import telegram_service
-        
-        if not settings.STOCK_ALERT_CHANNEL:
+        from app.bots.registry import get_bot
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+        report_target = settings.REPORT_TARGET_GROUP
+        if not report_target:
             return
         
         # Collect today's data first
@@ -610,28 +607,115 @@ class SectorService:
         
         # Generate and send report
         report = await self.generate_daily_report()
-        
-        await telegram_service.send_message(
-            settings.STOCK_ALERT_CHANNEL, report, 
-            parse_mode="html", 
-            link_preview=False
-        )
+
+        # Build buttons for top/bottom industry & concept
+        buttons = []
+        try:
+            industry = await db.pool.fetch("""
+                SELECT code, name, change_pct, 'industry' as type
+                FROM sector_daily
+                WHERE date = CURRENT_DATE AND type = 'industry'
+                ORDER BY change_pct DESC
+            """)
+            concept = await db.pool.fetch("""
+                SELECT code, name, change_pct, 'concept' as type
+                FROM sector_daily
+                WHERE date = CURRENT_DATE AND type = 'concept'
+                ORDER BY change_pct DESC
+            """)
+            buttons = list(industry[:5]) + list(industry[-3:]) + list(concept[:5]) + list(concept[-3:])
+        except Exception:
+            buttons = []
+
+        bot = get_bot("crawler")
+        if bot and buttons:
+            builder = InlineKeyboardBuilder()
+            seen = set()
+            for s in buttons:
+                code = s.get("code")
+                name = s.get("name") or ""
+                sector_type = s.get("type") or "concept"
+                if not code or not name:
+                    continue
+                key = f"{sector_type}:{code}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                icon = "🏭" if sector_type == "industry" else "💡"
+                builder.button(
+                    text=f"{icon} {name}",
+                    callback_data=f"sector:stocks:{sector_type}:{code}:1"
+                )
+            builder.adjust(2)
+            await bot.send_message(
+                report_target,
+                report,
+                parse_mode="HTML",
+                reply_markup=builder.as_markup(),
+                disable_web_page_preview=True
+            )
+        else:
+            await telegram_service.send_message(
+                report_target, report, 
+                parse_mode="html", 
+                link_preview=False
+            )
         logger.info("Sent daily sector report")
     
     async def send_weekly_report(self):
         """Send weekly sector report to Telegram."""
         from app.core.bot import telegram_service
-        
-        if not settings.STOCK_ALERT_CHANNEL:
+        from app.bots.registry import get_bot
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+
+        report_target = settings.REPORT_TARGET_GROUP
+        if not report_target:
             return
         
         report = await self.generate_weekly_report()
-        
-        await telegram_service.send_message(
-            settings.STOCK_ALERT_CHANNEL, report, 
-            parse_mode="html", 
-            link_preview=False
-        )
+
+        # Build buttons for strong/weak sectors
+        bot = get_bot("crawler")
+        builder = InlineKeyboardBuilder()
+        buttons = []
+        try:
+            strong = await self.get_strong_sectors(days=7, limit=10)
+            weak = await self.get_weak_sectors(days=7, limit=5)
+            buttons = strong + weak
+        except Exception:
+            buttons = []
+
+        if bot and buttons:
+            seen = set()
+            for s in buttons:
+                code = s.get("code")
+                name = s.get("name") or ""
+                sector_type = s.get("type") or "concept"
+                if not code or not name:
+                    continue
+                key = f"{sector_type}:{code}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                icon = "🏭" if sector_type == "industry" else "💡"
+                builder.button(
+                    text=f"{icon} {name}",
+                    callback_data=f"sector:stocks:{sector_type}:{code}:1"
+                )
+            builder.adjust(2)
+            await bot.send_message(
+                report_target,
+                report,
+                parse_mode="HTML",
+                reply_markup=builder.as_markup(),
+                disable_web_page_preview=True
+            )
+        else:
+            await telegram_service.send_message(
+                report_target, report, 
+                parse_mode="html", 
+                link_preview=False
+            )
         logger.info("Sent weekly sector report")
     
     # ─────────────────────────────────────────────────────────────────────────
@@ -786,6 +870,109 @@ class SectorService:
                     })
         
         return result
+
+    async def get_sector_stock_list(self, sector_code: str, sector_type: str, limit: int = 200) -> Dict:
+        """Get sector stock list sorted by change_pct.
+
+        Returns:
+            {
+                "name": "半导体",
+                "type": "industry",
+                "stocks": [{"code": "...", "name": "...", "change_pct": 1.23}, ...]
+            }
+        """
+        if not db.pool:
+            return {"name": None, "type": sector_type, "stocks": []}
+
+        sector_code = str(sector_code)
+        row = await db.pool.fetchrow("""
+            SELECT name
+            FROM sector_daily
+            WHERE code = $1 AND type = $2
+            ORDER BY date DESC
+            LIMIT 1
+        """, sector_code, sector_type)
+        sector_name = row["name"] if row else None
+        if not sector_name:
+            return {"name": None, "type": sector_type, "stocks": []}
+
+        ak = self._get_akshare()
+        if not ak:
+            return {"name": sector_name, "type": sector_type, "stocks": []}
+
+        try:
+            if sector_type == "industry":
+                df = await asyncio.to_thread(ak.stock_board_industry_cons_em, symbol=sector_name)
+            else:
+                df = await asyncio.to_thread(ak.stock_board_concept_cons_em, symbol=sector_name)
+        except Exception as e:
+            logger.warn(f"Failed to fetch sector constituents for {sector_name}: {e}")
+            return {"name": sector_name, "type": sector_type, "stocks": []}
+
+        if df is None or df.empty:
+            return {"name": sector_name, "type": sector_type, "stocks": []}
+
+        code_col = None
+        name_col = None
+        change_col = None
+        for c in ("代码", "股票代码", "证券代码", "成分股代码"):
+            if c in df.columns:
+                code_col = c
+                break
+        for c in ("名称", "股票名称", "证券简称", "成分股名称"):
+            if c in df.columns:
+                name_col = c
+                break
+        for c in ("涨跌幅", "涨幅", "涨跌幅(%)"):
+            if c in df.columns:
+                change_col = c
+                break
+
+        if not code_col:
+            return {"name": sector_name, "type": sector_type, "stocks": []}
+
+        stocks = []
+        codes = []
+        for _, row in df.iterrows():
+            code_raw = str(row.get(code_col, "")).strip()
+            if not code_raw:
+                continue
+            code = code_raw.zfill(6)
+            name = str(row.get(name_col, code)).strip() if name_col else code
+            change_val = row.get(change_col) if change_col else None
+            try:
+                change_pct = float(change_val) if change_val is not None else None
+            except Exception:
+                change_pct = None
+            stocks.append({
+                "code": code,
+                "name": name or code,
+                "change_pct": change_pct,
+            })
+            codes.append(code)
+
+        # Override change_pct from local DB (latest close)
+        if codes:
+            rows = await db.pool.fetch("""
+                SELECT DISTINCT ON (code) code, change_pct
+                FROM stock_history
+                WHERE code = ANY($1)
+                ORDER BY code, date DESC
+            """, codes)
+            latest_map = {r["code"]: float(r["change_pct"] or 0) for r in rows}
+            for s in stocks:
+                if s["code"] in latest_map:
+                    s["change_pct"] = latest_map[s["code"]]
+
+        for s in stocks:
+            if s.get("change_pct") is None:
+                s["change_pct"] = 0.0
+
+        stocks.sort(key=lambda x: x.get("change_pct", 0), reverse=True)
+        if limit and len(stocks) > limit:
+            stocks = stocks[:limit]
+
+        return {"name": sector_name, "type": sector_type, "stocks": stocks}
 
     async def _fetch_stock_sectors_akshare(self, code: str) -> Optional[Dict]:
         """Fetch stock sector info from AkShare."""

@@ -575,14 +575,21 @@ class LimitUpService:
         Shows ALL stocks sorted by real-time change percentage.
         Splits into multiple messages if content exceeds Telegram limit.
         """
-        from app.core.bot import telegram_service
+        from app.bots.registry import get_bot
+        from aiogram.utils.keyboard import InlineKeyboardBuilder
+        from aiogram import types
         
         logger.info("send_morning_price_update called")
         
-        # Use LIMITUP_TARGET_GROUP for morning reports, fallback to STOCK_ALERT_CHANNEL
-        target = settings.LIMITUP_TARGET_GROUP or settings.STOCK_ALERT_CHANNEL
+        # Use REPORT_TARGET_GROUP for morning reports
+        target = settings.REPORT_TARGET_GROUP
         if not target:
-            logger.warn("LIMITUP_TARGET_GROUP and STOCK_ALERT_CHANNEL not configured")
+            logger.warn("REPORT_TARGET_GROUP not configured")
+            return
+
+        bot = get_bot("crawler")
+        if not bot:
+            logger.warn("Crawler bot not available for morning report")
             return
         
         prices = await self.get_previous_limit_prices()
@@ -597,44 +604,76 @@ class LimitUpService:
         
         now = datetime.now(CHINA_TZ)
         total = len(prices)
-        
-        # Build stock lines (one per stock)
-        stock_lines = []
-        for i, p in enumerate(prices, 1):
-            change = p["change_pct"]
-            icon = "🔴" if change > 5 else ("🟢" if change > 0 else "⚪")
-            streak = f"[{p['limit_times']}板]"  # Always show 连板数
-            chart_url = get_chart_url(p['code'], p['name'], context="morning")
-            stock_lines.append(
-                f"{i}. {icon} <a href=\"{chart_url}\">{p['name']}</a> {streak} {p['current_price']:.2f} ({change:+.2f}%)"
+
+        # Resolve WebApp base for buttons
+        webapp_base = (settings.WEBFRONT_URL or "").strip()
+        if webapp_base:
+            webapp_base = webapp_base.rstrip("/")
+        else:
+            domain = (settings.DOMAIN or "").strip()
+            if domain:
+                webapp_base = domain.rstrip("/")
+                if not webapp_base.startswith("http"):
+                    webapp_base = f"https://{webapp_base}"
+        if not webapp_base:
+            webhook = (settings.WEBHOOK_URL or "").strip()
+            if webhook:
+                try:
+                    from urllib.parse import urlparse
+                    parsed = urlparse(webhook)
+                    if parsed.scheme and parsed.netloc:
+                        webapp_base = f"{parsed.scheme}://{parsed.netloc}"
+                except Exception:
+                    webapp_base = ""
+
+        page_size = 20
+        total_pages = (total + page_size - 1) // page_size
+        for page in range(total_pages):
+            start_idx = page * page_size
+            end_idx = start_idx + page_size
+            page_rows = prices[start_idx:end_idx]
+
+            lines = [
+                f"📈 <b>昨日涨停股实时</b> {now.strftime('%H:%M')} (共{total}只) 第{page+1}/{total_pages}",
+                "━━━━━━━━━━━━━━━━━━━━━\n",
+                "<i>点击下方按钮查看K线</i>",
+            ]
+
+            builder = InlineKeyboardBuilder()
+            for i, p in enumerate(page_rows, start_idx + 1):
+                change = p["change_pct"]
+                icon = "🔴" if change > 5 else ("🟢" if change > 0 else "⚪")
+                streak = f"[{p['limit_times']}板]"
+                lines.append(
+                    f"{i}. {icon} {p['name']} {streak} {p['current_price']:.2f} ({change:+.2f}%)"
+                )
+
+                text = f"{i}. {p['name']}({p['code']}) {change:+.2f}%"
+                if len(text) > 64:
+                    text = text[:61] + "..."
+                if webapp_base:
+                    url = f"{webapp_base}/miniapp/chart/?code={p['code']}&context=limitup_morning"
+                    builder.row(types.InlineKeyboardButton(
+                        text=text,
+                        web_app=types.WebAppInfo(url=url)
+                    ))
+                else:
+                    url = get_chart_url(p['code'], p['name'], context="limitup_morning")
+                    builder.row(types.InlineKeyboardButton(
+                        text=text,
+                        url=url
+                    ))
+
+            await bot.send_message(
+                target,
+                "\n".join(lines),
+                parse_mode="HTML",
+                reply_markup=builder.as_markup(),
+                disable_web_page_preview=True
             )
-        
-        # Split into messages (max ~3800 chars to be safe)
-        MAX_CHARS = 3800
-        messages = []
-        current_lines = [
-            f"📈 <b>昨日涨停股实时</b> {now.strftime('%H:%M')} (共{total}只)",
-            "━━━━━━━━━━━━━━━━━━━━━\n",
-        ]
-        current_len = sum(len(l) for l in current_lines)
-        
-        for line in stock_lines:
-            line_len = len(line) + 1  # +1 for newline
-            if current_len + line_len > MAX_CHARS:
-                messages.append("\n".join(current_lines))
-                current_lines = [f"📈 <b>昨日涨停股</b> (续)\n"]
-                current_len = len(current_lines[0])
-            current_lines.append(line)
-            current_len += line_len
-        
-        if current_lines:
-            messages.append("\n".join(current_lines))
-        
-        # Send all messages
-        for msg in messages:
-            await telegram_service.send_message(target, msg, parse_mode="html")
-        
-        logger.info(f"Sent morning price update at {now.strftime('%H:%M')} ({total} stocks, {len(messages)} messages)")
+            await asyncio.sleep(0.4)
+
+        logger.info(f"Sent morning price update at {now.strftime('%H:%M')} ({total} stocks, {total_pages} pages)")
     
     # ─────────────────────────────────────────────────────────────────────────
     # Scheduler
