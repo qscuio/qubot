@@ -43,7 +43,8 @@ async def _build_main_menu() -> tuple[str, types.InlineKeyboardMarkup]:
     builder.button(text="⭐ 自选列表", callback_data="watch:list")
     builder.button(text="💰 模拟交易", callback_data="sim:main")
     builder.button(text="🤖 AI行情", callback_data="ai_analysis:main")
-    builder.adjust(2, 2, 2, 2, 1)
+    builder.button(text="🔄 同步数据", callback_data="scanner:dbsync")
+    builder.adjust(2, 2, 2, 2, 2)
 
     return text, builder.as_markup()
 
