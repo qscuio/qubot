@@ -151,6 +151,8 @@ async def cb_scanner_main(callback: types.CallbackQuery):
     # New Signals (Hot)
     builder.button(text="🚀 启动关注", callback_data="scanner:scan:startup_candidate")
     builder.button(text="🚀 低位潜伏启动", callback_data="scanner:scan:low_accumulation_launch")
+    builder.button(text="⚡ 底部快启动", callback_data="scanner:scan:bottom_quick_start")
+    builder.button(text="🧭 长周期刚逆转", callback_data="scanner:scan:long_cycle_reversal")
     builder.button(text="🏎️ 狂飙启动", callback_data="scanner:scan:kuangbiao")
     builder.button(text="🔥 蓄势爆发", callback_data="scanner:scan:triple_bullish_shrink_breakout")
 

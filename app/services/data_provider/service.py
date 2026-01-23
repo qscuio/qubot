@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 import asyncio
+import time
 from datetime import datetime, timedelta
 from app.core.logger import Logger
 from app.services.data_provider.base import BaseDataProvider
@@ -28,6 +29,38 @@ class DataProviderService:
         self._trading_dates = []
         self._cache_time = None
 
+        # Provider circuit breaker (for providers without internal protection)
+        self._provider_failures = {}
+        self._provider_open_until = {}
+        self._failure_threshold = 2  # Open circuit after N failures
+        self._circuit_timeout = 120  # Seconds to keep circuit open
+
+    def _provider_is_available(self, provider: BaseDataProvider) -> bool:
+        name = provider.get_name()
+        now = time.time()
+        if self._provider_open_until.get(name, 0) > now:
+            return False
+        is_available = getattr(provider, "is_available", None)
+        if callable(is_available) and not is_available():
+            return False
+        return True
+
+    def _record_provider_success(self, provider: BaseDataProvider):
+        name = provider.get_name()
+        self._provider_failures[name] = 0
+        if name in self._provider_open_until:
+            self._provider_open_until[name] = 0
+
+    def _record_provider_failure(self, provider: BaseDataProvider):
+        name = provider.get_name()
+        count = self._provider_failures.get(name, 0) + 1
+        self._provider_failures[name] = count
+        if count >= self._failure_threshold:
+            now = time.time()
+            self._provider_open_until[name] = now + self._circuit_timeout
+            self._provider_failures[name] = 0
+            logger.warn(f"Circuit breaker OPEN for {name} ({self._circuit_timeout}s)")
+
     async def initialize(self):
         """Initialize all providers."""
         for p in self.providers:
@@ -45,12 +78,17 @@ class DataProviderService:
     async def get_stock_list(self) -> List[Dict[str, str]]:
         """Fetch stock list from providers with fallback."""
         for provider in self.providers:
+            if not self._provider_is_available(provider):
+                continue
             try:
                 data = await provider.get_stock_list()
                 if data:
+                    self._record_provider_success(provider)
                     logger.info(f"Fetched {len(data)} stocks from {provider.get_name()}")
                     return data
+                self._record_provider_failure(provider)
             except Exception as e:
+                self._record_provider_failure(provider)
                 logger.warn(f"Failed to fetch stock list from {provider.get_name()}: {e}")
         return []
 
@@ -72,14 +110,18 @@ class DataProviderService:
         errors = []
         
         for provider in self.providers:
+            if not self._provider_is_available(provider):
+                continue
             try:
                 data = await provider.get_daily_bars(code, start_date, end_date, adjust)
                 if data:
                     # Log source if not primary
                     if provider.get_name() != self.providers[0].get_name():
                         logger.info(f"Fetched {len(data)} records for {code} from {provider.get_name()}")
+                    self._record_provider_success(provider)
                     return data
             except Exception as e:
+                self._record_provider_failure(provider)
                 errors.append(f"{provider.get_name()}: {e}")
         
         if errors:
@@ -102,10 +144,15 @@ class DataProviderService:
 
         # Fallback to providers
         for provider in self.providers:
+            if not self._provider_is_available(provider):
+                continue
             try:
                 dates = await provider.get_trading_dates(start_date, end_date)
-                if dates: return dates
+                if dates:
+                    self._record_provider_success(provider)
+                    return dates
             except Exception as e:
+                self._record_provider_failure(provider)
                 logger.warn(f"Failed to get trading dates from {provider.get_name()}: {e}")
             
         return []
@@ -166,13 +213,20 @@ class DataProviderService:
 
     async def get_quotes(self, codes: List[str]) -> Dict[str, Dict[str, Any]]:
         """Fetch real-time quotes with fallback."""
+        if not codes:
+            return {}
         errors = []
         for provider in self.providers:
+            if not self._provider_is_available(provider):
+                continue
             try:
                 quotes = await provider.get_quotes(codes)
                 if quotes:
+                    self._record_provider_success(provider)
                     return quotes
+                self._record_provider_failure(provider)
             except Exception as e:
+                self._record_provider_failure(provider)
                 errors.append(f"{provider.get_name()}: {e}")
                 
         if errors:
@@ -184,14 +238,19 @@ class DataProviderService:
         """Fetch full market spot data with fallback (provider optional)."""
         errors = []
         for provider in self.providers:
+            if not self._provider_is_available(provider):
+                continue
             getter = getattr(provider, "get_all_spot_data", None)
             if not callable(getter):
                 continue
             try:
                 data = await getter()
-                if data is not None:
+                if data is not None and not getattr(data, "empty", False):
+                    self._record_provider_success(provider)
                     return data
+                self._record_provider_failure(provider)
             except Exception as e:
+                self._record_provider_failure(provider)
                 errors.append(f"{provider.get_name()}: {e}")
 
         if errors:
