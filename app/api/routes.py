@@ -201,6 +201,66 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
             "turnover_rate": _safe_float(turnover_v, default=0.0),
             "volume_ratio": _safe_float(volume_ratio_v, default=None),
         }
+
+    def _resample_bars(rows, period_name: str):
+        if not rows:
+            return []
+        # rows are sorted ascending by date
+        grouped = {}
+        order = []
+        for r in rows:
+            d = r["date"]
+            if period_name == "weekly":
+                y, w, _ = d.isocalendar()
+                key = (y, w)
+            else:
+                key = (d.year, d.month)
+            if key not in grouped:
+                grouped[key] = []
+                order.append(key)
+            grouped[key].append(r)
+
+        bars = []
+        for key in order:
+            bucket = grouped[key]
+            if not bucket:
+                continue
+            first = bucket[0]
+            last = bucket[-1]
+            high_vals = []
+            low_vals = []
+            for b in bucket:
+                h = _safe_float(b.get("high"), default=None)
+                l = _safe_float(b.get("low"), default=None)
+                if h is not None:
+                    high_vals.append(h)
+                if l is not None:
+                    low_vals.append(l)
+            if not high_vals or not low_vals:
+                continue
+            high_v = max(high_vals)
+            low_v = min(low_vals)
+            open_v = first.get("open")
+            close_v = last.get("close")
+            volume_v = sum(_safe_int(b.get("volume"), default=0) for b in bucket)
+            amplitude_v = None
+            open_f = _safe_float(open_v, default=None)
+            if open_f and open_f > 0:
+                amplitude_v = (high_v - low_v) / open_f * 100
+            bar = _build_bar(
+                str(last["date"]),
+                open_v,
+                high_v,
+                low_v,
+                close_v,
+                volume_v,
+                amplitude_v,
+                None,
+                None,
+            )
+            if bar:
+                bars.append(bar)
+        return bars
     
     # Validate period
     if period not in ("daily", "weekly", "monthly"):
@@ -355,6 +415,25 @@ async def chart_data(code: str, days: int = 60, period: str = "daily", user_id: 
             if len(data) > days:
                 data = data[-days:]
     
+    # Weekly/monthly: try local DB resample first
+    if not data and period in ("weekly", "monthly") and db.pool:
+        try:
+            fetch_limit = days * (7 if period == "weekly" else 31) + 30
+            rows = await db.pool.fetch("""
+                SELECT date, open, high, low, close, volume, amplitude, turnover_rate
+                FROM stock_history
+                WHERE code = $1
+                ORDER BY date DESC
+                LIMIT $2
+            """, code, fetch_limit)
+            if rows:
+                rows = list(reversed(rows))
+                data = _resample_bars(rows, period)
+                if len(data) > days:
+                    data = data[-days:]
+        except Exception:
+            pass
+
     # Fallback or weekly/monthly: fetch from AkShare
     if not data:
         try:
