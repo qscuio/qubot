@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     BOT_TOKEN: Optional[str] = None  # Legacy single token
     AGENT_BOT_TOKEN: Optional[str] = None
     CRAWLER_BOT_TOKEN: Optional[str] = None
+    FILE_BOT_TOKEN: Optional[str] = None
     CRAWLER_BOT_USERNAME: Optional[str] = None  # Bot username for Mini App links (e.g., "q_tty_crawler_bot")
     
     # Crawler settings

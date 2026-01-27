@@ -90,6 +90,16 @@ A modular Telegram application with REST API support, built with Python (FastAPI
 
 **Token:** `MONITOR_BOT_TOKEN`
 
+### 📼 File Bot
+| Command | Description |
+|---------|-------------|
+| `/start` | Main menu |
+| `/fv <source>` | Forward historical videos |
+| `/fv_target <chat>` | Set forwarding target |
+| `/help` | Show commands |
+
+**Token:** `FILE_BOT_TOKEN`
+
 ## Architecture
 
 ```
@@ -177,7 +187,7 @@ cp .env.example .env
 
 **Required:**
 - `TG_SESSIONS_JSON` - Telegram sessions (JSON array, see below)
-- Bot tokens: `RSS_BOT_TOKEN`, `AI_BOT_TOKEN`, `AGENT_BOT_TOKEN`, `MONITOR_BOT_TOKEN`
+- Bot tokens: `RSS_BOT_TOKEN`, `AI_BOT_TOKEN`, `AGENT_BOT_TOKEN`, `MONITOR_BOT_TOKEN`, `FILE_BOT_TOKEN`
 
 **Sessions JSON Format:**
 ```json
@@ -241,6 +251,7 @@ curl http://localhost:3888/health
 | `AGENT_BOT_TOKEN` | Agent bot token (@BotFather) | - |
 | `RSS_BOT_TOKEN` | RSS bot token (@BotFather) | - |
 | `CRAWLER_BOT_TOKEN` | Crawler bot token (@BotFather) | - |
+| `FILE_BOT_TOKEN` | File bot token (@BotFather) | - |
 | `ALLOWED_USERS` | Allowed Telegram user IDs | `123456789,987654321` |
 | `WEBHOOK_URL` | Webhook base URL (optional) | `https://bot.yourdomain.com` |
 | `BOT_PORT` | Webhook server port | `10001` |
@@ -375,7 +386,7 @@ For **each environment**, add these VPS-specific secrets:
 | `REPORT_TARGET_CHANNEL` | Report target channel (fallback) |
 | `DABAN_GROUP` | Daban signals group (preferred) |
 | `DABAN_CHANNEL` | Daban signals channel (fallback) |
-| Bot tokens | `AI_BOT_TOKEN`, `MONITOR_BOT_TOKEN`, etc. |
+| Bot tokens | `AI_BOT_TOKEN`, `MONITOR_BOT_TOKEN`, `FILE_BOT_TOKEN`, etc. |
 
 #### Step 3: Shared Secrets (Repository Level)
 

@@ -448,6 +448,7 @@ jobs:
             export OPENROUTER_API_KEY='${{ secrets.OPENROUTER_API_KEY }}'
             export API_KEYS='${{ secrets.API_KEYS }}'
             export CRAWLER_BOT_TOKEN='${{ secrets.CRAWLER_BOT_TOKEN }}'
+            export FILE_BOT_TOKEN='${{ secrets.FILE_BOT_TOKEN }}'
             export VIBE_BOT_TOKEN='${{ secrets.VIBE_BOT_TOKEN }}'
             export BOT_GITHUB_TOKEN='${{ secrets.BOT_GITHUB_TOKEN }}'
             export FILE_TARGET_GROUP='${{ secrets.FILE_TARGET_GROUP }}'

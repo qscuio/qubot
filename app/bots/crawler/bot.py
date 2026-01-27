@@ -41,8 +41,6 @@ CRAWLER_BOT_COMMANDS = [
     BotCommand(command="userlist", description="用户列表"),
     BotCommand(command="help", description="帮助"),
     # History commands
-    BotCommand(command="fv", description="转发历史视频"),
-    BotCommand(command="fv_target", description="设置视频转发目标"),
     BotCommand(command="save_history", description="保存聊天记录"),
     BotCommand(command="get_history", description="查询聊天记录"),
 ]
