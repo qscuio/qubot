@@ -16,6 +16,7 @@ const bots = [
     { name: "ai-bot", token: process.env.AI_BOT_TOKEN },
     { name: "agent-bot", token: process.env.AGENT_BOT_TOKEN },
     { name: "monitor-bot", token: process.env.MONITOR_BOT_TOKEN },
+    { name: "file-bot", token: process.env.FILE_BOT_TOKEN },
 ].filter((b) => b.token);
 
 if (!WEBHOOK_URL) {

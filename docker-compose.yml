@@ -27,6 +27,7 @@ services:
       - OPENROUTER_API_KEY
       - API_KEYS
       - CRAWLER_BOT_TOKEN
+      - FILE_BOT_TOKEN
       - VIBE_BOT_TOKEN
       - BOT_GITHUB_TOKEN
       # Non-sensitive config from .env file
