@@ -107,6 +107,11 @@ async def cmd_help(message: types.Message):
         "<b>👤 用户管理</b>\n"
         "/useradd - 添加用户\n"
         "/userdel - 删除用户\n"
-        "/userlist - 用户列表"
+        "/userlist - 用户列表\n\n"
+        "<b>📼 历史与转发</b>\n"
+        "/fv - 转发历史视频\n"
+        "/fv_target - 设置视频转发目标\n"
+        "/save_history - 保存聊天记录\n"
+        "/get_history - 查询聊天记录"
     )
     await message.answer(text, parse_mode="HTML")

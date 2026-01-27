@@ -11,8 +11,9 @@ from aiogram.filters import Command, CommandObject
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.services.history_service import history_service
+from app.core.config import settings
 
-from .common import is_allowed, safe_answer, logger
+from .common import is_allowed, safe_answer, safe_edit_text, logger
 
 router = Router()
 
@@ -22,6 +23,7 @@ router = Router()
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.message(Command("forward_videos"))
+@router.message(Command("fv"))
 async def cmd_forward_videos(message: types.Message, command: CommandObject):
     """Forward videos from a source chat."""
     if not await is_allowed(message.from_user.id):
@@ -29,7 +31,7 @@ async def cmd_forward_videos(message: types.Message, command: CommandObject):
 
     args = command.args
     if not args:
-        await message.answer("用法: /forward_videos <source_id_or_username>")
+        await message.answer("用法: /fv <source_id_or_username>")
         return
 
     source = args.strip()
@@ -57,6 +59,41 @@ async def cmd_forward_videos(message: types.Message, command: CommandObject):
             await safe_edit_text(status, f"❌ 任务崩溃: {str(e)}")
 
     asyncio.create_task(run_forward())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Forward Videos Target
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.message(Command("fv_target"))
+async def cmd_fv_target(message: types.Message, command: CommandObject):
+    """Set target channel/group for forward videos."""
+    if not await is_allowed(message.from_user.id):
+        return
+
+    args = command.args
+    current_target = settings.FILE_TARGET_GROUP or "未设置"
+
+    if not args:
+        await message.answer(
+            "用法: /fv_target <target_id_or_username>\n"
+            f"当前目标: {current_target}\n"
+            "示例: /fv_target -1001234567890 或 /fv_target @channelname"
+        )
+        return
+
+    target = args.strip()
+    if target.lower() in ("none", "off", "clear"):
+        settings.FILE_TARGET_GROUP = None
+        await message.answer("✅ 已清空 forward_videos 目标 (FILE_TARGET_GROUP).")
+        return
+
+    settings.FILE_TARGET_GROUP = target
+    await message.answer(
+        "✅ 已更新 forward_videos 目标\n"
+        f"目标: {target}\n"
+        "提示: 重启后会恢复为环境变量 FILE_TARGET_GROUP 的值"
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
