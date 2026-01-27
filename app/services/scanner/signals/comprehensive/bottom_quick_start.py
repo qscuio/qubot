@@ -4,6 +4,7 @@ import pandas as pd
 
 from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
+from app.services.scanner.utils import scale_pct, scale_ratio_up, scale_ratio_down
 
 
 @SignalRegistry.register
@@ -24,6 +25,7 @@ class BottomQuickStartSignal(SignalDetector):
                 return SignalResult(triggered=False)
 
             name = stock_info.get('name', '')
+            code = stock_info.get('code', '')
             if 'ST' in name or '退' in name:
                 return SignalResult(triggered=False)
 
@@ -63,15 +65,17 @@ class BottomQuickStartSignal(SignalDetector):
             if high40 and high40 > 0:
                 drop_ratio = (high40 - low40) / high40
 
-            cond_pos1 = low60 is not None and close <= low60 * 1.15
-            cond_pos2 = low120 is not None and close <= low120 * 1.25
-            cond_pos3 = ma60 is not None and close <= ma60 * 1.08
-            cond_pos4 = drop_ratio is not None and drop_ratio >= 0.3
+            cond_pos1 = low60 is not None and close <= low60 * scale_ratio_up(1.15, code, name)
+            cond_pos2 = low120 is not None and close <= low120 * scale_ratio_up(1.25, code, name)
+            cond_pos3 = ma60 is not None and close <= ma60 * scale_ratio_up(1.08, code, name)
+            cond_pos4 = drop_ratio is not None and drop_ratio >= scale_pct(0.3, code, name)
             cond_pos = (cond_pos1 + cond_pos2 + cond_pos3 + cond_pos4) >= 3
 
             # ② 有效小阳线计数（12日）
             small_up_cnt = 0
             down_cnt = 0
+            rise_min = scale_pct(0.5, code, name)
+            rise_max = scale_pct(2.5, code, name)
             for j in range(idx - 11, idx + 1):
                 if j <= 0:
                     continue
@@ -82,7 +86,7 @@ class BottomQuickStartSignal(SignalDetector):
                 ma20v = _ma(vols, j, 20)
 
                 if (
-                    rise >= 0.5 and rise <= 2.5 and
+                    rise >= rise_min and rise <= rise_max and
                     rng > 0 and
                     body / rng >= 0.6 and
                     (highs[j] - closes[j]) <= body * 0.5 and
@@ -99,7 +103,7 @@ class BottomQuickStartSignal(SignalDetector):
             if low12 and low12 > 0:
                 range12 = (high12 - low12) / low12
 
-            cond_box = small_up_cnt >= 4 and down_cnt <= 2 and range12 is not None and range12 <= 0.12
+            cond_box = small_up_cnt >= 4 and down_cnt <= 2 and range12 is not None and range12 <= scale_pct(0.12, code, name)
 
             # ③ 量能转强（10~30）
             vol10 = _ma(vols, idx, 10)
@@ -140,7 +144,10 @@ class BottomQuickStartSignal(SignalDetector):
 
             cond_time1 = bars_since_high20 is not None and bars_since_high20 >= 15
             cond_time2 = ma5 is not None and ma10 is not None and ma5 > ma10
-            cond_time3 = ma20 is not None and ma20_prev is not None and ma20_prev > 0 and (ma20 / ma20_prev) > 0.998
+            cond_time3 = (
+                ma20 is not None and ma20_prev is not None and ma20_prev > 0 and
+                (ma20 / ma20_prev) > scale_ratio_down(0.998, code, name)
+            )
             cond_time4 = llv5 is not None and llv5_prev is not None and llv5 > llv5_prev
             cond_time = (cond_time1 + cond_time2 + cond_time3 + cond_time4) >= 2
 
@@ -148,11 +155,11 @@ class BottomQuickStartSignal(SignalDetector):
             high60 = _hhv(highs, idx, 60)
             near_high = False
             if high60 is not None and close > 0:
-                near_high = ((high60 - close) / close) < 0.1
+                near_high = ((high60 - close) / close) < scale_pct(0.1, code, name)
 
             big_up = False
             if idx >= 10 and closes[idx - 10] > 0:
-                big_up = (close / closes[idx - 10] - 1) > 0.2
+                big_up = (close / closes[idx - 10] - 1) > scale_pct(0.2, code, name)
 
             bad_bar_cnt = 0
             for j in range(idx - 9, idx + 1):

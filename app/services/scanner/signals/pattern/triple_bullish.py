@@ -2,7 +2,7 @@
 
 from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
-from app.services.scanner.utils import is_bullish_candle, calculate_body_percent
+from app.services.scanner.utils import is_bullish_candle, calculate_body_percent, scale_pct
 
 
 @SignalRegistry.register
@@ -34,10 +34,14 @@ class TripleBullishShrinkBreakoutSignal(SignalDetector):
             t_1 = hist.iloc[-2]  # Yesterday
             t_0 = hist.iloc[-1]  # Today
             
-            # 1. T-4 to T-2: small bullish (0.5% < body < 4%)
+            # 1. T-4 to T-2: small bullish (0.5% < body < 4%, board-aware)
+            code = stock_info.get("code")
+            name = stock_info.get("name")
+            min_body = scale_pct(0.5, code, name)
+            max_body = scale_pct(4.0, code, name)
             for bar in [t_4, t_3, t_2]:
                 body_pct = calculate_body_percent(bar['开盘'], bar['收盘'])
-                if not (0.5 < body_pct < 4.0):
+                if not (min_body < body_pct < max_body):
                     return SignalResult(triggered=False)
             
             # 2. T-1: shrink volume (Vol < T-2 Vol)

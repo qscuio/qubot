@@ -3,7 +3,7 @@
 import pandas as pd
 from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
-from app.services.scanner.utils import resample_to_weekly
+from app.services.scanner.utils import resample_to_weekly, scale_pct
 
 
 class MAPullbackBase(SignalDetector):
@@ -35,7 +35,7 @@ class MAPullbackBase(SignalDetector):
             return 0.8
         return 1.0
 
-    def check_pullback(self, hist, window: int, weekly: bool = False) -> bool:
+    def check_pullback(self, hist, window: int, weekly: bool = False, stock_info: dict = None) -> bool:
         """Check for MA pullback pattern.
         
         Conditions:
@@ -59,6 +59,11 @@ class MAPullbackBase(SignalDetector):
 
             touch_tol, close_max_bias = self._get_tolerances(window, weekly)
             pullback_body_limit = self._get_pullback_body_limit(window, weekly)
+            code = stock_info.get("code") if stock_info else None
+            name = stock_info.get("name") if stock_info else None
+            touch_tol = scale_pct(touch_tol, code, name)
+            close_max_bias = scale_pct(close_max_bias, code, name)
+            pullback_body_limit = scale_pct(pullback_body_limit, code, name)
             
             # MA trend up
             if ma_curr <= ma_5ago:
@@ -118,7 +123,7 @@ class MAPullbackMA5Signal(MAPullbackBase):
     priority = 45
     
     def detect(self, hist, stock_info) -> SignalResult:
-        return SignalResult(triggered=self.check_pullback(hist, 5))
+        return SignalResult(triggered=self.check_pullback(hist, 5, stock_info=stock_info))
 
 
 @SignalRegistry.register
@@ -132,7 +137,7 @@ class MAPullbackMA20Signal(MAPullbackBase):
     priority = 46
     
     def detect(self, hist, stock_info) -> SignalResult:
-        return SignalResult(triggered=self.check_pullback(hist, 20))
+        return SignalResult(triggered=self.check_pullback(hist, 20, stock_info=stock_info))
 
 
 @SignalRegistry.register
@@ -146,7 +151,7 @@ class MAPullbackMA30Signal(MAPullbackBase):
     priority = 47
     
     def detect(self, hist, stock_info) -> SignalResult:
-        return SignalResult(triggered=self.check_pullback(hist, 30))
+        return SignalResult(triggered=self.check_pullback(hist, 30, stock_info=stock_info))
 
 
 @SignalRegistry.register
@@ -166,7 +171,7 @@ class MAPullbackMA5WeeklySignal(MAPullbackBase):
             if len(weekly) < 10:
                 return SignalResult(triggered=False)
             
-            return SignalResult(triggered=self.check_pullback(weekly, 5, weekly=True))
+            return SignalResult(triggered=self.check_pullback(weekly, 5, weekly=True, stock_info=stock_info))
             
         except Exception:
             return SignalResult(triggered=False)

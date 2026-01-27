@@ -10,7 +10,7 @@ Provides common calculations used across multiple signals:
 """
 
 import numpy as np
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 import pandas as pd
 
 
@@ -250,17 +250,64 @@ def calculate_daily_return(prev_close: float, close: float) -> float:
     return (close - prev_close) / prev_close
 
 
-def is_limit_up(prev_close: float, close: float, threshold: float = 0.095) -> bool:
+def get_board_multiplier(code: Optional[str], name: Optional[str]) -> float:
+    """Return board-based volatility multiplier (主板=1x, 创业/科创=2x, 北交所=3x, ST=0.5x)."""
+    if name and ("ST" in name or "*ST" in name):
+        return 0.5
+    if code and code.startswith("8") and len(code) == 6:
+        return 3.0
+    if code and (code.startswith("68") or code.startswith("30")):
+        return 2.0
+    return 1.0
+
+
+def scale_pct(value: float, code: Optional[str], name: Optional[str]) -> float:
+    """Scale a percentage threshold (decimal or percent units) by board multiplier."""
+    return value * get_board_multiplier(code, name)
+
+
+def scale_ratio_up(ratio: float, code: Optional[str], name: Optional[str]) -> float:
+    """Scale an upward ratio like 1.15 (15% above) by board multiplier."""
+    return 1 + (ratio - 1) * get_board_multiplier(code, name)
+
+
+def scale_ratio_down(ratio: float, code: Optional[str], name: Optional[str]) -> float:
+    """Scale a downward ratio like 0.98 (2% below) by board multiplier."""
+    return 1 - (1 - ratio) * get_board_multiplier(code, name)
+
+
+def get_limit_up_threshold(code: Optional[str], name: Optional[str]) -> float:
+    """Get limit-up threshold as decimal based on board type."""
+    if code and code.startswith("8") and len(code) == 6:
+        return 0.295  # 北交所 30%
+    if code and (code.startswith("68") or code.startswith("30")):
+        return 0.195  # 科创板/创业板 20%
+    if name and ("ST" in name or "*ST" in name):
+        return 0.045  # ST 5%
+    return 0.095  # 主板 10%
+
+
+def is_limit_up(
+    prev_close: float,
+    close: float,
+    threshold: Optional[float] = None,
+    code: Optional[str] = None,
+    name: Optional[str] = None,
+) -> bool:
     """Check if stock hit limit up (涨停).
     
     Args:
         prev_close: Previous close
         close: Current close
-        threshold: Limit up threshold (default 9.5%)
+        threshold: Limit up threshold (decimal). If None, infer by board.
+        code: Stock code for board inference
+        name: Stock name for ST inference
         
     Returns:
         True if limit up
     """
+    if threshold is None:
+        threshold = get_limit_up_threshold(code, name)
     return calculate_daily_return(prev_close, close) > threshold
 
 

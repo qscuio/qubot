@@ -19,7 +19,7 @@ class KuangbiaoSignal(SignalDetector):
     def detect(self, hist, stock_info) -> SignalResult:
         try:
             # Use the existing scoring function
-            score_a, score_b = calculate_kuangbiao_score(hist)
+            score_a, score_b = calculate_kuangbiao_score(hist, stock_info)
             
             # Thresholds for triggering
             if score_a >= 60 and score_b >= 50:

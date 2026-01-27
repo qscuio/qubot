@@ -9,9 +9,14 @@ class BrokenBoardBase(SignalDetector):
     """Base class for broken board signals."""
     group = "board"
     
-    def check_limit_up(self, prev_close: float, close: float) -> bool:
-        """Check if daily move is limit up (>9.5%)."""
-        return is_limit_up(prev_close, close)
+    def check_limit_up(self, prev_close: float, close: float, stock_info: dict) -> bool:
+        """Check if daily move is limit up (board-aware)."""
+        return is_limit_up(
+            prev_close,
+            close,
+            code=stock_info.get("code"),
+            name=stock_info.get("name"),
+        )
 
 
 @SignalRegistry.register
@@ -38,15 +43,15 @@ class BrokenLimitUpStreakSignal(BrokenBoardBase):
             t_0_close = closes[-1]
             
             # T-2: limit up from T-3
-            if not self.check_limit_up(t_3_close, t_2_close):
+            if not self.check_limit_up(t_3_close, t_2_close, stock_info):
                 return SignalResult(triggered=False)
             
             # T-1: limit up from T-2
-            if not self.check_limit_up(t_2_close, t_1_close):
+            if not self.check_limit_up(t_2_close, t_1_close, stock_info):
                 return SignalResult(triggered=False)
             
             # T: NOT limit up
-            if self.check_limit_up(t_1_close, t_0_close):
+            if self.check_limit_up(t_1_close, t_0_close, stock_info):
                 return SignalResult(triggered=False)
             
             return SignalResult(triggered=True)
@@ -79,15 +84,15 @@ class YesterdayBrokenBoardSignal(BrokenBoardBase):
             t_1_close = closes[-2]
             
             # T-3: limit up from T-4
-            if not self.check_limit_up(t_4_close, t_3_close):
+            if not self.check_limit_up(t_4_close, t_3_close, stock_info):
                 return SignalResult(triggered=False)
             
             # T-2: limit up from T-3
-            if not self.check_limit_up(t_3_close, t_2_close):
+            if not self.check_limit_up(t_3_close, t_2_close, stock_info):
                 return SignalResult(triggered=False)
             
             # T-1: NOT limit up (broken yesterday)
-            if self.check_limit_up(t_2_close, t_1_close):
+            if self.check_limit_up(t_2_close, t_1_close, stock_info):
                 return SignalResult(triggered=False)
             
             return SignalResult(triggered=True)
@@ -120,15 +125,15 @@ class DayBeforeYesterdayBrokenBoardSignal(BrokenBoardBase):
             t_2_close = closes[-3]
             
             # T-4: limit up from T-5
-            if not self.check_limit_up(t_5_close, t_4_close):
+            if not self.check_limit_up(t_5_close, t_4_close, stock_info):
                 return SignalResult(triggered=False)
             
             # T-3: limit up from T-4
-            if not self.check_limit_up(t_4_close, t_3_close):
+            if not self.check_limit_up(t_4_close, t_3_close, stock_info):
                 return SignalResult(triggered=False)
             
             # T-2: NOT limit up (broken day before yesterday)
-            if self.check_limit_up(t_3_close, t_2_close):
+            if self.check_limit_up(t_3_close, t_2_close, stock_info):
                 return SignalResult(triggered=False)
             
             return SignalResult(triggered=True)

@@ -3,7 +3,7 @@
 import numpy as np
 from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
-from app.services.scanner.utils import is_bullish_candle, is_bearish_candle
+from app.services.scanner.utils import is_bullish_candle, is_bearish_candle, scale_pct
 
 
 @SignalRegistry.register
@@ -35,7 +35,9 @@ class StrongFirstNegativeSignal(SignalDetector):
             close_today = closes[-1]
             gain_20d = (close_today - close_20_ago) / close_20_ago
             
-            if gain_20d <= 0.30:
+            code = stock_info.get("code")
+            name = stock_info.get("name")
+            if gain_20d <= scale_pct(0.30, code, name):
                 return SignalResult(triggered=False)
             
             # 2. Yesterday: bullish

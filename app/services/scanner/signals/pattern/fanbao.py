@@ -2,7 +2,7 @@
 
 from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
-from app.services.scanner.utils import is_bullish_candle, is_bearish_candle, is_limit_up
+from app.services.scanner.utils import is_bullish_candle, is_bearish_candle, is_limit_up, scale_pct
 
 
 @SignalRegistry.register
@@ -10,7 +10,7 @@ class StrongFanbaoSignal(SignalDetector):
     """强势股反包信号.
     
     条件:
-    1. 强势背景: 过去10天内(不含今日)有过涨停(>9.5%)
+    1. 强势背景: 过去10天内(不含今日)有过涨停(按板块阈值)
     2. 昨日调整: 昨日收阴线 (收盘 < 开盘)
     3. 今日反包: 今日收阳线，且收盘价 > 昨日开盘价 (实体反包)
     4. 力度确认: 今日涨幅 > 3%
@@ -40,7 +40,12 @@ class StrongFanbaoSignal(SignalDetector):
             for i in range(1, len(past_10)):
                 curr = past_10.iloc[i]
                 prev = past_10.iloc[i-1]
-                if is_limit_up(prev['收盘'], curr['收盘']):
+                if is_limit_up(
+                    prev['收盘'],
+                    curr['收盘'],
+                    code=stock_info.get("code"),
+                    name=stock_info.get("name"),
+                ):
                     has_limit_up = True
                     break
             
@@ -58,9 +63,9 @@ class StrongFanbaoSignal(SignalDetector):
             if today['收盘'] <= yesterday['开盘']:
                 return SignalResult(triggered=False)
             
-            # 4. Today gain > 3%
+            # 4. Today gain > 3% (board-aware)
             pct_change = (today['收盘'] - yesterday['收盘']) / yesterday['收盘']
-            if pct_change < 0.03:
+            if pct_change < scale_pct(0.03, stock_info.get("code"), stock_info.get("name")):
                 return SignalResult(triggered=False)
             
             return SignalResult(

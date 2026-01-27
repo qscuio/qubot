@@ -17,6 +17,7 @@ from app.core.database import db
 from app.core.config import settings
 from app.core.stock_links import get_chart_url
 from app.core.timezone import china_now, china_today
+from app.services.scanner.utils import get_limit_up_threshold
 
 logger = Logger("StockScanner")
 
@@ -458,29 +459,32 @@ class StockScanner:
     async def _get_scan_codes(self, today) -> tuple:
         """Fetch stock codes and names for scanning."""
         rows = await db.pool.fetch("""
-            SELECT DISTINCT code
-            FROM stock_history 
-            WHERE date >= $1::date - INTERVAL '7 days'
-              AND code ~ '^[036]'
+            SELECT DISTINCT h.code, s.name
+            FROM stock_history h
+            LEFT JOIN stock_info s ON s.code = h.code
+            WHERE h.date >= $1::date - INTERVAL '7 days'
+              AND h.code ~ '^[036]'
         """, today)
 
         if not rows:
             return [], {}
 
-        codes = [r['code'] for r in rows]
+        # Default filters: exclude 北交所(8x) and ST/退市; drop unknown names to enforce filter
+        filtered_codes = []
+        filtered_names = {}
+        for row in rows:
+            code = row['code']
+            if code.startswith("8"):
+                continue
+            name = row.get('name')
+            if not name:
+                continue
+            if "ST" in name or "*ST" in name or "退" in name:
+                continue
+            filtered_codes.append(code)
+            filtered_names[code] = name
 
-        stock_names = {code: code for code in codes}
-        try:
-            name_rows = await db.pool.fetch("""
-                SELECT code, name FROM stock_info WHERE code = ANY($1)
-            """, codes)
-            for row in name_rows:
-                if row.get('name'):
-                    stock_names[row['code']] = row['name']
-        except Exception:
-            pass
-
-        return codes, stock_names
+        return filtered_codes, filtered_names
 
     async def _load_stocks_data_for_scan(self, today, progress_callback=None, limit: int = 150) -> tuple:
         """Load stock data for scanning.
@@ -578,15 +582,20 @@ class StockScanner:
             logger.warn(traceback.format_exc())
             return {}
 
+    def _limit_up_threshold(self, code: str, name: str) -> float:
+        """Return limit-up threshold as a decimal (e.g., 0.095 for 9.5%)."""
+        return get_limit_up_threshold(code, name)
+
     def _append_top_gainers(self, hist, code: str, name: str, temp_5d: list, temp_10d: list, temp_20d: list) -> None:
         """Append gainers info for a single stock into temp lists."""
         try:
             closes = hist['收盘'].values
+            limit_threshold = self._limit_up_threshold(code, name)
 
             if len(closes) >= 6:
                 gain_5d = (closes[-1] - closes[-6]) / closes[-6] * 100
                 has_lu = any(
-                    (closes[i] - closes[i-1]) / closes[i-1] > 0.095
+                    (closes[i] - closes[i-1]) / closes[i-1] >= limit_threshold
                     for i in range(-5, 0) if i > -len(closes)
                 )
                 temp_5d.append({"code": code, "name": name, "gain": gain_5d, "has_lu": has_lu})
@@ -594,7 +603,7 @@ class StockScanner:
             if len(closes) >= 11:
                 gain_10d = (closes[-1] - closes[-11]) / closes[-11] * 100
                 has_lu = any(
-                    (closes[i] - closes[i-1]) / closes[i-1] > 0.095
+                    (closes[i] - closes[i-1]) / closes[i-1] >= limit_threshold
                     for i in range(-10, 0) if i > -len(closes)
                 )
                 temp_10d.append({"code": code, "name": name, "gain": gain_10d, "has_lu": has_lu})
@@ -602,7 +611,7 @@ class StockScanner:
             if len(closes) >= 21:
                 gain_20d = (closes[-1] - closes[-21]) / closes[-21] * 100
                 has_lu = any(
-                    (closes[i] - closes[i-1]) / closes[i-1] > 0.095
+                    (closes[i] - closes[i-1]) / closes[i-1] >= limit_threshold
                     for i in range(-20, 0) if i > -len(closes)
                 )
                 temp_20d.append({"code": code, "name": name, "gain": gain_20d, "has_lu": has_lu})

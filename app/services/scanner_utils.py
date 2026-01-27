@@ -1,13 +1,15 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Tuple, Optional
+from app.services.scanner.utils import get_board_multiplier, scale_ratio_down
 
-def calculate_kuangbiao_score(hist: pd.DataFrame) -> Tuple[float, float, str]:
+def calculate_kuangbiao_score(hist: pd.DataFrame, stock_info: Optional[Dict[str, str]] = None) -> Tuple[float, float, str]:
     """
     Calculate 'Kuangbiao' (狂飙) scores: ScoreA (Silent Accumulation) and ScoreB (Launch Trigger).
     
     Args:
         hist: DataFrame with columns ['收盘', '开盘', '最高', '最低', '成交量'] and datetime index or '日期' column.
+        stock_info: Optional dict with code/name for board-aware thresholds.
         
     Returns:
         (score_a, score_b, state)
@@ -31,6 +33,13 @@ def calculate_kuangbiao_score(hist: pd.DataFrame) -> Tuple[float, float, str]:
         open_p = opens.iloc[-1]
         high = highs.iloc[-1]
         low = lows.iloc[-1]
+
+        code = stock_info.get("code") if stock_info else None
+        name = stock_info.get("name") if stock_info else None
+        mult = get_board_multiplier(code, name)
+
+        def s(value: float) -> float:
+            return value * mult
 
         # ==========================================
         # 1. ScoreA: Silent Accumulation (0-100)
@@ -73,9 +82,9 @@ def calculate_kuangbiao_score(hist: pd.DataFrame) -> Tuple[float, float, str]:
         lower_count = (bbw_series.iloc[-120:] < bbw).sum()
         bbw_percentile = lower_count / 120.0
         
-        if atrp <= 0.020:
+        if atrp <= s(0.020):
             score_a += 15
-        elif atrp <= 0.025:
+        elif atrp <= s(0.025):
             score_a += 8
             
         if bbw_percentile <= 0.20:
@@ -101,12 +110,12 @@ def calculate_kuangbiao_score(hist: pd.DataFrame) -> Tuple[float, float, str]:
         elif up_count >= 5:
             score_a += 6
             
-        if 0.003 <= avg_ret <= 0.018:
+        if s(0.003) <= avg_ret <= s(0.018):
             score_a += 10
             
-        if max_dd <= 0.03:
+        if max_dd <= s(0.03):
             score_a += 5
-        elif max_dd <= 0.05:
+        elif max_dd <= s(0.05):
             score_a += 2
             
         # --- A4. Gentle Volume (0-20) ---
@@ -236,7 +245,7 @@ def calculate_kuangbiao_score(hist: pd.DataFrame) -> Tuple[float, float, str]:
             # Launch was 'i' days ago.
             # Check retest condition
             launch_price = closes.iloc[-1-breakout_day_idx]
-            retest_ok = low >= launch_price * 0.98
+            retest_ok = low >= launch_price * scale_ratio_down(0.98, code, name)
             
             launch_vol = vols.iloc[-1-breakout_day_idx]
             vol_drop = vol < launch_vol * 0.7

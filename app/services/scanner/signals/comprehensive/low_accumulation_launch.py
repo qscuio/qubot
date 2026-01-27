@@ -8,7 +8,9 @@ from app.services.scanner.utils import (
     calculate_mfi, 
     calculate_cmf, 
     calculate_slope, 
-    calculate_ma
+    calculate_ma,
+    scale_pct,
+    scale_ratio_down,
 )
 
 @SignalRegistry.register
@@ -48,6 +50,7 @@ class LowAccumulationLaunchSignal(SignalDetector):
         # Exclude ST/Star is usually handled by the caller or global filter, 
         # but we can check name if available
         name = stock_info.get('name', '')
+        code = stock_info.get('code', '')
         if 'ST' in name or '退' in name:
              return SignalResult(triggered=False)
              
@@ -67,7 +70,8 @@ class LowAccumulationLaunchSignal(SignalDetector):
         # Hard Thresholds for Low Position
         if pos_score > 0.45:  # Slightly relaxed from 0.35 to allow for emerging trends
             return SignalResult(triggered=False)
-        if dd < 0.30: # 30% pullback at least
+        dd_min = scale_pct(0.30, code, name)
+        if dd < dd_min: # 30% pullback at least (board-aware)
             return SignalResult(triggered=False)
             
         # Trend check: MA20 slope >= 0 or Close >= MA20 (Stabilization)
@@ -90,13 +94,13 @@ class LowAccumulationLaunchSignal(SignalDetector):
             
         # B. Volatility Contraction
         atr14 = calculate_atr(hist, 14)
-        is_low_volatility = (atr14 / current_close) <= 0.04 # Relaxed from 0.03
+        is_low_volatility = (atr14 / current_close) <= scale_pct(0.04, code, name) # Relaxed from 0.03
         
         # C. Narrow Box
         high20 = np.max(highs[-20:])
         low20 = np.min(lows[-20:])
         box_width = (high20 - low20) / current_close
-        is_narrow_box = box_width <= 0.15 # Relaxed from 0.12
+        is_narrow_box = box_width <= scale_pct(0.15, code, name) # Relaxed from 0.12
         
         # Must meet at least 2 of 3 accumulation conditions
         accumulation_score = sum([is_vol_contract, is_low_volatility, is_narrow_box])
@@ -111,7 +115,7 @@ class LowAccumulationLaunchSignal(SignalDetector):
         
         # T1. Price Critical Breakout (Near box top)
         # Close >= High20 * 0.98
-        if current_close >= high20 * 0.98:
+        if current_close >= high20 * scale_ratio_down(0.98, code, name):
             triggers += 1
             
         # T2. Healthy Volume (Not Explosive)
@@ -143,7 +147,10 @@ class LowAccumulationLaunchSignal(SignalDetector):
         # pos_score: lower is better (0.0 -> 20pts, 0.4 -> 0pts)
         score_pos = max(0, 20 * (1 - (pos_score / 0.4))) 
         # dd: higher is better (0.3 -> 0pts, 0.6 -> 15pts)
-        score_dd = min(15, 15 * ((dd - 0.3) / 0.3))
+        dd_span = scale_pct(0.30, code, name)
+        score_dd = 0.0
+        if dd_span > 0:
+            score_dd = min(15, 15 * ((dd - dd_min) / dd_span))
         total_pos = score_pos + score_dd
         
         # 2. Accumulation (35 pts)

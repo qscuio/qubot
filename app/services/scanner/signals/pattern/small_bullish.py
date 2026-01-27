@@ -4,7 +4,7 @@ from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
 from app.services.scanner.utils import (
     is_bullish_candle, is_bearish_candle, calculate_body_percent,
-    calculate_position_in_range
+    calculate_position_in_range, scale_pct
 )
 
 
@@ -12,12 +12,16 @@ class SmallBullishBase(SignalDetector):
     """Base class for small bullish patterns."""
     group = "pattern"
     
-    def is_small_bullish(self, open_price: float, close: float) -> bool:
-        """Check if candle is small bullish (0.5% - 3% body)."""
+    def is_small_bullish(self, open_price: float, close: float, stock_info: dict) -> bool:
+        """Check if candle is small bullish (0.5% - 3% body, board-aware)."""
         if close <= open_price:
             return False
         body_pct = calculate_body_percent(open_price, close)
-        return 0.5 <= body_pct <= 3.0
+        code = stock_info.get("code")
+        name = stock_info.get("name")
+        min_body = scale_pct(0.5, code, name)
+        max_body = scale_pct(3.0, code, name)
+        return min_body <= body_pct <= max_body
     
     def is_at_bottom(self, hist, threshold: float = 0.4) -> bool:
         """Check if price is in lower part of range."""
@@ -50,7 +54,7 @@ class SmallBullish5Signal(SmallBullishBase):
             prev_close = 0
             for i in range(5):
                 row = last_5.iloc[i]
-                if not self.is_small_bullish(row['开盘'], row['收盘']):
+                if not self.is_small_bullish(row['开盘'], row['收盘'], stock_info):
                     return SignalResult(triggered=False)
                 if i > 0 and row['收盘'] <= prev_close:
                     return SignalResult(triggered=False)
@@ -82,7 +86,7 @@ class SmallBullish4Signal(SmallBullishBase):
             
             for i in range(4):
                 row = last_4.iloc[i]
-                if not self.is_small_bullish(row['开盘'], row['收盘']):
+                if not self.is_small_bullish(row['开盘'], row['收盘'], stock_info):
                     return SignalResult(triggered=False)
             
             if not self.is_at_bottom(hist):
@@ -112,7 +116,7 @@ class SmallBullish4_1BearishSignal(SmallBullishBase):
             # First 4 days: small bullish
             for i in range(4):
                 row = last_5.iloc[i]
-                if not self.is_small_bullish(row['开盘'], row['收盘']):
+                if not self.is_small_bullish(row['开盘'], row['收盘'], stock_info):
                     return SignalResult(triggered=False)
             
             # Today: bearish
@@ -147,7 +151,7 @@ class SmallBullish5_1BearishSignal(SmallBullishBase):
             # First 5 days: small bullish
             for i in range(5):
                 row = last_6.iloc[i]
-                if not self.is_small_bullish(row['开盘'], row['收盘']):
+                if not self.is_small_bullish(row['开盘'], row['收盘'], stock_info):
                     return SignalResult(triggered=False)
             
             # Today: bearish
@@ -182,7 +186,7 @@ class SmallBullish3_1_1Signal(SmallBullishBase):
             # T-4 to T-2: small bullish
             for i in range(3):
                 row = last_5.iloc[i]
-                if not self.is_small_bullish(row['开盘'], row['收盘']):
+                if not self.is_small_bullish(row['开盘'], row['收盘'], stock_info):
                     return SignalResult(triggered=False)
             
             # T-1: bearish
@@ -222,7 +226,7 @@ class SmallBullish5In7Signal(SmallBullishBase):
             bullish_count = 0
             for i in range(7):
                 row = last_7.iloc[i]
-                if self.is_small_bullish(row['开盘'], row['收盘']):
+                if self.is_small_bullish(row['开盘'], row['收盘'], stock_info):
                     bullish_count += 1
             
             if bullish_count < 5:

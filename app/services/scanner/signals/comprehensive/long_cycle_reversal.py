@@ -4,6 +4,7 @@ import pandas as pd
 
 from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
+from app.services.scanner.utils import scale_pct, scale_ratio_down
 
 
 @SignalRegistry.register
@@ -38,6 +39,7 @@ class LongCycleReversalSignal(SignalDetector):
                 return SignalResult(triggered=False)
 
             name = stock_info.get("name", "")
+            code = stock_info.get("code", "")
             if "ST" in name or "退" in name:
                 return SignalResult(triggered=False)
 
@@ -76,12 +78,20 @@ class LongCycleReversalSignal(SignalDetector):
             for i in range(self.N_LONG - 1, len(hist)):
                 ma_long_series[i] = np.mean(closes[i - self.N_LONG + 1:i + 1])
 
+            low_converge_thresh = scale_pct(self.LOW_CONVERGE_THRESH, code, name)
+            price_near_ma_long = scale_pct(self.PRICE_NEAR_MA_LONG, code, name)
+            price_near_ma_long_best = scale_pct(self.PRICE_NEAR_MA_LONG_BEST, code, name)
+            roc_exclude = scale_pct(self.ROC_EXCLUDE, code, name)
+            near_high_exclude = scale_pct(self.NEAR_HIGH_EXCLUDE, code, name)
+            ma_long_down_exclude = scale_ratio_down(self.MA_LONG_DOWN_EXCLUDE, code, name)
+            slope_ratio_min = scale_pct(0.003, code, name)
+
             # 1) Hard filters: downtrend ended
             llv40 = _llv(lows, idx, 40)
             llv120 = _llv(lows, idx, 120)
             cond_a = False
             if llv40 is not None and llv120 is not None and llv120 > 0:
-                cond_a = abs(llv40 - llv120) / llv120 <= self.LOW_CONVERGE_THRESH
+                cond_a = abs(llv40 - llv120) / llv120 <= low_converge_thresh
 
             llv30 = _llv(lows, idx, 30)
             llv60_prev = _llv(lows, idx - 1, 60)
@@ -102,14 +112,14 @@ class LongCycleReversalSignal(SignalDetector):
             score_d = 0.0
             if ma_long is not None and ma_long > 0:
                 dist = abs(close - ma_long) / ma_long
-                if dist <= self.PRICE_NEAR_MA_LONG:
+                if dist <= price_near_ma_long:
                     cond_d = True
-                    if dist <= self.PRICE_NEAR_MA_LONG_BEST:
+                    if dist <= price_near_ma_long_best:
                         score_d = 12.0
                     else:
                         score_d = 12.0 * (
-                            (self.PRICE_NEAR_MA_LONG - dist) /
-                            (self.PRICE_NEAR_MA_LONG - self.PRICE_NEAR_MA_LONG_BEST)
+                            (price_near_ma_long - dist) /
+                            (price_near_ma_long - price_near_ma_long_best)
                         )
 
             llv10 = _llv(lows, idx, 10)
@@ -165,14 +175,14 @@ class LongCycleReversalSignal(SignalDetector):
             roc20 = None
             if idx >= 20 and closes[idx - 20] > 0:
                 roc20 = close / closes[idx - 20] - 1
-            x1 = roc20 is not None and roc20 > self.ROC_EXCLUDE
+            x1 = roc20 is not None and roc20 > roc_exclude
 
             x2 = False
             if idx >= 10 and ma_long is not None and not np.isnan(ma_long_series[idx - 10]) and ma_long_series[idx - 10] > 0:
-                x2 = ma_long / ma_long_series[idx - 10] < self.MA_LONG_DOWN_EXCLUDE
+                x2 = ma_long / ma_long_series[idx - 10] < ma_long_down_exclude
 
             high60 = _hhv(highs, idx, 60)
-            x3 = high60 is not None and close > 0 and (high60 - close) / close < self.NEAR_HIGH_EXCLUDE
+            x3 = high60 is not None and close > 0 and (high60 - close) / close < near_high_exclude
 
             # Scoring
             score = 0.0
@@ -185,7 +195,7 @@ class LongCycleReversalSignal(SignalDetector):
             score_ma_turn = 0.0
             if cond_c and ma_long is not None and ma_long > 0 and slope_recent is not None:
                 slope_ratio = slope_recent / ma_long
-                score_ma_turn = 30.0 if slope_ratio >= 0.003 else 20.0
+                score_ma_turn = 30.0 if slope_ratio >= slope_ratio_min else 20.0
             score += score_ma_turn
 
             # S_price_behavior (0-25)

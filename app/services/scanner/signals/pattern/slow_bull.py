@@ -2,6 +2,7 @@
 
 from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
+from app.services.scanner.utils import scale_pct
 
 
 class SlowBullBase(SignalDetector):
@@ -47,7 +48,10 @@ class SlowBull7Signal(SlowBullBase):
     priority = 80
     
     def detect(self, hist, stock_info) -> SignalResult:
-        triggered = self.check_slow_bull(hist, 7)
+        code = stock_info.get("code")
+        name = stock_info.get("name")
+        max_gain = scale_pct(0.20, code, name)
+        triggered = self.check_slow_bull(hist, 7, max_gain=max_gain)
         if triggered:
             closes = hist['收盘'].values
             gain = (closes[-1] - closes[-8]) / closes[-8] * 100
@@ -66,7 +70,10 @@ class SlowBull5Signal(SlowBullBase):
     priority = 81
     
     def detect(self, hist, stock_info) -> SignalResult:
-        triggered = self.check_slow_bull(hist, 5)
+        code = stock_info.get("code")
+        name = stock_info.get("name")
+        max_gain = scale_pct(0.20, code, name)
+        triggered = self.check_slow_bull(hist, 5, max_gain=max_gain)
         if triggered:
             closes = hist['收盘'].values
             gain = (closes[-1] - closes[-6]) / closes[-6] * 100

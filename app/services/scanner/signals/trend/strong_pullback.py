@@ -7,7 +7,7 @@ import pandas as pd
 
 from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
-from app.services.scanner.utils import calculate_atr, detect_pivot_lows
+from app.services.scanner.utils import calculate_atr, detect_pivot_lows, scale_pct
 
 
 @SignalRegistry.register
@@ -58,8 +58,12 @@ class StrongPullbackSignal(SignalDetector):
             if not trend_ok:
                 return SignalResult(triggered=False)
 
+            code = stock_info.get("code")
+            name = stock_info.get("name")
+
             # Support score
-            breakout_price = self._find_recent_breakout(close, vol)
+            breakout_jump_min = scale_pct(0.05, code, name)
+            breakout_price = self._find_recent_breakout(close, vol, breakout_jump_min)
             vwap60 = self._calculate_vwap(high, low, close, vol, 60)
             support_score, support_hits = self._support_score(
                 low.iloc[-1],
@@ -72,12 +76,16 @@ class StrongPullbackSignal(SignalDetector):
             )
             support_ok = support_score >= 2
 
+            min_dd = scale_pct(0.03, code, name)
+            max_dd = scale_pct(0.10, code, name)
+            box_range_max = scale_pct(0.04, code, name)
+
             # Pullback health
-            pullback_ok = self._pullback_ok(close, vol, ma60.iloc[-1])
+            pullback_ok = self._pullback_ok(close, vol, ma60.iloc[-1], min_dd, max_dd)
 
             # Trigger
             trigger, trigger_name = self._trigger(
-                close, high, low, vol, ma20, atr14
+                close, high, low, vol, ma20, atr14, box_range_max
             )
 
             buy_signal = trend_ok and support_ok and pullback_ok and trigger
@@ -141,6 +149,7 @@ class StrongPullbackSignal(SignalDetector):
         self,
         close: pd.Series,
         vol: pd.Series,
+        breakout_jump_min: float,
     ) -> Optional[float]:
         if len(close) < 40:
             return None
@@ -159,7 +168,7 @@ class StrongPullbackSignal(SignalDetector):
                 continue
             if self.require_breakout_jump:
                 prev_close = close.iloc[idx - 1]
-                if prev_close <= 0 or (close.iloc[idx] / prev_close - 1) <= 0.05:
+                if prev_close <= 0 or (close.iloc[idx] / prev_close - 1) <= breakout_jump_min:
                     continue
             return float(close.iloc[idx])
 
@@ -231,9 +240,9 @@ class StrongPullbackSignal(SignalDetector):
             return False
         return vol_ma3 < 0.75 * vol_ma10
 
-    def _pullback_ok(self, close: pd.Series, vol: pd.Series, ma60_last: float) -> bool:
+    def _pullback_ok(self, close: pd.Series, vol: pd.Series, ma60_last: float, min_dd: float, max_dd: float) -> bool:
         dd20 = self._dd20(close)
-        if dd20 < 0.03 or dd20 > 0.10:
+        if dd20 < min_dd or dd20 > max_dd:
             return False
         if close.iloc[-1] < ma60_last:
             return False
@@ -249,6 +258,7 @@ class StrongPullbackSignal(SignalDetector):
         vol: pd.Series,
         ma20: pd.Series,
         atr14: float,
+        box_range_max: float,
     ) -> Tuple[bool, str]:
         if len(close) < 6:
             return False, ""
@@ -275,7 +285,7 @@ class StrongPullbackSignal(SignalDetector):
         box_high_prev = high.iloc[-6:-1].max()
 
         t2 = (
-            box_range <= 0.04
+            box_range <= box_range_max
             and close_last > box_high_prev
             and vol_last > 1.3 * vol_ma5
         )

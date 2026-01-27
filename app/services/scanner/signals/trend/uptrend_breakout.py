@@ -3,7 +3,7 @@
 import numpy as np
 from app.services.scanner.base import SignalDetector, SignalResult
 from app.services.scanner.registry import SignalRegistry
-from app.services.scanner.utils import detect_pivot_lows, calculate_atr
+from app.services.scanner.utils import detect_pivot_lows, calculate_atr, scale_ratio_down
 
 
 @SignalRegistry.register
@@ -88,6 +88,9 @@ class UptrendBreakoutSignal(SignalDetector):
             if breakout_bar is None:
                 return SignalResult(triggered=False)
             
+            code = stock_info.get("code")
+            name = stock_info.get("name")
+
             # Today: pullback + hold
             today_low = lows[-1]
             today_close = closes[-1]
@@ -101,7 +104,7 @@ class UptrendBreakoutSignal(SignalDetector):
             shrink_volume = today_vol_ratio < 1.0
             
             # Hold above
-            held_above = today_close > upper_rail * 0.99
+            held_above = today_close > upper_rail * scale_ratio_down(0.99, code, name)
             
             if pullback_to_zone and shrink_volume and held_above:
                 return SignalResult(
