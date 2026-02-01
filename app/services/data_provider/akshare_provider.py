@@ -39,16 +39,13 @@ class AkShareProvider(BaseDataProvider):
         return
 
     async def initialize(self) -> bool:
-        """Lazy load libraries and configure proxy."""
+        """Lazy load libraries."""
         try:
-            # Configure proxy from settings (must be done before importing akshare)
+            # Note: AkShare doesn't support explicit proxy configuration
+            # If DATA_PROXY is set, http_crawler_provider should be preferred
             from app.core.config import settings
-            import os
             if settings.DATA_PROXY:
-                proxy_url = settings.DATA_PROXY
-                os.environ['HTTP_PROXY'] = proxy_url
-                os.environ['HTTPS_PROXY'] = proxy_url
-                logger.info(f"AkShare proxy configured: {proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url}")
+                logger.info("DATA_PROXY is set - AkShare may fail, will fallback to http_crawler")
             
             import akshare as ak
             import pandas as pd

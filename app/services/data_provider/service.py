@@ -15,15 +15,19 @@ class DataProviderService:
     
     def __init__(self):
         self.providers: List[BaseDataProvider] = []
-        # Primary provider
+        # Providers
         self.ak_provider = AkShareProvider()
-        # Secondary provider
         self.bs_provider = BaostockProvider()
-        # Fallback/Primary Crawler
         self.crawler_provider = HttpCrawlerProvider()
         
-        # Register base order: AkShare -> BaoStock -> Crawler
-        self.providers = [self.ak_provider, self.bs_provider, self.crawler_provider]
+        # Check if proxy is configured - if so, prefer http_crawler which supports explicit proxy
+        from app.core.config import settings
+        if settings.DATA_PROXY:
+            # HttpCrawler supports explicit proxy, prefer it
+            self.providers = [self.crawler_provider, self.ak_provider, self.bs_provider]
+        else:
+            # No proxy - use default order: AkShare -> BaoStock -> Crawler
+            self.providers = [self.ak_provider, self.bs_provider, self.crawler_provider]
         
         # Cache for trading dates
         self._trading_dates = []
