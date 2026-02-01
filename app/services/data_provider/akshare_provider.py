@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import time
 from typing import List, Dict, Any, Optional
 from app.core.logger import Logger
 from app.services.data_provider.base import BaseDataProvider
@@ -16,19 +15,12 @@ class AkShareProvider(BaseDataProvider):
         self._request_interval = 3.0  # 3 seconds between requests
         self._lock = asyncio.Lock()
         
-        # Circuit Breaker
-        self._consecutive_failures = 0
-        self._circuit_open_until = 0  # Timestamp when circuit closes
-        self._failure_threshold = 5   # Open circuit after N failures
-        self._circuit_timeout = 60    # Keep circuit open for N seconds
+        # Circuit breaker handled by DataProviderService
         
     def get_name(self) -> str:
         return "akshare"
     
     def is_available(self) -> bool:
-        """Check if provider is available (circuit closed)."""
-        if self._circuit_open_until > time.time():
-            return False
         return True
         
     async def _rate_limit(self):
@@ -41,16 +33,10 @@ class AkShareProvider(BaseDataProvider):
             self._last_request_time = asyncio.get_event_loop().time()
     
     def _record_success(self):
-        """Record successful request, reset circuit breaker."""
-        self._consecutive_failures = 0
+        return
         
     def _record_failure(self):
-        """Record failed request, possibly open circuit."""
-        self._consecutive_failures += 1
-        if self._consecutive_failures >= self._failure_threshold:
-            self._circuit_open_until = time.time() + self._circuit_timeout
-            logger.warn(f"Circuit breaker OPEN: Too many failures ({self._consecutive_failures}). Disabled for {self._circuit_timeout}s")
-            self._consecutive_failures = 0  # Reset counter
+        return
 
     async def initialize(self) -> bool:
         """Lazy load libraries."""

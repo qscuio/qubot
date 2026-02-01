@@ -33,7 +33,7 @@ class DataProviderService:
         self._provider_failures = {}
         self._provider_open_until = {}
         self._failure_threshold = 2  # Open circuit after N failures
-        self._circuit_timeout = 120  # Seconds to keep circuit open
+        self._circuit_timeout = 1800  # Seconds to keep circuit open (30m)
 
         # Sticky preferred provider (1 day)
         self._preferred_provider_name: Optional[str] = None
