@@ -144,8 +144,18 @@ jobs:
             fi
             
             # Start Docker
-            $SUDO systemctl start docker 2>/dev/null || true
+            $SUDO systemctl daemon-reload 2>/dev/null || true
+            $SUDO systemctl enable --now docker.socket 2>/dev/null || true
+            $SUDO systemctl restart docker 2>/dev/null || true
             $SUDO systemctl enable docker 2>/dev/null || true
+
+            # Wait for Docker socket to become available
+            for i in 1 2 3 4 5; do
+              if [ -S /run/docker.sock ] && docker info &> /dev/null; then
+                break
+              fi
+              sleep 2
+            done
             
             # Configure firewall
             if command -v ufw &> /dev/null; then
