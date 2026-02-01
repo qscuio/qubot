@@ -775,11 +775,28 @@ class StockHistoryService:
             total_stocks = len(df_filtered)
             logger.info(f"Got {total_stocks} valid stocks from API")
             
-            if progress_callback:
-                await progress_callback("数据同步", 10, 100, f"⏳ 获取到 {total_stocks} 只股票，准备入库...")
-            
-            # Prepare records for bulk insert
-            records = []
+        if progress_callback:
+            await progress_callback("数据同步", 10, 100, f"⏳ 获取到 {total_stocks} 只股票，准备入库...")
+
+        # Reject partial market snapshots to avoid poisoning local DB.
+        try:
+            expected_count = 0
+            if db.pool:
+                expected_count = await db.pool.fetchval("SELECT COUNT(*) FROM stock_info") or 0
+            min_required = 3000
+            if expected_count and expected_count > min_required:
+                min_required = int(expected_count * 0.6)
+            if total_stocks < min_required:
+                logger.warn(
+                    f"Batch snapshot too small ({total_stocks} < {min_required}); "
+                    "treating as failure to trigger fallback."
+                )
+                return False
+        except Exception as e:
+            logger.warn(f"Failed to validate snapshot size: {e}")
+
+        # Prepare records for bulk insert
+        records = []
             for _, row in df_filtered.iterrows():
                 try:
                     # Map columns
