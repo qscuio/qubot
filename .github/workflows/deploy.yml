@@ -564,6 +564,20 @@ jobs:
             sha256sum Dockerfile requirements.txt docker-compose.yml > .deps_hash 2>/dev/null || true
             
             docker compose up -d
+
+            # ARM py_mini_racer fix: symlink armlibmini_racer.glibc.so -> libmini_racer.glibc.so
+            if docker compose ps userbot &> /dev/null; then
+              docker compose exec -T userbot sh -lc '
+              set -e
+              cd /usr/local/lib/python3.11/site-packages/py_mini_racer
+              if [ -f armlibmini_racer.glibc.so ] && [ ! -e libmini_racer.glibc.so ]; then
+                ln -s armlibmini_racer.glibc.so libmini_racer.glibc.so
+                echo "✅ py_mini_racer ARM symlink created"
+              else
+                echo "ℹ️ py_mini_racer ARM symlink not needed"
+              fi
+              ' || true
+            fi
             
             # Wait for userbot to be healthy
             echo "⏳ Waiting for services to be healthy..."
