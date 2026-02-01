@@ -535,6 +535,7 @@ jobs:
             printf 'STOCK_ALERT_CHANNEL=%s\n' '${{ secrets.STOCK_ALERT_CHANNEL }}' >> .env
             printf 'ALERT_CHANNEL=%s\n' '${{ secrets.ALERT_CHANNEL }}' >> .env
             printf 'FILE_TARGET_GROUP=%s\n' '${{ secrets.FILE_TARGET_GROUP }}' >> .env
+            printf 'DATA_PROXY=%s\n' '${{ secrets.DATA_PROXY }}' >> .env
             
             # Deploy with smart rebuild logic
             docker compose down || true
