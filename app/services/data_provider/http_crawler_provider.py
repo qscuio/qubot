@@ -473,9 +473,10 @@ class HttpCrawlerProvider(BaseDataProvider):
         """Compatible with get_all_spot_data using EastMoney."""
         
         url = "http://82.push2.eastmoney.com/api/qt/clist/get"
+        page_size = 100
         params = {
             "pn": "1",
-            "pz": "10000",
+            "pz": str(page_size),
             "po": "1",
             "np": "1",
             "ut": "bd1d9ddb04089700cf9c27f6f7426281",
@@ -488,33 +489,48 @@ class HttpCrawlerProvider(BaseDataProvider):
         }
         
         try:
-            resp = await asyncio.to_thread(self._get_sync, url, params)
-            if not resp: return None
-            data = resp.json()
-                
-            if not data or 'data' not in data or 'diff' not in data['data']:
-                return None
-            
             raw_data = []
-            for item in data['data']['diff']:
-                try:
-                    raw_data.append({
-                        '代码': str(item['f12']),
-                        '名称': str(item['f14']),
-                        '最新价': item['f2'],
-                        '涨跌幅': item['f3'],
-                        '今开': item['f17'],
-                        '最高': item['f15'],
-                        '最低': item['f16'],
-                        '成交量': item['f5'],
-                        '成交额': item['f6'],
-                        '换手率': item['f8'],
-                        '振幅': item['f7']
-                    })
-                except:
-                    continue
+            total_pages = 1
+            page = 1
+
+            while page <= total_pages:
+                params["pn"] = str(page)
+                resp = await asyncio.to_thread(self._get_sync, url, params)
+                if not resp:
+                    break
+                data = resp.json()
+
+                diff = data.get("data", {}).get("diff", [])
+                if page == 1:
+                    total = int(data.get("data", {}).get("total") or 0)
+                    if total > 0:
+                        total_pages = max(1, math.ceil(total / page_size))
+
+                if not diff:
+                    break
+
+                for item in diff:
+                    try:
+                        raw_data.append({
+                            '代码': str(item['f12']),
+                            '名称': str(item['f14']),
+                            '最新价': item['f2'],
+                            '涨跌幅': item['f3'],
+                            '今开': item['f17'],
+                            '最高': item['f15'],
+                            '最低': item['f16'],
+                            '成交量': item['f5'],
+                            '成交额': item['f6'],
+                            '换手率': item['f8'],
+                            '振幅': item['f7']
+                        })
+                    except:
+                        continue
+
+                page += 1
                     
-            if not raw_data: return None
+            if not raw_data:
+                return None
             
             df = pd.DataFrame(raw_data)
             df.replace('-', 0, inplace=True)
