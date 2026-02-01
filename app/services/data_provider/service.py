@@ -150,6 +150,8 @@ class DataProviderService:
                     self._record_provider_success(provider)
                     self._set_preferred_provider(provider)
                     return data
+                # Treat empty result as failure for this provider
+                self._record_provider_failure(provider)
             except Exception as e:
                 self._record_provider_failure(provider)
                 errors.append(f"{provider.get_name()}: {e}")
