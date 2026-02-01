@@ -767,7 +767,12 @@ async def cb_scanner_dbsync(callback: types.CallbackQuery, bot: Bot):
 
     try:
         status_msg = await callback.message.answer("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时更新进度")
-        asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback(status_msg)))
+        asyncio.create_task(
+            stock_history_service.sync_with_integrity_check(
+                make_progress_callback(status_msg),
+                ignore_time_checks=True,
+            )
+        )
 
     except Exception as e:
         await callback.message.answer(f"❌ 同步失败: {e}")
@@ -872,7 +877,12 @@ async def cmd_dbsync(message: types.Message, bot: Bot):
                     logger.error(f"Failed to update progress message: {e}")
         return progress_cb
 
-    asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback(status_msg)))
+    asyncio.create_task(
+        stock_history_service.sync_with_integrity_check(
+            make_progress_callback(status_msg),
+            ignore_time_checks=True,
+        )
+    )
 
 
 @router.callback_query(F.data == "db:sync")
@@ -914,7 +924,12 @@ async def cb_db_sync(callback: types.CallbackQuery, bot: Bot):
 
     try:
         await callback.message.edit_text("⏳ 正在后台同步数据（含完整性检查）...\n\n会定时推送进度通知")
-        asyncio.create_task(stock_history_service.sync_with_integrity_check(make_progress_callback(callback.message)))
+        asyncio.create_task(
+            stock_history_service.sync_with_integrity_check(
+                make_progress_callback(callback.message),
+                ignore_time_checks=True,
+            )
+        )
 
     except Exception as e:
         await callback.message.edit_text(f"❌ 同步失败: {e}")
