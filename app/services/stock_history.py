@@ -93,23 +93,25 @@ class StockHistoryService:
                 f"from {result['min_date']} to {result['max_date']}"
             )
             
-            # Optimization: Check if stock_info is already updated today to avoid slow AkShare call
-            try:
-                info_stats = await db.pool.fetchrow("""
-                    SELECT COUNT(*) as count, MAX(updated_at) as last_update 
-                    FROM stock_info
-                """)
-                if info_stats and info_stats['count'] > 4000:
-                    last_update = info_stats['last_update']
-                    today = china_today()
-                    if last_update and last_update.date() == today:
-                        logger.info(f"✅ Stock list is up to date (Updated: {last_update}), skipping initialization check")
-                        return
-            except Exception as e:
-                logger.warn(f"Failed to check stock_info stats: {e}")
+        # Optimization: Check if stock_info is already updated today to avoid slow AkShare call
+        # NOTE: This only skips the external API fetch, NOT the history staleness checks!
+        use_cached_stock_list = False
+        try:
+            info_stats = await db.pool.fetchrow("""
+                SELECT COUNT(*) as count, MAX(updated_at) as last_update 
+                FROM stock_info
+            """)
+            if info_stats and info_stats['count'] > 4000:
+                last_update = info_stats['last_update']
+                today = china_today()
+                if last_update and last_update.date() == today:
+                    logger.info(f"Stock list cache is fresh (Updated: {last_update}), will use cached list")
+                    use_cached_stock_list = True
+        except Exception as e:
+            logger.warn(f"Failed to check stock_info stats: {e}")
         
-        # Get all current A-share stock codes
-        all_codes = await self.get_all_stock_codes()
+        # Get all current A-share stock codes (use cache if fresh, else fetch from API)
+        all_codes = await self.get_all_stock_codes(force_refresh=not use_cached_stock_list)
         if not all_codes:
             logger.warn("Could not fetch stock list, skipping backfill check")
             return
