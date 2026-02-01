@@ -66,6 +66,29 @@ class DataProviderService:
             self._provider_failures[name] = 0
             logger.warn(f"Circuit breaker OPEN for {name} ({self._circuit_timeout}s)")
 
+    def _set_preferred_provider(self, provider: BaseDataProvider):
+        self._preferred_provider_name = provider.get_name()
+        self._preferred_until = time.time() + self._preferred_ttl
+
+    def _get_ordered_providers(self) -> List[BaseDataProvider]:
+        if not self._preferred_provider_name:
+            return self.providers
+
+        now = time.time()
+        if now >= self._preferred_until:
+            return self.providers
+
+        preferred = None
+        for p in self.providers:
+            if p.get_name() == self._preferred_provider_name:
+                preferred = p
+                break
+
+        if preferred and self._provider_is_available(preferred):
+            return [preferred] + [p for p in self.providers if p is not preferred]
+
+        return self.providers
+
     async def initialize(self):
         """Initialize all providers."""
         for p in self.providers:
@@ -82,13 +105,14 @@ class DataProviderService:
 
     async def get_stock_list(self) -> List[Dict[str, str]]:
         """Fetch stock list from providers with fallback."""
-        for provider in self.providers:
+        for provider in self._get_ordered_providers():
             if not self._provider_is_available(provider):
                 continue
             try:
                 data = await provider.get_stock_list()
                 if data:
                     self._record_provider_success(provider)
+                    self._set_preferred_provider(provider)
                     logger.info(f"Fetched {len(data)} stocks from {provider.get_name()}")
                     return data
                 self._record_provider_failure(provider)
@@ -114,7 +138,7 @@ class DataProviderService:
         
         errors = []
         
-        for provider in self.providers:
+        for provider in self._get_ordered_providers():
             if not self._provider_is_available(provider):
                 continue
             try:
@@ -124,6 +148,7 @@ class DataProviderService:
                     if provider.get_name() != self.providers[0].get_name():
                         logger.info(f"Fetched {len(data)} records for {code} from {provider.get_name()}")
                     self._record_provider_success(provider)
+                    self._set_preferred_provider(provider)
                     return data
             except Exception as e:
                 self._record_provider_failure(provider)
@@ -148,13 +173,14 @@ class DataProviderService:
             pass
 
         # Fallback to providers
-        for provider in self.providers:
+        for provider in self._get_ordered_providers():
             if not self._provider_is_available(provider):
                 continue
             try:
                 dates = await provider.get_trading_dates(start_date, end_date)
                 if dates:
                     self._record_provider_success(provider)
+                    self._set_preferred_provider(provider)
                     return dates
             except Exception as e:
                 self._record_provider_failure(provider)
@@ -221,13 +247,14 @@ class DataProviderService:
         if not codes:
             return {}
         errors = []
-        for provider in self.providers:
+        for provider in self._get_ordered_providers():
             if not self._provider_is_available(provider):
                 continue
             try:
                 quotes = await provider.get_quotes(codes)
                 if quotes:
                     self._record_provider_success(provider)
+                    self._set_preferred_provider(provider)
                     return quotes
                 self._record_provider_failure(provider)
             except Exception as e:
@@ -242,7 +269,7 @@ class DataProviderService:
     async def get_all_spot_data(self):
         """Fetch full market spot data with fallback (provider optional)."""
         errors = []
-        for provider in self.providers:
+        for provider in self._get_ordered_providers():
             if not self._provider_is_available(provider):
                 continue
             getter = getattr(provider, "get_all_spot_data", None)
@@ -252,6 +279,7 @@ class DataProviderService:
                 data = await getter()
                 if data is not None and not getattr(data, "empty", False):
                     self._record_provider_success(provider)
+                    self._set_preferred_provider(provider)
                     return data
                 self._record_provider_failure(provider)
             except Exception as e:
@@ -269,13 +297,14 @@ class DataProviderService:
             return []
 
         errors = []
-        for provider in self.providers:
+        for provider in self._get_ordered_providers():
             if not self._provider_is_available(provider):
                 continue
             try:
                 data = await provider.get_sector_list(sector_type)
                 if data:
                     self._record_provider_success(provider)
+                    self._set_preferred_provider(provider)
                     return data
                 self._record_provider_failure(provider)
             except Exception as e:
@@ -298,13 +327,14 @@ class DataProviderService:
             return []
 
         errors = []
-        for provider in self.providers:
+        for provider in self._get_ordered_providers():
             if not self._provider_is_available(provider):
                 continue
             try:
                 data = await provider.get_sector_constituents(sector_code, sector_name, sector_type)
                 if data:
                     self._record_provider_success(provider)
+                    self._set_preferred_provider(provider)
                     return data
                 self._record_provider_failure(provider)
             except Exception as e:
