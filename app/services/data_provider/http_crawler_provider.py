@@ -25,6 +25,20 @@ class HttpCrawlerProvider(BaseDataProvider):
         self._headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
+        self._proxies = None
+        self._init_proxy()
+        
+    def _init_proxy(self):
+        """Initialize proxy from config."""
+        from app.core.config import settings
+        if settings.DATA_PROXY:
+            proxy_url = settings.DATA_PROXY
+            # Support both http and socks5 proxies
+            self._proxies = {
+                "http": proxy_url,
+                "https": proxy_url,
+            }
+            logger.info(f"Proxy configured: {proxy_url.split('@')[-1] if '@' in proxy_url else proxy_url}")
         
     def get_name(self) -> str:
         return "http_crawler"
@@ -41,7 +55,13 @@ class HttpCrawlerProvider(BaseDataProvider):
         else: headers.update(self._headers)
         
         try:
-            resp = requests.get(url, params=params, headers=headers, timeout=10)
+            resp = requests.get(
+                url, 
+                params=params, 
+                headers=headers, 
+                timeout=15,
+                proxies=self._proxies
+            )
             if resp.status_code != 200:
                 logger.warn(f"HTTP {resp.status_code} for {resp.url}")
                 return None

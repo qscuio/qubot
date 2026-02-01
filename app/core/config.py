@@ -201,6 +201,10 @@ class Settings(BaseSettings):
     AI_ALLOWED_PATHS: Optional[str] = None  # Comma-separated allowed paths for file tools
     EASTMONEY_FINGERPRINT: Optional[str] = None  # EastMoney qgqp_b_id cookie for stock search tool
     
+    # Data Provider Proxy (for China stock APIs when server is outside China)
+    # Format: socks5://host:port or http://user:pass@host:port
+    DATA_PROXY: Optional[str] = None
+    
     # API Keys (format: key1:userId1,key2:userId2)
     API_KEYS: Optional[str] = None
 
