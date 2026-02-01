@@ -13,3 +13,4 @@ __pycache__/
 app/miniapps/chart/index-old.html
 app/miniapps/chart/package-lock.json
 *.log
+.worktrees/
