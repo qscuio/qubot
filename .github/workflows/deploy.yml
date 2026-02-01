@@ -498,6 +498,7 @@ jobs:
             export VIBE_BOT_TOKEN='${{ secrets.VIBE_BOT_TOKEN }}'
             export BOT_GITHUB_TOKEN='${{ secrets.BOT_GITHUB_TOKEN }}'
             export FILE_TARGET_GROUP='${{ secrets.FILE_TARGET_GROUP }}'
+            export DATA_PROXY='${{secrets.DATA_PROXY }}'
             
             # Create .env file for NON-SENSITIVE config only (with restrictive permissions)
             cat > .env << 'EOF'
