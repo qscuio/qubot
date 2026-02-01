@@ -65,6 +65,23 @@ jobs:
               echo "⚡ Incremental deployment (skipping setup)"
               echo "needs_setup=false" >> /tmp/deploy_flags
             fi
+
+            # Check if Docker is available (not Podman shim, daemon reachable)
+            needs_docker=false
+            if ! command -v docker &> /dev/null; then
+              needs_docker=true
+            elif docker --version 2>/dev/null | grep -qi podman; then
+              needs_docker=true
+            elif ! docker info &> /dev/null; then
+              needs_docker=true
+            fi
+
+            if [ "$needs_docker" = "true" ]; then
+              echo "🐳 Docker not available, will install/start"
+            else
+              echo "🐳 Docker available"
+            fi
+            echo "needs_docker=$needs_docker" >> /tmp/deploy_flags
             
             # Output the flag
             cat /tmp/deploy_flags
@@ -81,7 +98,7 @@ jobs:
             cat /tmp/deploy_flags 2>/dev/null || echo "needs_setup=true"
 
       - name: Install Docker if needed
-        if: steps.check_enabled.outputs.skip != 'true' && (contains(steps.flags.outputs.stdout, 'needs_setup=true') || github.event.inputs.full_setup == 'true')
+        if: steps.check_enabled.outputs.skip != 'true' && (contains(steps.flags.outputs.stdout, 'needs_setup=true') || contains(steps.flags.outputs.stdout, 'needs_docker=true') || github.event.inputs.full_setup == 'true')
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
