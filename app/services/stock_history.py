@@ -783,9 +783,7 @@ class StockHistoryService:
             expected_count = 0
             if db.pool:
                 expected_count = await db.pool.fetchval("SELECT COUNT(*) FROM stock_info") or 0
-            min_required = 3000
-            if expected_count and expected_count > min_required:
-                min_required = int(expected_count * 0.9)
+            min_required = int(expected_count * 0.9) if expected_count else 0
             if total_stocks < min_required:
                 logger.warn(
                     f"Batch snapshot too small ({total_stocks} < {min_required}); "
