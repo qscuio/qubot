@@ -528,6 +528,8 @@ jobs:
             printf 'RATE_LIMIT_MS=%s\n' '${{ secrets.RATE_LIMIT_MS }}' >> .env
             printf 'LOG_LEVEL=%s\n' '${{ secrets.LOG_LEVEL }}' >> .env
             printf 'TWITTER_ACCOUNTS=%s\n' '${{ secrets.TWITTER_ACCOUNTS }}' >> .env
+            printf 'TWITTER_AUTH_TOKEN=%s\n' '${{ secrets.TWITTER_AUTH_TOKEN }}' >> .env
+            printf 'TWITTER_CT0=%s\n' '${{ secrets.TWITTER_CT0 }}' >> .env
             printf 'BLACKLIST_CHANNELS=%s\n' '${{ secrets.BLACKLIST_CHANNELS }}' >> .env
             printf 'STOCK_ALERT_CHANNEL=%s\n' '${{ secrets.STOCK_ALERT_CHANNEL }}' >> .env
             printf 'ALERT_CHANNEL=%s\n' '${{ secrets.ALERT_CHANNEL }}' >> .env

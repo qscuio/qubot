@@ -96,6 +96,8 @@ class Settings(BaseSettings):
     
     # Twitter monitoring
     TWITTER_ACCOUNTS: Optional[str] = None  # JSON array of Twitter accounts
+    TWITTER_AUTH_TOKEN: Optional[str] = None  # Twitter auth_token cookie (preferred)
+    TWITTER_CT0: Optional[str] = None  # Twitter ct0 cookie (required with auth_token)
 
     @property
     def source_channels_list(self) -> list:

@@ -30,39 +30,57 @@ class TwitterService:
         """Initialize Twitter API and load follows from database."""
         logger.info("Initializing TwitterService...")
         
-        # Check for credentials
-        if not settings.TWITTER_ACCOUNTS:
-            logger.warn("TWITTER_ACCOUNTS not configured. Twitter monitoring disabled.")
+        # Check for cookie-based auth first (simpler, more stable)
+        has_cookie_auth = settings.TWITTER_AUTH_TOKEN and settings.TWITTER_CT0
+        has_accounts_json = settings.TWITTER_ACCOUNTS
+        
+        if not has_cookie_auth and not has_accounts_json:
+            logger.warn("No Twitter credentials configured. Twitter monitoring disabled.")
+            logger.warn("Set TWITTER_AUTH_TOKEN + TWITTER_CT0, or TWITTER_ACCOUNTS JSON.")
             return False
         
         try:
             from twscrape import API
             self.api = API()
             
-            # Parse and add accounts
-            accounts = json.loads(settings.TWITTER_ACCOUNTS)
-            for acc in accounts:
-                username = acc.get('username')
-                password = acc.get('password')
-                email = acc.get('email')
-                email_password = acc.get('email_password')
-                cookies = acc.get('cookies')
+            if has_cookie_auth:
+                # Use cookie-based authentication (preferred)
+                cookies = {
+                    "auth_token": settings.TWITTER_AUTH_TOKEN,
+                    "ct0": settings.TWITTER_CT0
+                }
+                # twscrape requires a username even with cookies - use placeholder
+                await self.api.pool.add_account(
+                    "cookie_auth_user", "", "", "", 
+                    cookies=cookies
+                )
+                logger.info("Added Twitter account via cookie auth (auth_token + ct0)")
+            else:
+                # Fall back to TWITTER_ACCOUNTS JSON
+                accounts = json.loads(has_accounts_json)
+                for acc in accounts:
+                    username = acc.get('username')
+                    password = acc.get('password')
+                    email = acc.get('email')
+                    email_password = acc.get('email_password')
+                    cookies = acc.get('cookies')
+                    
+                    if cookies:
+                        # Add with cookies (more stable)
+                        await self.api.pool.add_account(username, password or "", email or "", email_password or "", cookies=cookies)
+                        logger.info(f"Added Twitter account (cookies): {username}")
+                    elif username and password and email:
+                        # Add with login credentials
+                        await self.api.pool.add_account(username, password, email, email_password or "")
+                        logger.info(f"Added Twitter account: {username}")
                 
-                if cookies:
-                    # Add with cookies (more stable)
-                    await self.api.pool.add_account(username, password or "", email or "", email_password or "", cookies=cookies)
-                    logger.info(f"Added Twitter account (cookies): {username}")
-                elif username and password and email:
-                    # Add with login credentials
-                    await self.api.pool.add_account(username, password, email, email_password or "")
-                    logger.info(f"Added Twitter account: {username}")
-            
-            # Login all accounts
-            await self.api.pool.login_all()
-            logger.info("Twitter accounts logged in")
+                # Login all accounts (not needed with cookies)
+                await self.api.pool.login_all()
+                logger.info("Twitter accounts logged in")
             
         except Exception as e:
             logger.error(f"Failed to initialize Twitter API: {e}")
+            return False
             return False
         
         # Load follows from database
