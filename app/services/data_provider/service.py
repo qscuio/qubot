@@ -22,8 +22,8 @@ class DataProviderService:
         # Fallback/Primary Crawler
         self.crawler_provider = HttpCrawlerProvider()
         
-        # Register order: Crawler first (most reliable if no auth), then AkShare, then BaoStock
-        self.providers = [self.crawler_provider, self.ak_provider, self.bs_provider]
+        # Register base order: AkShare -> BaoStock -> Crawler
+        self.providers = [self.ak_provider, self.bs_provider, self.crawler_provider]
         
         # Cache for trading dates
         self._trading_dates = []
@@ -34,6 +34,11 @@ class DataProviderService:
         self._provider_open_until = {}
         self._failure_threshold = 2  # Open circuit after N failures
         self._circuit_timeout = 120  # Seconds to keep circuit open
+
+        # Sticky preferred provider (1 day)
+        self._preferred_provider_name: Optional[str] = None
+        self._preferred_until = 0.0
+        self._preferred_ttl = 86400
 
     def _provider_is_available(self, provider: BaseDataProvider) -> bool:
         name = provider.get_name()
