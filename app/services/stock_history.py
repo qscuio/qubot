@@ -673,19 +673,26 @@ class StockHistoryService:
             f"✅ Daily update complete (Fallback): {success_count}/{len(codes)} stocks updated"
         )
 
-    async def update_all_stocks(self, progress_callback: Optional[Callable] = None):
+    async def update_all_stocks(
+        self,
+        progress_callback: Optional[Callable] = None,
+        ignore_time_checks: bool = False,
+    ):
         """Daily update - fetch today's data for all stocks.
         
         Tries batch update first, falls back to concurrent individual update.
         """
         today = china_today()
-        # Skip weekends
-        if today.weekday() >= 5:
+        # Skip weekends unless manual override
+        if not ignore_time_checks and today.weekday() >= 5:
             logger.info("Weekend, skipping daily update")
             return
 
         # Try batch update first
-        success = await self.update_all_stocks_batch(progress_callback)
+        success = await self.update_all_stocks_batch(
+            progress_callback,
+            ignore_time_checks=ignore_time_checks,
+        )
         
         if success:
             return
@@ -697,7 +704,11 @@ class StockHistoryService:
             
         await self._update_all_stocks_concurrent(progress_callback)
     
-    async def update_all_stocks_batch(self, progress_callback: Optional[Callable] = None) -> bool:
+    async def update_all_stocks_batch(
+        self,
+        progress_callback: Optional[Callable] = None,
+        ignore_time_checks: bool = False,
+    ) -> bool:
         """Batch update using ak.stock_zh_a_spot_em() - much faster.
         
         Returns:
@@ -708,15 +719,17 @@ class StockHistoryService:
             return False
         
         today = china_today()
-        now = china_now()
-        
         # Determine the correct date for the data
         # If before 09:30, the data is from the previous trading day
-        if now.time() < datetime.strptime("09:30", "%H:%M").time():
-            target_date = today - timedelta(days=1)
-            logger.info(f"Time is {now.strftime('%H:%M')} (<09:30), assuming data is from previous day: {target_date}")
-        else:
+        if ignore_time_checks:
             target_date = today
+        else:
+            now = china_now()
+            if now.time() < datetime.strptime("09:30", "%H:%M").time():
+                target_date = today - timedelta(days=1)
+                logger.info(f"Time is {now.strftime('%H:%M')} (<09:30), assuming data is from previous day: {target_date}")
+            else:
+                target_date = today
             
         # Get actual latest trading date
         trade_date = await self.get_latest_trading_date(target_date)
@@ -889,7 +902,11 @@ class StockHistoryService:
             logger.error(f"Failed to get trading date: {e}")
             return None
 
-    async def sync_with_integrity_check(self, progress_callback: Optional[Callable] = None):
+    async def sync_with_integrity_check(
+        self,
+        progress_callback: Optional[Callable] = None,
+        ignore_time_checks: bool = False,
+    ):
         """Sync data with integrity check.
         
         This method:
@@ -907,9 +924,9 @@ class StockHistoryService:
             return
         
         today = china_today()
-        
-        # Skip weekends
-        if today.weekday() >= 5:
+
+        # Skip weekends unless manual override
+        if not ignore_time_checks and today.weekday() >= 5:
             logger.info("Weekend, skipping sync")
             return
         
@@ -920,11 +937,14 @@ class StockHistoryService:
             await progress_callback("开始同步", 0, 100, "⏳ 正在同步最新数据...")
         
         # Step 1: Regular daily update for latest trading day data
-        await self.update_all_stocks(progress_callback)
+        await self.update_all_stocks(progress_callback, ignore_time_checks=ignore_time_checks)
 
         # Step 2: Find stocks with missing 7-day data and fix gaps
         try:
-            stocks_to_fix = await self._check_recent_data_integrity(progress_callback)
+            stocks_to_fix = await self._check_recent_data_integrity(
+                progress_callback,
+                ignore_time_checks=ignore_time_checks,
+            )
             
             if stocks_to_fix:
                 logger.info(f"📋 Found {len(stocks_to_fix)} stocks with incomplete data, fixing...")
@@ -946,6 +966,7 @@ class StockHistoryService:
         self,
         progress_callback: Optional[Callable] = None,
         limit: Optional[int] = None,
+        ignore_time_checks: bool = False,
     ) -> List[Dict]:
         """Check which stocks are missing data in the last 7 trading days.
         
@@ -955,12 +976,15 @@ class StockHistoryService:
             return []
         
         today = china_today()
-        now = china_now()
         # Determine expected latest trading date (not simply DB max)
-        if now.time() < datetime.strptime("09:30", "%H:%M").time():
-            target_base = today - timedelta(days=1)
-        else:
+        if ignore_time_checks:
             target_base = today
+        else:
+            now = china_now()
+            if now.time() < datetime.strptime("09:30", "%H:%M").time():
+                target_base = today - timedelta(days=1)
+            else:
+                target_base = today
         target_date = await self.get_latest_trading_date(target_base) or target_base
         seven_days_ago = target_date - timedelta(days=10)  # Look back 10 days to cover weekends
         
