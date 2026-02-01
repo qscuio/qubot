@@ -25,12 +25,20 @@ class GitHubService:
             if settings.GIT_SSH_KEY_PATH:
                 self._setup_ssh()
 
-            if os.path.isdir(os.path.join(self.local_path, ".git")):
+            git_dir = os.path.join(self.local_path, ".git")
+            if os.path.isdir(git_dir):
                 self.repo = git.Repo(self.local_path)
                 logger.info("Pulling latest changes...")
                 origin = self.repo.remotes.origin
                 origin.pull()
             else:
+                # Clean up any existing files (corrupted/incomplete clone)
+                if os.path.exists(self.local_path) and os.listdir(self.local_path):
+                    import shutil
+                    logger.warn(f"Removing invalid repo directory: {self.local_path}")
+                    shutil.rmtree(self.local_path)
+                    os.makedirs(self.local_path, exist_ok=True)
+                
                 logger.info(f"Cloning {self.repo_url}...")
                 self.repo = git.Repo.clone_from(self.repo_url, self.local_path)
 
