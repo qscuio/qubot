@@ -98,7 +98,7 @@ jobs:
             cat /tmp/deploy_flags 2>/dev/null || echo "needs_setup=true"
 
       - name: Install Docker if needed
-        if: steps.check_enabled.outputs.skip != 'true' && (contains(steps.flags.outputs.stdout, 'needs_setup=true') || github.event.inputs.full_setup == 'true')
+        if: steps.check_enabled.outputs.skip != 'true' && (contains(steps.flags.outputs.stdout, 'needs_setup=true') || contains(steps.flags.outputs.stdout, 'needs_docker=true') || github.event.inputs.full_setup == 'true')
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
