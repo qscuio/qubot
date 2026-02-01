@@ -2,6 +2,7 @@ import asyncio
 import requests
 import pandas as pd
 import datetime
+import math
 from typing import List, Dict, Any, Optional
 from io import StringIO
 from app.core.logger import Logger
@@ -72,9 +73,10 @@ class HttpCrawlerProvider(BaseDataProvider):
         
         # EastMoney API for all A-shares
         url = "http://82.push2.eastmoney.com/api/qt/clist/get"
+        page_size = 100
         params = {
             "pn": "1",
-            "pz": "10000",  # Fetch all in one go if possible, or large page
+            "pz": str(page_size),
             "po": "1",
             "np": "1",
             "ut": "bd1d9ddb04089700cf9c27f6f7426281",
@@ -87,21 +89,35 @@ class HttpCrawlerProvider(BaseDataProvider):
         }
         
         try:
-            resp = await asyncio.to_thread(self._get_sync, url, params)
-            if not resp: return []
-            
-            data = resp.json()
-            if not data or 'data' not in data or 'diff' not in data['data']:
-                return []
-                
             results = []
-            for item in data['data']['diff']:
-                code = str(item.get('f12'))
-                name = str(item.get('f14'))
-                # Basic filter for A-shares
-                if code.startswith(('0', '3', '6', '4', '8')):
-                    results.append({"code": code, "name": name})
-                    
+            total_pages = 1
+            page = 1
+
+            while page <= total_pages:
+                params["pn"] = str(page)
+                resp = await asyncio.to_thread(self._get_sync, url, params)
+                if not resp:
+                    break
+
+                data = resp.json()
+                diff = data.get("data", {}).get("diff", [])
+                if page == 1:
+                    total = int(data.get("data", {}).get("total") or 0)
+                    if total > 0:
+                        total_pages = max(1, math.ceil(total / page_size))
+
+                if not diff:
+                    break
+
+                for item in diff:
+                    code = str(item.get('f12'))
+                    name = str(item.get('f14'))
+                    # Basic filter for A-shares
+                    if code.startswith(('0', '3', '6', '4', '8')):
+                        results.append({"code": code, "name": name})
+
+                page += 1
+
             logger.info(f"Crawled {len(results)} stocks from EastMoney")
             return results
         except Exception as e:
