@@ -47,10 +47,45 @@ class BaostockProvider(BaseDataProvider):
                 pass
 
     async def get_stock_list(self) -> List[Dict[str, str]]:
-        # Baostock stock list fetching is a bit complex (query_all_stock), 
-        # usually date based. For now we might skip or implement basic if needed.
-        # But generally we rely on AkShare for the list.
-        # Return empty list as fallback for now or implement later if critical.
+        if not await self.initialize():
+            return []
+
+        # Baostock stock list is date-based; try recent days to handle weekends/holidays.
+        today = datetime.datetime.now().date()
+
+        for back in range(0, 7):
+            date_str = (today - datetime.timedelta(days=back)).strftime("%Y-%m-%d")
+            try:
+                rs = await asyncio.to_thread(self._bs.query_all_stock, date_str)
+                if rs.error_code != '0':
+                    logger.warn(f"Baostock query_all_stock failed ({date_str}): {rs.error_msg}")
+                    continue
+
+                results: List[Dict[str, str]] = []
+                while rs.next():
+                    row = rs.get_row_data()
+                    if not row:
+                        continue
+
+                    raw_code = (row[0] if len(row) > 0 else "").strip()
+                    name = (row[2] if len(row) > 2 else raw_code).strip()
+                    if not raw_code:
+                        continue
+
+                    code = raw_code.split(".")[-1].strip()
+                    if not code:
+                        continue
+
+                    code_val = code.zfill(6) if code.isdigit() else code
+                    if code_val.startswith(("0", "3", "6", "4", "8")):
+                        results.append({"code": code_val, "name": name or code_val})
+
+                if results:
+                    logger.info(f"Fetched {len(results)} stocks from baostock for {date_str}")
+                    return results
+            except Exception as e:
+                logger.warn(f"Baostock query_all_stock error ({date_str}): {e}")
+
         return []
 
     async def get_daily_bars(
