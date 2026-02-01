@@ -117,11 +117,24 @@ jobs:
               $SUDO apt-get install -y git
             fi
             
-            # Install Docker
+            # Install Docker (treat Podman shim or missing CLI as no-Docker)
+            docker_cmd_missing=false
+            docker_is_podman=false
+            docker_daemon_ok=true
             if ! command -v docker &> /dev/null; then
+              docker_cmd_missing=true
+            elif docker --version 2>/dev/null | grep -qi podman; then
+              docker_is_podman=true
+            elif ! docker info &> /dev/null; then
+              docker_daemon_ok=false
+            fi
+
+            if [ "$docker_cmd_missing" = "true" ] || [ "$docker_is_podman" = "true" ]; then
               echo "🐳 Installing Docker..."
               curl -fsSL https://get.docker.com | sh
               $SUDO usermod -aG docker $USER || true
+            elif [ "$docker_daemon_ok" = "false" ]; then
+              echo "🐳 Docker installed but daemon not running; will start service"
             fi
             
             # Install Docker Compose
