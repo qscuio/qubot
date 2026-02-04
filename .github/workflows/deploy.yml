@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false  # Continue deploying to other VPS even if one fails
       matrix:
-        environment: [CC, DMIT, ORACLE]  # Add/remove VPS environments as needed
+        environment: [CC, DMIT, ORACLE, RACKNERD]  # Add/remove VPS environments as needed
     environment: ${{ matrix.environment }}
     name: Deploy to ${{ matrix.environment }}
     env:
