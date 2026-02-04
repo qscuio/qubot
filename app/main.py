@@ -104,8 +104,9 @@ async def lifespan(app: FastAPI):
 
     # Limit-Up Tracker
     if settings.ENABLE_LIMIT_UP:
-        await limit_up_service.initialize()
         await limit_up_service.start()
+        # Run initialization in background to avoid blocking startup
+        asyncio.create_task(limit_up_service.initialize())
 
     # Stock Scanner (启动信号扫描)
     if settings.ENABLE_LIMIT_UP:
