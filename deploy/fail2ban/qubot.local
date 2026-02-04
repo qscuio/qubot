@@ -9,15 +9,17 @@ filter = qubot-scanner
 # Log source: nginx access log
 logpath = /var/log/nginx/access.log
 
-# Ban settings
-maxretry = 5          # Ban after 5 suspicious requests
-findtime = 600        # Within 10 minutes (600 seconds)
-bantime = 2592000     # Ban for 1 month (30 days)
+# Ban after 5 suspicious requests within 10 minutes
+# Ban for 1 month (30 days)
+maxretry = 5
+findtime = 600
+bantime = 2592000
 
 # Action: block via iptables
 action = iptables-multiport[name=qubot, port="http,https,8000", protocol=tcp]
 
 # Progressive ban time (repeat offenders get longer bans)
+# Double ban time each offense, max 1 year
 bantime.increment = true
-bantime.factor = 2        # Double ban time each offense
-bantime.maxtime = 31536000  # Max 1 year ban
+bantime.factor = 2
+bantime.maxtime = 31536000
