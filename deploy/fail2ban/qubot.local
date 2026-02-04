@@ -6,18 +6,13 @@ enabled = true
 port = http,https,8000
 filter = qubot-scanner
 
-# Log source - choose one:
-# Option 1: File-based logging
-logpath = /var/log/qubot/app.log
-
-# Option 2: Systemd journal (uncomment if using systemd)
-# backend = systemd
-# journalmatch = _SYSTEMD_UNIT=qubot.service
+# Log source: nginx access log
+logpath = /var/log/nginx/access.log
 
 # Ban settings
 maxretry = 5          # Ban after 5 suspicious requests
 findtime = 600        # Within 10 minutes (600 seconds)
-bantime = 3600        # Ban for 1 hour (3600 seconds)
+bantime = 2592000     # Ban for 1 month (30 days)
 
 # Action: block via iptables
 action = iptables-multiport[name=qubot, port="http,https,8000", protocol=tcp]
@@ -25,4 +20,4 @@ action = iptables-multiport[name=qubot, port="http,https,8000", protocol=tcp]
 # Progressive ban time (repeat offenders get longer bans)
 bantime.increment = true
 bantime.factor = 2        # Double ban time each offense
-bantime.maxtime = 604800  # Max 1 week ban
+bantime.maxtime = 31536000  # Max 1 year ban
