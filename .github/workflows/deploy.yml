@@ -195,6 +195,17 @@ jobs:
             echo 'bantime = 604800' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
             echo 'banaction = ufw' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
 
+            # Create SSH brute force jail (uses built-in sshd filter)
+            echo '[sshd]' | $SUDO tee /etc/fail2ban/jail.d/sshd.conf > /dev/null
+            echo 'enabled = true' | $SUDO tee -a /etc/fail2ban/jail.d/sshd.conf > /dev/null
+            echo 'port = ssh' | $SUDO tee -a /etc/fail2ban/jail.d/sshd.conf > /dev/null
+            echo 'filter = sshd' | $SUDO tee -a /etc/fail2ban/jail.d/sshd.conf > /dev/null
+            echo 'logpath = /var/log/auth.log' | $SUDO tee -a /etc/fail2ban/jail.d/sshd.conf > /dev/null
+            echo 'maxretry = 3' | $SUDO tee -a /etc/fail2ban/jail.d/sshd.conf > /dev/null
+            echo 'findtime = 300' | $SUDO tee -a /etc/fail2ban/jail.d/sshd.conf > /dev/null
+            echo 'bantime = 604800' | $SUDO tee -a /etc/fail2ban/jail.d/sshd.conf > /dev/null
+            echo 'banaction = ufw' | $SUDO tee -a /etc/fail2ban/jail.d/sshd.conf > /dev/null
+
             # Restart fail2ban
             $SUDO systemctl enable fail2ban
             $SUDO systemctl restart fail2ban
@@ -240,10 +251,30 @@ jobs:
               $SUDO systemctl enable nginx
             fi
             
-            # Add rate limiting zones to nginx.conf if not present
+            # Add rate limiting and DDoS protection to nginx.conf if not present
             if ! grep -q "limit_req_zone" /etc/nginx/nginx.conf; then
               echo "📊 Adding rate limiting zones to nginx.conf..."
-              $SUDO sed -i '/http {/a\    # Rate limiting zones\n    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;\n    limit_conn_zone $binary_remote_addr zone=conn_limit:10m;' /etc/nginx/nginx.conf
+              $SUDO sed -i '/http {/a\
+    # Rate limiting zones (DDoS and scan protection)\
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;\
+    limit_req_zone $binary_remote_addr zone=login_limit:10m rate=1r/s;\
+    limit_req_zone $binary_remote_addr zone=general_limit:10m rate=30r/s;\
+    limit_conn_zone $binary_remote_addr zone=conn_limit:10m;\
+    limit_conn_zone $binary_remote_addr zone=addr:10m;\
+    \
+    # DDoS protection settings\
+    client_body_timeout 10s;\
+    client_header_timeout 10s;\
+    keepalive_timeout 30s;\
+    send_timeout 10s;\
+    \
+    # Limit request body and header size\
+    client_body_buffer_size 16k;\
+    client_header_buffer_size 1k;\
+    large_client_header_buffers 4 8k;\
+    \
+    # Connection limits\
+    reset_timedout_connection on;' /etc/nginx/nginx.conf
             fi
             
             # Install Certbot
@@ -306,12 +337,20 @@ jobs:
                 add_header X-Frame-Options "SAMEORIGIN" always;
                 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
                 
-                # Rate limiting (10 req/sec per IP)
+                # Rate limiting (DDoS protection)
                 limit_req zone=api_limit burst=20 nodelay;
-                limit_conn conn_limit 20;
-                
+                limit_req zone=general_limit burst=50 nodelay;
+                limit_conn addr 30;
+                limit_conn_status 429;
+                limit_req_status 429;
+
                 # Block bad User-Agents at Nginx level
-                if (\$http_user_agent ~* (nmap|nikto|sqlmap|gobuster|dirbuster|masscan|nuclei)) {
+                if (\$http_user_agent ~* (nmap|nikto|sqlmap|gobuster|dirbuster|masscan|nuclei|l9scan|python-requests|aiohttp)) {
+                    return 403;
+                }
+
+                # Block empty User-Agent (common in bots/scanners)
+                if (\$http_user_agent = "") {
                     return 403;
                 }
 
@@ -445,6 +484,31 @@ jobs:
                 ssl_certificate_key /etc/letsencrypt/live/$WEB_DOMAIN/privkey.pem;
                 include /etc/letsencrypt/options-ssl-nginx.conf;
                 ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+                # Security headers
+                add_header X-XSS-Protection "1; mode=block" always;
+                add_header X-Content-Type-Options "nosniff" always;
+                add_header X-Frame-Options "SAMEORIGIN" always;
+                add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+                # Rate limiting (DDoS protection)
+                limit_req zone=general_limit burst=50 nodelay;
+                limit_conn addr 30;
+                limit_conn_status 429;
+                limit_req_status 429;
+
+                # Block bad User-Agents
+                if (\$http_user_agent ~* (nmap|nikto|sqlmap|gobuster|dirbuster|masscan|nuclei|l9scan|python-requests|aiohttp)) {
+                    return 403;
+                }
+
+                # Block empty User-Agent
+                if (\$http_user_agent = "") {
+                    return 403;
+                }
+
+                # Max request body size
+                client_max_body_size 10M;
 
                 # Block sensitive file probes
                 location ~* ^/\.(env|git|svn|htaccess|htpasswd|DS_Store) {
