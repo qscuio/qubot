@@ -167,6 +167,43 @@ jobs:
               $SUDO ufw --force enable || true
             fi
 
+            # Install and configure fail2ban for scanner protection
+            if ! command -v fail2ban-client &> /dev/null; then
+              echo "🛡️ Installing fail2ban..."
+              $SUDO apt-get install -y fail2ban
+            fi
+
+            # Create nginx scanner filter
+            $SUDO tee /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null << 'FILTERCONF'
+[Definition]
+failregex = ^<HOST> .* ".*l9scan.*
+            ^<HOST> .* "(GET|HEAD|POST) /\.(env|git|svn|htaccess|DS_Store|vscode).*
+            ^<HOST> .* "(GET|HEAD|POST) .*(wp-admin|wp-login|phpMyAdmin|swagger|api-docs|\.php).*
+            ^<HOST> .* ".*python-requests.*
+            ^<HOST> .* ".*aiohttp.*
+
+ignoreregex = .*Let's Encrypt.*
+              .*well-known/acme-challenge.*
+FILTERCONF
+
+            # Create jail with UFW action
+            $SUDO tee /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null << 'JAILCONF'
+[nginx-scanner]
+enabled = true
+port = http,https
+filter = nginx-scanner
+logpath = /var/log/nginx/access.log
+maxretry = 2
+findtime = 60
+bantime = 604800
+banaction = ufw
+JAILCONF
+
+            # Restart fail2ban
+            $SUDO systemctl enable fail2ban
+            $SUDO systemctl restart fail2ban
+            echo "✅ fail2ban configured for scanner protection"
+
       - name: Setup Nginx reverse proxy
         if: steps.check_enabled.outputs.skip != 'true' && (contains(steps.flags.outputs.stdout, 'needs_setup=true') || github.event.inputs.full_setup == 'true')
         uses: appleboy/ssh-action@v1.0.3
@@ -281,10 +318,23 @@ jobs:
                 if (\$http_user_agent ~* (nmap|nikto|sqlmap|gobuster|dirbuster|masscan|nuclei)) {
                     return 403;
                 }
-                
+
                 # Max request body size
                 client_max_body_size 10M;
-                
+
+                # Block sensitive file probes
+                location ~* ^/\.(env|git|svn|htaccess|htpasswd|DS_Store) {
+                    access_log off;
+                    log_not_found off;
+                    return 404;
+                }
+
+                # Block common attack paths
+                location ~* (wp-admin|wp-login|phpMyAdmin|\.php$|cgi-bin) {
+                    access_log off;
+                    return 404;
+                }
+
                 location / {
                     proxy_pass http://127.0.0.1:$BOT_PORT;
                     proxy_http_version 1.1;
@@ -394,12 +444,25 @@ jobs:
             server {
                 listen 443 ssl;
                 server_name $WEB_DOMAIN;
-                
+
                 ssl_certificate /etc/letsencrypt/live/$WEB_DOMAIN/fullchain.pem;
                 ssl_certificate_key /etc/letsencrypt/live/$WEB_DOMAIN/privkey.pem;
                 include /etc/letsencrypt/options-ssl-nginx.conf;
                 ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-                
+
+                # Block sensitive file probes
+                location ~* ^/\.(env|git|svn|htaccess|htpasswd|DS_Store) {
+                    access_log off;
+                    log_not_found off;
+                    return 404;
+                }
+
+                # Block common attack paths
+                location ~* (wp-admin|wp-login|phpMyAdmin|\.php$|cgi-bin) {
+                    access_log off;
+                    return 404;
+                }
+
                 location / {
                     proxy_pass http://127.0.0.1:$BOT_PORT;
                     proxy_http_version 1.1;
@@ -410,7 +473,7 @@ jobs:
                     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
                     proxy_set_header X-Forwarded-Proto \$scheme;
                 }
-                
+
                 # WebSocket support for /ws paths
                 location /ws {
                     proxy_pass http://127.0.0.1:$BOT_PORT;
