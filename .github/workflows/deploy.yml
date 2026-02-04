@@ -55,7 +55,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           debug: true
           script: |
-	    whoami
+            whoami
             # Check if first-time setup is needed
             if [ "${{ github.event.inputs.full_setup }}" = "true" ]; then
               echo "🔄 Force full setup requested"
