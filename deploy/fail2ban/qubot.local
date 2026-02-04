@@ -8,6 +8,7 @@ filter = qubot-scanner
 
 # Log source: nginx access log
 logpath = /var/log/nginx/access.log
+backend = auto
 
 # Ban after 5 suspicious requests within 10 minutes
 # Ban for 1 month (30 days)
