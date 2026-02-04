@@ -174,30 +174,26 @@ jobs:
             fi
 
             # Create nginx scanner filter
-            $SUDO tee /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null << 'FILTERCONF'
-[Definition]
-failregex = ^<HOST> .* ".*l9scan.*
-            ^<HOST> .* "(GET|HEAD|POST) /\.(env|git|svn|htaccess|DS_Store|vscode).*
-            ^<HOST> .* "(GET|HEAD|POST) .*(wp-admin|wp-login|phpMyAdmin|swagger|api-docs|\.php).*
-            ^<HOST> .* ".*python-requests.*
-            ^<HOST> .* ".*aiohttp.*
-
-ignoreregex = .*Let's Encrypt.*
-              .*well-known/acme-challenge.*
-FILTERCONF
+            echo '[Definition]' | $SUDO tee /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null
+            echo 'failregex = ^<HOST> .* ".*l9scan.*' | $SUDO tee -a /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null
+            echo '            ^<HOST> .* "(GET|HEAD|POST) /\.(env|git|svn|htaccess|DS_Store|vscode).*' | $SUDO tee -a /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null
+            echo '            ^<HOST> .* "(GET|HEAD|POST) .*(wp-admin|wp-login|phpMyAdmin|swagger|api-docs|\.php).*' | $SUDO tee -a /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null
+            echo '            ^<HOST> .* ".*python-requests.*' | $SUDO tee -a /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null
+            echo '            ^<HOST> .* ".*aiohttp.*' | $SUDO tee -a /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null
+            echo '' | $SUDO tee -a /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null
+            echo 'ignoreregex = .*Lets Encrypt.*' | $SUDO tee -a /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null
+            echo '              .*well-known/acme-challenge.*' | $SUDO tee -a /etc/fail2ban/filter.d/nginx-scanner.conf > /dev/null
 
             # Create jail with UFW action
-            $SUDO tee /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null << 'JAILCONF'
-[nginx-scanner]
-enabled = true
-port = http,https
-filter = nginx-scanner
-logpath = /var/log/nginx/access.log
-maxretry = 2
-findtime = 60
-bantime = 604800
-banaction = ufw
-JAILCONF
+            echo '[nginx-scanner]' | $SUDO tee /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
+            echo 'enabled = true' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
+            echo 'port = http,https' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
+            echo 'filter = nginx-scanner' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
+            echo 'logpath = /var/log/nginx/access.log' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
+            echo 'maxretry = 2' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
+            echo 'findtime = 60' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
+            echo 'bantime = 604800' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
+            echo 'banaction = ufw' | $SUDO tee -a /etc/fail2ban/jail.d/nginx-scanner.conf > /dev/null
 
             # Restart fail2ban
             $SUDO systemctl enable fail2ban
