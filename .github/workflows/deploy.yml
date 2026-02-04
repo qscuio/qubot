@@ -254,27 +254,28 @@ jobs:
             # Add rate limiting and DDoS protection to nginx.conf if not present
             if ! grep -q "limit_req_zone" /etc/nginx/nginx.conf; then
               echo "📊 Adding rate limiting zones to nginx.conf..."
-              $SUDO sed -i '/http {/a\
-    # Rate limiting zones (DDoS and scan protection)\
-    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;\
-    limit_req_zone $binary_remote_addr zone=login_limit:10m rate=1r/s;\
-    limit_req_zone $binary_remote_addr zone=general_limit:10m rate=30r/s;\
-    limit_conn_zone $binary_remote_addr zone=conn_limit:10m;\
-    limit_conn_zone $binary_remote_addr zone=addr:10m;\
-    \
-    # DDoS protection settings\
-    client_body_timeout 10s;\
-    client_header_timeout 10s;\
-    keepalive_timeout 30s;\
-    send_timeout 10s;\
-    \
-    # Limit request body and header size\
-    client_body_buffer_size 16k;\
-    client_header_buffer_size 1k;\
-    large_client_header_buffers 4 8k;\
-    \
-    # Connection limits\
-    reset_timedout_connection on;' /etc/nginx/nginx.conf
+              # Create temp file with rate limit config
+              cat > /tmp/nginx_ratelimit.txt << 'RATELIMIT'
+              # Rate limiting zones (DDoS and scan protection)
+              limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+              limit_req_zone $binary_remote_addr zone=login_limit:10m rate=1r/s;
+              limit_req_zone $binary_remote_addr zone=general_limit:10m rate=30r/s;
+              limit_conn_zone $binary_remote_addr zone=conn_limit:10m;
+              limit_conn_zone $binary_remote_addr zone=addr:10m;
+              # DDoS protection settings
+              client_body_timeout 10s;
+              client_header_timeout 10s;
+              keepalive_timeout 30s;
+              send_timeout 10s;
+              # Limit request body and header size
+              client_body_buffer_size 16k;
+              client_header_buffer_size 1k;
+              large_client_header_buffers 4 8k;
+              # Connection limits
+              reset_timedout_connection on;
+            RATELIMIT
+              $SUDO sed -i '/http {/r /tmp/nginx_ratelimit.txt' /etc/nginx/nginx.conf
+              rm /tmp/nginx_ratelimit.txt
             fi
             
             # Install Certbot
