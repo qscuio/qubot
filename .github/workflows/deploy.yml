@@ -361,9 +361,16 @@ jobs:
                     return 403;
                 }
 
-                # Block empty User-Agent (common in bots/scanners)
-                if (\$http_user_agent = "") {
-                    return 403;
+                # Allow Telegram webhooks (can have empty User-Agent)
+                location ^~ /webhook/ {
+                    proxy_pass http://127.0.0.1:$BOT_PORT;
+                    proxy_http_version 1.1;
+                    proxy_set_header Upgrade \$http_upgrade;
+                    proxy_set_header Connection 'upgrade';
+                    proxy_set_header Host \$host;
+                    proxy_set_header X-Real-IP \$remote_addr;
+                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto \$scheme;
                 }
 
                 # Max request body size
@@ -383,6 +390,10 @@ jobs:
                 }
 
                 location / {
+                    # Block empty User-Agent (common in bots/scanners)
+                    if (\$http_user_agent = "") {
+                        return 403;
+                    }
                     proxy_pass http://127.0.0.1:$BOT_PORT;
                     proxy_http_version 1.1;
                     proxy_set_header Upgrade \$http_upgrade;
