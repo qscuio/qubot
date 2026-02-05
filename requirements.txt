@@ -24,6 +24,8 @@ baostock>=0.8.8
 PyGithub>=2.1.0
 PySocks>=1.7.0  # SOCKS5 proxy support for requests
 pyyaml>=6.0
+paramiko>=3.0.0
+typer>=0.9.0
 
 # Testing
 pytest>=8.0.0
