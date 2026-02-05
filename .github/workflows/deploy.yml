@@ -251,46 +251,28 @@ jobs:
               $SUDO systemctl enable nginx
             fi
             
-            # Add rate limiting and DDoS protection to nginx.conf if not present
-            # Check for specific zone we need, not just any limit_req_zone
+            # Add rate limiting zones to nginx.conf if not present
             if ! grep -q "zone=general_limit" /etc/nginx/nginx.conf; then
               echo "📊 Adding rate limiting zones to nginx.conf..."
-
-              # First, clean up any malformed/partial rate limiting from previous attempts
-              $SUDO sed -i '/# Rate limiting zones/,/reset_timedout_connection on;/d' /etc/nginx/nginx.conf 2>/dev/null || true
-              $SUDO sed -i '/zone=api_limit/d' /etc/nginx/nginx.conf 2>/dev/null || true
-              $SUDO sed -i '/zone=login_limit/d' /etc/nginx/nginx.conf 2>/dev/null || true
-              $SUDO sed -i '/zone=general_limit/d' /etc/nginx/nginx.conf 2>/dev/null || true
-              $SUDO sed -i '/zone=conn_limit/d' /etc/nginx/nginx.conf 2>/dev/null || true
-              $SUDO sed -i '/zone=addr/d' /etc/nginx/nginx.conf 2>/dev/null || true
-
-              # Create temp file with rate limit config
-              cat > /tmp/nginx_ratelimit.txt << 'RATELIMIT'
-              # Rate limiting zones (DDoS and scan protection)
-              limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
-              limit_req_zone $binary_remote_addr zone=login_limit:10m rate=1r/s;
-              limit_req_zone $binary_remote_addr zone=general_limit:10m rate=30r/s;
-              limit_conn_zone $binary_remote_addr zone=conn_limit:10m;
-              limit_conn_zone $binary_remote_addr zone=addr:10m;
-              # DDoS protection settings
-              client_body_timeout 10s;
-              client_header_timeout 10s;
-              keepalive_timeout 30s;
-              send_timeout 10s;
-              # Limit request body and header size
-              client_body_buffer_size 16k;
-              client_header_buffer_size 1k;
-              large_client_header_buffers 4 8k;
-              # Connection limits
-              reset_timedout_connection on;
-            RATELIMIT
+              # Clean up any broken config first
+              $SUDO sed -i '/# Rate limiting zones/d' /etc/nginx/nginx.conf 2>/dev/null || true
+              $SUDO sed -i '/limit_req_zone.*zone=api_limit/d' /etc/nginx/nginx.conf 2>/dev/null || true
+              $SUDO sed -i '/limit_req_zone.*zone=general_limit/d' /etc/nginx/nginx.conf 2>/dev/null || true
+              $SUDO sed -i '/limit_conn_zone.*zone=addr/d' /etc/nginx/nginx.conf 2>/dev/null || true
+              # Create temp file with proper nginx config (using printf to avoid whitespace issues)
+              printf '%s\n' '    # Rate limiting zones' '    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;' '    limit_req_zone $binary_remote_addr zone=general_limit:10m rate=30r/s;' '    limit_conn_zone $binary_remote_addr zone=addr:10m;' > /tmp/nginx_ratelimit.txt
+              # Insert after 'http {' line
               $SUDO sed -i '/http {/r /tmp/nginx_ratelimit.txt' /etc/nginx/nginx.conf
-              rm /tmp/nginx_ratelimit.txt
-
-              # Verify the zones were added correctly
-              if ! $SUDO nginx -t 2>&1; then
-                echo "⚠️ Nginx config test failed after adding rate limits, checking..."
-                $SUDO nginx -t
+              rm -f /tmp/nginx_ratelimit.txt
+              # Verify config
+              if $SUDO nginx -t; then
+                echo "✅ Rate limiting zones added successfully"
+              else
+                echo "⚠️ Nginx config failed, removing rate limiting..."
+                $SUDO sed -i '/# Rate limiting zones/d' /etc/nginx/nginx.conf
+                $SUDO sed -i '/limit_req_zone.*zone=api_limit/d' /etc/nginx/nginx.conf
+                $SUDO sed -i '/limit_req_zone.*zone=general_limit/d' /etc/nginx/nginx.conf
+                $SUDO sed -i '/limit_conn_zone.*zone=addr/d' /etc/nginx/nginx.conf
               fi
             else
               echo "✅ Rate limiting zones already configured"
@@ -356,12 +338,11 @@ jobs:
                 add_header X-Frame-Options "SAMEORIGIN" always;
                 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
                 
-                # Rate limiting (DDoS protection)
-                limit_req zone=api_limit burst=20 nodelay;
+                # Rate limiting (requires zones in nginx.conf)
                 limit_req zone=general_limit burst=50 nodelay;
                 limit_conn addr 30;
-                limit_conn_status 429;
                 limit_req_status 429;
+                limit_conn_status 429;
 
                 # Block bad User-Agents at Nginx level
                 if (\$http_user_agent ~* (nmap|nikto|sqlmap|gobuster|dirbuster|masscan|nuclei|l9scan|python-requests|aiohttp)) {
@@ -510,11 +491,11 @@ jobs:
                 add_header X-Frame-Options "SAMEORIGIN" always;
                 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-                # Rate limiting (DDoS protection)
+                # Rate limiting (requires zones in nginx.conf)
                 limit_req zone=general_limit burst=50 nodelay;
                 limit_conn addr 30;
-                limit_conn_status 429;
                 limit_req_status 429;
+                limit_conn_status 429;
 
                 # Block bad User-Agents
                 if (\$http_user_agent ~* (nmap|nikto|sqlmap|gobuster|dirbuster|masscan|nuclei|l9scan|python-requests|aiohttp)) {
