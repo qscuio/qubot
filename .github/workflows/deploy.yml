@@ -252,7 +252,11 @@ jobs:
             fi
             
             # Add rate limiting zones to nginx.conf if not present
-            if ! grep -q "zone=general_limit" /etc/nginx/nginx.conf; then
+            RATELIMIT_OK=false
+            if grep -q "zone=general_limit" /etc/nginx/nginx.conf; then
+              echo "✅ Rate limiting zones already configured"
+              RATELIMIT_OK=true
+            else
               echo "📊 Adding rate limiting zones to nginx.conf..."
               # Clean up any broken config first
               $SUDO sed -i '/# Rate limiting zones/d' /etc/nginx/nginx.conf 2>/dev/null || true
@@ -267,16 +271,27 @@ jobs:
               # Verify config
               if $SUDO nginx -t; then
                 echo "✅ Rate limiting zones added successfully"
+                RATELIMIT_OK=true
               else
-                echo "⚠️ Nginx config failed, removing rate limiting..."
+                echo "❌ ERROR: Failed to add rate limiting zones to nginx.conf"
+                echo "❌ Nginx config test output:"
+                $SUDO nginx -t 2>&1 || true
+                echo "❌ Cleaning up broken config..."
                 $SUDO sed -i '/# Rate limiting zones/d' /etc/nginx/nginx.conf
                 $SUDO sed -i '/limit_req_zone.*zone=api_limit/d' /etc/nginx/nginx.conf
                 $SUDO sed -i '/limit_req_zone.*zone=general_limit/d' /etc/nginx/nginx.conf
                 $SUDO sed -i '/limit_conn_zone.*zone=addr/d' /etc/nginx/nginx.conf
+                # Verify cleanup worked
+                if ! $SUDO nginx -t; then
+                  echo "❌ FATAL: Cannot fix nginx.conf - manual intervention required"
+                  echo "❌ Check /etc/nginx/nginx.conf for syntax errors"
+                  exit 1
+                fi
+                echo "⚠️ Rate limiting disabled - nginx.conf cleaned up"
               fi
-            else
-              echo "✅ Rate limiting zones already configured"
             fi
+            # Write marker file for site config step
+            echo "$RATELIMIT_OK" > /tmp/nginx_ratelimit_ok
             
             # Install Certbot
             if ! command -v certbot &> /dev/null; then
@@ -314,6 +329,9 @@ jobs:
               fi
             fi
             
+            # Check if rate limiting is available from previous step
+            RATELIMIT_OK=$(cat /tmp/nginx_ratelimit_ok 2>/dev/null || echo "false")
+
             # Create final Nginx config (with or without SSL)
             if [ "$SSL_OBTAINED" = true ]; then
               $SUDO tee /etc/nginx/sites-available/qubot > /dev/null << NGINXCONF
@@ -322,27 +340,21 @@ jobs:
                 server_name $DOMAIN;
                 return 301 https://\$host\$request_uri;
             }
-            
+
             server {
                 listen 443 ssl;
                 server_name $DOMAIN;
-                
+
                 ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
                 ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
                 include /etc/letsencrypt/options-ssl-nginx.conf;
                 ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-                
+
                 # Security headers
                 add_header X-XSS-Protection "1; mode=block" always;
                 add_header X-Content-Type-Options "nosniff" always;
                 add_header X-Frame-Options "SAMEORIGIN" always;
                 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-                
-                # Rate limiting (requires zones in nginx.conf)
-                limit_req zone=general_limit burst=50 nodelay;
-                limit_conn addr 30;
-                limit_req_status 429;
-                limit_conn_status 429;
 
                 # Block bad User-Agents at Nginx level
                 if (\$http_user_agent ~* (nmap|nikto|sqlmap|gobuster|dirbuster|masscan|nuclei|l9scan|python-requests|aiohttp)) {
@@ -399,9 +411,22 @@ jobs:
             NGINXCONF
               echo "⚠️ Nginx configured with HTTP only (SSL failed)"
             fi
-            
+
+            # Add rate limiting to site config only if zones are available
+            if [ "$RATELIMIT_OK" = "true" ]; then
+              echo "📊 Adding rate limiting to site config..."
+              $SUDO sed -i '/# Security headers/a\                # Rate limiting\n                limit_req zone=general_limit burst=50 nodelay;\n                limit_conn addr 30;\n                limit_req_status 429;\n                limit_conn_status 429;\n' /etc/nginx/sites-available/qubot
+            else
+              echo "⚠️ Skipping rate limiting in site config (zones not available)"
+            fi
+
             $SUDO ln -sf /etc/nginx/sites-available/qubot /etc/nginx/sites-enabled/qubot
-            $SUDO nginx -t && $SUDO systemctl reload nginx
+            if ! $SUDO nginx -t; then
+              echo "❌ ERROR: Nginx config test failed for qubot site"
+              $SUDO nginx -t 2>&1
+              exit 1
+            fi
+            $SUDO systemctl reload nginx
 
       - name: Setup Nginx for Web Frontend
         if: steps.check_enabled.outputs.skip != 'true' && (contains(steps.flags.outputs.stdout, 'needs_setup=true') || github.event.inputs.full_setup == 'true')
@@ -467,6 +492,9 @@ jobs:
               fi
             fi
             
+            # Check if rate limiting is available
+            RATELIMIT_OK=$(cat /tmp/nginx_ratelimit_ok 2>/dev/null || echo "false")
+
             # Create final Nginx config (with or without SSL)
             if [ "$SSL_OBTAINED" = true ]; then
               $SUDO tee /etc/nginx/sites-available/qubot-web > /dev/null << NGINXCONF
@@ -475,7 +503,7 @@ jobs:
                 server_name $WEB_DOMAIN;
                 return 301 https://\$host\$request_uri;
             }
-            
+
             server {
                 listen 443 ssl;
                 server_name $WEB_DOMAIN;
@@ -490,12 +518,6 @@ jobs:
                 add_header X-Content-Type-Options "nosniff" always;
                 add_header X-Frame-Options "SAMEORIGIN" always;
                 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-
-                # Rate limiting (requires zones in nginx.conf)
-                limit_req zone=general_limit burst=50 nodelay;
-                limit_conn addr 30;
-                limit_req_status 429;
-                limit_conn_status 429;
 
                 # Block bad User-Agents
                 if (\$http_user_agent ~* (nmap|nikto|sqlmap|gobuster|dirbuster|masscan|nuclei|l9scan|python-requests|aiohttp)) {
@@ -569,9 +591,22 @@ jobs:
             NGINXCONF
               echo "⚠️ Nginx configured with HTTP only for web frontend (SSL failed)"
             fi
-            
+
+            # Add rate limiting to site config only if zones are available
+            if [ "$RATELIMIT_OK" = "true" ]; then
+              echo "📊 Adding rate limiting to web frontend config..."
+              $SUDO sed -i '/# Security headers/a\                # Rate limiting\n                limit_req zone=general_limit burst=50 nodelay;\n                limit_conn addr 30;\n                limit_req_status 429;\n                limit_conn_status 429;\n' /etc/nginx/sites-available/qubot-web
+            else
+              echo "⚠️ Skipping rate limiting in web frontend config (zones not available)"
+            fi
+
             $SUDO ln -sf /etc/nginx/sites-available/qubot-web /etc/nginx/sites-enabled/qubot-web
-            $SUDO nginx -t && $SUDO systemctl reload nginx
+            if ! $SUDO nginx -t; then
+              echo "❌ ERROR: Nginx config test failed for qubot-web site"
+              $SUDO nginx -t 2>&1
+              exit 1
+            fi
+            $SUDO systemctl reload nginx
 
       - name: Deploy to VPS via SSH
         if: steps.check_enabled.outputs.skip != 'true'
