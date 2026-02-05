@@ -449,6 +449,27 @@ async def webhook_handler(bot_name: str, request: Request):
     Handle incoming Telegram updates for specific bots via webhook.
     URL: https://<domain>/webhook/<bot_name>
     """
+    def _get_request_ip(req: Request) -> str:
+        cf_ip = req.headers.get("cf-connecting-ip")
+        if cf_ip:
+            return cf_ip.strip()
+        forwarded = req.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = req.headers.get("x-real-ip")
+        if real_ip:
+            return real_ip.strip()
+        return req.client.host if req.client else "unknown"
+
+    client_ip = _get_request_ip(request)
+    ua = (request.headers.get("user-agent") or "").strip()
+    content_length = request.headers.get("content-length") or "unknown"
+    secret_present = bool(request.headers.get("X-Telegram-Bot-Api-Secret-Token"))
+    logger.info(
+        f"📬 Webhook received: bot={bot_name} ip={client_ip} ua={(ua[:80] if ua else '-')}"
+        f" len={content_length} secret={secret_present}"
+    )
+
     # Verify secret if configured (only if BOT_SECRET has a value)
     bot_secret = (settings.BOT_SECRET or "").strip()
     if bot_secret:

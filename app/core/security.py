@@ -251,6 +251,11 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     
     def _get_client_ip(self, request: Request) -> str:
         """Get real client IP (considering proxies)."""
+        # Cloudflare (if present)
+        cf_ip = request.headers.get("cf-connecting-ip")
+        if cf_ip:
+            return cf_ip.strip()
+
         # Check X-Forwarded-For header first (for reverse proxy)
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
@@ -303,6 +308,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         method = request.method
         user_agent = request.headers.get('user-agent', '')
+        is_webhook_path = path.startswith("/webhook/")
         
         # Check if IP is blocked
         if self.rate_limiter.is_blocked(client_ip):
@@ -324,7 +330,8 @@ class SecurityMiddleware(BaseHTTPMiddleware):
             )
         
         # Check for suspicious User-Agent (scanner tools)
-        if self._is_suspicious_user_agent(user_agent, client_ip):
+        # Allow webhooks to pass without UA checks (Telegram/Cloudflare can look "bot-like")
+        if (not is_webhook_path) and self._is_suspicious_user_agent(user_agent, client_ip):
             self._scanner_ips[client_ip] += 1
             logger.warn(f"🔍 Suspicious UA from {client_ip}: {user_agent[:50]} (count: {self._scanner_ips[client_ip]})")
             if self._scanner_ips[client_ip] >= 3:
