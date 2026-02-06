@@ -3,7 +3,7 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "${BOT_PORT:-6887}:${BOT_PORT:-6887}"
+      - "127.0.0.1:${BOT_PORT:-6887}:${BOT_PORT:-6887}"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://qubot:qubot@postgres:5432/qubot
