@@ -398,35 +398,8 @@ class MonitorService:
 *处理时间: {result.processing_time_ms:.0f}ms | 召回率: {result.hard_fact_recall:.0%} | 可追溯性: {result.traceability:.0%}*
 """
             
-            # ═══════════════════════════════════════════════════════════════
-            # Save to GitHub (Markdown + JSON)
-            # ═══════════════════════════════════════════════════════════════
             download_url = None
             json_url = None
-            try:
-                from app.services.github import github_service
-                if github_service.is_ready:
-                    # Save markdown report
-                    safe_name = channel_name.replace(' ', '_').replace('/', '_')
-                    md_filename = f"reports/channels/{safe_name}_{now.strftime('%Y%m%d_%H%M')}.md"
-                    download_url = github_service.save_note(
-                        md_filename, 
-                        report_markdown, 
-                        f"Report: {channel_name} {report_type}"
-                    )
-                    logger.info(f"📎 Report saved: {download_url}")
-                    
-                    # Save structured memory as JSON
-                    json_filename = f"reports/data/{now.strftime('%Y-%m-%d')}_{safe_name}.json"
-                    json_content = result.memory.to_json()
-                    json_url = github_service.save_note(
-                        json_filename,
-                        json_content,
-                        f"Memory: {channel_name} {now.strftime('%Y-%m-%d')}"
-                    )
-                    logger.info(f"📦 Structured memory saved: {json_url}")
-            except Exception as e:
-                logger.warn(f"Failed to save report to GitHub: {e}")
             
             # ═══════════════════════════════════════════════════════════════
             # Send report to Telegram
